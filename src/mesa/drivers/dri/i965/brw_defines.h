@@ -1359,6 +1359,12 @@ enum brw_pixel_shader_coverage_mask_mode {
 
 #define GEN6_MI_REPORT_PERF_COUNT ((0x28 << 23) | (3 - 2))
 
+#define GEN8_MI_REPORT_PERF_COUNT ((0x28 << 23) | (4 - 2))
+
+/* Bitfields for the URB_WRITE message, DW2 of message header: */
+#define URB_WRITE_PRIM_END		0x1
+#define URB_WRITE_PRIM_START		0x2
+#define URB_WRITE_PRIM_TYPE_SHIFT	2
 
 /* Maximum number of entries that can be addressed using a binding table
  * pointer of type SURFTYPE_BUFFER
