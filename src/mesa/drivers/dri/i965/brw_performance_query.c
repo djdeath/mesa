@@ -84,10 +84,10 @@
 
 /* Samples read from i915 perf file descriptor */
 struct oa_sample {
-   struct drm_i915_perf_event_header header;
+   struct drm_i915_perf_record_header header;
    uint8_t oa_report[];
 };
-#define MAX_OA_SAMPLE_SIZE (8 +   /* drm_i915_perf_event_header */ \
+#define MAX_OA_SAMPLE_SIZE (8 +   /* drm_i915_perf_record_header */ \
                             256)  /* OA counter report */
 
 /**
@@ -810,8 +810,8 @@ accumulate_oa_snapshots(struct brw_context *brw,
       int offset = 0;
 
       while (offset < buf->len) {
-         const struct drm_i915_perf_event_header *header =
-            (const struct drm_i915_perf_event_header *)(buf->buf + offset);
+         const struct drm_i915_perf_record_header *header =
+            (const struct drm_i915_perf_record_header *)(buf->buf + offset);
 
          assert(header->size != 0);
          assert(header->size <= buf->len);
@@ -900,33 +900,32 @@ open_i915_oa_event(struct brw_context *brw,
                    uint32_t ctx_id)
 {
    struct drm_i915_perf_open_param param;
-   struct drm_i915_perf_oa_attr oa_attr;
+   uint64_t properties[] = {
+      /* Single context sampling */
+      DRM_I915_PERF_CTX_HANDLE_PROP, ctx_id,
+
+      /* Include OA reports in samples */
+      DRM_I915_PERF_SAMPLE_OA_PROP, true,
+
+      /* OA unit configuration */
+      DRM_I915_PERF_OA_METRICS_SET_PROP, metrics_set,
+      DRM_I915_PERF_OA_FORMAT_PROP, report_format,
+      DRM_I915_PERF_OA_EXPONENT_PROP, period_exponent,
+   };
    int ret;
 
    memset(&param, 0, sizeof(param));
-   memset(&oa_attr, 0, sizeof(oa_attr));
-
-   param.type = I915_PERF_OA_EVENT;
 
    param.flags |= I915_PERF_FLAG_FD_CLOEXEC;
    param.flags |= I915_PERF_FLAG_FD_NONBLOCK;
    param.flags |= I915_PERF_FLAG_DISABLED;
-   param.flags |= I915_PERF_FLAG_SINGLE_CONTEXT;
 
-   param.sample_flags = I915_PERF_SAMPLE_OA_REPORT;
-
-   param.ctx_id = ctx_id;
-
-   oa_attr.size = sizeof(oa_attr);
-   oa_attr.flags |= I915_OA_FLAG_PERIODIC;
-   oa_attr.oa_format = report_format;
-   oa_attr.metrics_set = metrics_set;
-   oa_attr.oa_timer_exponent = period_exponent;
-   param.attr = (uintptr_t)&oa_attr;
+   param.properties = (uint64_t)properties;
+   param.n_properties = sizeof(properties) / 16;
 
    ret = drmIoctl(drm_fd, DRM_IOCTL_I915_PERF_OPEN, &param);
    if (ret == -1) {
-      DBG("Error opening i915_oa perf event: %m\n");
+      DBG("Error opening i915 perf OA event: %m\n");
       return false;
    }
 
@@ -1461,6 +1460,7 @@ void
 brw_init_performance_queries(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
+   struct stat sb;
 
    ctx->Driver.GetPerfQueryInfo = brw_get_perf_query_info;
    ctx->Driver.GetPerfCounterInfo = brw_get_perf_counter_info;
@@ -1486,13 +1486,9 @@ brw_init_performance_queries(struct brw_context *brw)
                                      sizeof(gen7_pipeline_statistics[0])));
    }
 
-   /* FIXME: try calling the DRM_IOCTL_I915_PERF_OPEN ioctl with an
-    * invalid event ID to check the ioctl exists.
-    *
-    * For now a failure to query the number of EUs + slices implies
-    * we're not running on a suitable kernel for capturing OA metrics
-    */
-   if (brw->perfquery.devinfo.n_eus && brw->perfquery.devinfo.n_eu_slices) {
+   /* The existence of this sysctl parameter implies the kernel supports
+    * OA metrics... */
+   if (stat("/proc/sys/dev/i915/stream_event_paranoid", &sb) == 0) {
       switch (brw->gen) {
       case 7:
          if (brw->is_haswell)
