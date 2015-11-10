@@ -1,9 +1,10 @@
 <?xml version="1.0"?>
-<metrics version="1444835110" merge_md5="71f1da5f04d5e4d487c89bcc941d29a9">
+<metrics version="1447112406" merge_md5="71f1da5f04d5e4d487c89bcc941d29a9">
   <set name="Render Metrics Basic Gen8LP"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="render_basic"
+       chipset="CHV"
+       guid="9d8a3af5-c02c-4a4a-b947-f1672469e0fb"
        symbol_name="RenderBasic"
        >
     <counter name="GPU Core Clocks"
@@ -325,7 +326,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -428,18 +429,19 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="EU Array/Fragment Shader"
              />
-    <counter name="Sampler 0 Texels all LODs"
-             description="The total number of texels lookups in all LODs in Sampler 0 unit."
+    <counter name="GTI Read Throughput"
+             description="The total number of GPU memory bytes read from GTI."
              data_type="uint64"
-             equation="B 4 READ 4 UMUL"
-             underscore_name="sampler0_texels"
-             units="texels"
-             symbol_name="Sampler0Texels"
-             semantic_type="event"
+             max_equation="$GpuCoreClocks 64 UMUL"
+             equation="C 6 READ 64 UMUL"
+             underscore_name="gti_read_throughput"
+             units="bytes"
+             symbol_name="GtiReadThroughput"
+             semantic_type="throughput"
              mdapi_supported_apis="OGL OCL IO"
-             mdapi_usage_flags="Tier3 Draw"
-             mdapi_hw_unit_type="subslice"
-             mdapi_group="Sampler/Sampler Cache"
+             mdapi_usage_flags="Tier1 Overview System Frame Batch Draw"
+             mdapi_group="GTI"
+             mdapi_hw_unit_type="gpu"
              />
     <counter name="PS FPU1 Pipe Active"
              description="The percentage of time in which EU FPU1 pipeline was actively processing a pixel shader instruction."
@@ -480,20 +482,6 @@
              mdapi_supported_apis="OGL IO"
              mdapi_usage_flags="Tier3 Overview System Frame Batch Draw"
              mdapi_group="EU Array/Pixel Shader"
-             mdapi_hw_unit_type="gpu"
-             />
-    <counter name="GTI Read Throughput"
-             description="The total number of GPU memory bytes read from GTI."
-             data_type="uint64"
-             max_equation="$GpuCoreClocks 64 UMUL"
-             equation="C 6 READ 64 UMUL"
-             underscore_name="gti_read_throughput"
-             units="bytes"
-             symbol_name="GtiReadThroughput"
-             semantic_type="throughput"
-             mdapi_supported_apis="OGL OCL IO"
-             mdapi_usage_flags="Tier1 Overview System Frame Batch Draw"
-             mdapi_group="GTI"
              mdapi_hw_unit_type="gpu"
              />
     <counter name="Rasterized Pixels"
@@ -799,25 +787,13 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Output Merger"
              />
-    <counter name="Sampler 1 Texels all LODs"
-             description="The total number of texels lookups in all LODs in Sampler 1 unit."
-             data_type="uint64"
-             equation="B 5 READ 4 UMUL"
-             underscore_name="sampler1_texels"
-             units="texels"
-             symbol_name="Sampler1Texels"
-             semantic_type="event"
-             mdapi_supported_apis="OGL OCL IO"
-             mdapi_usage_flags="Tier3 Draw"
-             mdapi_hw_unit_type="subslice"
-             mdapi_group="Sampler/Sampler Cache"
-             />
   </set>
 
   <set name="Compute Metrics Basic Gen8LP"
-       chipset="CHV"
        mdapi_supported_apis="OGL4 OCL IO"
        underscore_name="compute_basic"
+       chipset="CHV"
+       guid="f522a89c-ecd1-4522-8331-3383c54af5f5"
        symbol_name="ComputeBasic"
        >
     <counter name="GPU Core Clocks"
@@ -1025,7 +1001,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -1215,7 +1191,7 @@
              description="The percentage of time in which hardware threads occupied EUs."
              data_type="float"
              max_equation="100"
-             equation="A 13 READ 8 UMUL $EuCoresTotalCount UDIV $EuThreadsCount UDIV $GpuCoreClocks FDIV"
+             equation="A 13 READ 8 UMUL $EuCoresTotalCount UDIV $EuThreadsCount UDIV 100 UMUL $GpuCoreClocks FDIV"
              underscore_name="eu_thread_occupancy"
              units="percent"
              symbol_name="EuThreadOccupancy"
@@ -1390,9 +1366,10 @@
   </set>
 
   <set name="Render Metrics for 3D Pipeline Profile"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="render_pipe_profile"
+       chipset="CHV"
+       guid="a9ccc03d-a943-4e6b-9cd6-13e063075927"
        symbol_name="RenderPipeProfile"
        >
     <counter name="GPU Core Clocks"
@@ -1604,7 +1581,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -2166,9 +2143,10 @@
   </set>
 
   <set name="Metric set HDCAndSF"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="hdc_and_sf"
+       chipset="CHV"
+       guid="2cf0c064-68df-4fac-9b3f-57f51ca8a069"
        symbol_name="HDCAndSF"
        >
     <counter name="GPU Core Clocks"
@@ -2390,7 +2368,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -2857,9 +2835,10 @@
   </set>
 
   <set name="Metric set L3_1"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="l3_1"
+       chipset="CHV"
+       guid="78a87ff9-543a-49ce-95ea-26d86071ea93"
        symbol_name="L3_1"
        >
     <counter name="GPU Core Clocks"
@@ -3082,7 +3061,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -3504,9 +3483,10 @@
   </set>
 
   <set name="Metric set L3_2"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="l3_2"
+       chipset="CHV"
+       guid="9f2cece5-7bfe-4320-ad66-8c7cc526bec5"
        symbol_name="L3_2"
        >
     <counter name="GPU Core Clocks"
@@ -3729,7 +3709,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -4151,9 +4131,10 @@
   </set>
 
   <set name="Metric set L3_3"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="l3_3"
+       chipset="CHV"
+       guid="d890ef38-d309-47e4-b8b5-aa779bb19ab0"
        symbol_name="L3_3"
        >
     <counter name="GPU Core Clocks"
@@ -4361,7 +4342,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -4798,9 +4779,10 @@
   </set>
 
   <set name="Metric set L3_4"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="l3_4"
+       chipset="CHV"
+       guid="5fdff4a6-9dc8-45e1-bfda-ef54869fbdd4"
        symbol_name="L3_4"
        >
     <counter name="GPU Core Clocks"
@@ -4993,7 +4975,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -5445,9 +5427,10 @@
   </set>
 
   <set name="Metric set RasterizerAndPixelBackend"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="rasterizer_and_pixel_backend"
+       chipset="CHV"
+       guid="2c0e45e1-7e2c-4a14-ae00-0b7ec868b8aa"
        symbol_name="RasterizerAndPixelBackend"
        >
     <counter name="GPU Core Clocks"
@@ -5685,7 +5668,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -6182,9 +6165,10 @@
   </set>
 
   <set name="Metric set Sampler_1"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="sampler_1"
+       chipset="CHV"
+       guid="71148d78-baf5-474f-878a-e23158d0265d"
        symbol_name="Sampler_1"
        >
     <counter name="GPU Core Clocks"
@@ -6407,7 +6391,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -6859,9 +6843,10 @@
   </set>
 
   <set name="Metric set Sampler_2"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="sampler_2"
+       chipset="CHV"
+       guid="b996a2b7-c59c-492d-877a-8cd54fd6df84"
        symbol_name="Sampler_2"
        >
     <counter name="GPU Core Clocks"
@@ -7114,7 +7099,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -7536,9 +7521,10 @@
   </set>
 
   <set name="Metric set TDL_1"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="tdl_1"
+       chipset="CHV"
+       guid="eb2fecba-b431-42e7-8261-fe9429a6e67a"
        symbol_name="TDL_1"
        >
     <counter name="GPU Core Clocks"
@@ -7806,7 +7792,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
@@ -8303,9 +8289,10 @@
   </set>
 
   <set name="Metric set TDL_2"
-       chipset="CHV"
        mdapi_supported_apis="OGL OCL IO"
        underscore_name="tdl_2"
+       chipset="CHV"
+       guid="60749470-a648-4a4b-9f10-dbfe1e36e44d"
        symbol_name="TDL_2"
        >
     <counter name="GPU Core Clocks"
@@ -8543,7 +8530,7 @@
     <counter name="GPU Time Elapsed"
              description="Time elapsed on the GPU during the measurement."
              data_type="uint64"
-             equation="GPU_TIME 0 READ 80 UMUL"
+             equation="GPU_TIME 0 READ 1000000000 UMUL 12500000 UDIV"
              underscore_name="gpu_time"
              units="ns"
              symbol_name="GpuTime"
