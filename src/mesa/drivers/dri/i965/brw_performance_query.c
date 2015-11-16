@@ -1488,7 +1488,7 @@ brw_init_performance_queries(struct brw_context *brw)
 
    /* The existence of this sysctl parameter implies the kernel supports
     * OA metrics... */
-   if (stat("/proc/sys/dev/i915/stream_event_paranoid", &sb) == 0) {
+   if (stat("/proc/sys/dev/i915/perf_stream_paranoid", &sb) == 0) {
       switch (brw->gen) {
       case 7:
          if (brw->is_haswell)
