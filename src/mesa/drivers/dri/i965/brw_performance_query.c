@@ -40,6 +40,7 @@
  */
 
 #include <limits.h>
+#include <dirent.h>
 
 #include <asm/unistd.h>
 #include <sys/types.h>
@@ -58,6 +59,7 @@
 
 #include "util/bitset.h"
 #include "util/ralloc.h"
+#include "util/hash_table.h"
 
 #include "glsl/list.h"
 
@@ -1435,14 +1437,26 @@ static struct brw_perf_query_counter gen7_pipeline_statistics[] = {
 #undef STAT
 #undef NAMED_STAT
 
+static struct brw_perf_query *
+append_query(struct brw_context *brw)
+{
+   brw->perfquery.queries =
+      reralloc(brw, brw->perfquery.queries,
+               struct brw_perf_query, ++brw->perfquery.n_queries);
+
+   return &brw->perfquery.queries[brw->perfquery.n_queries - 1];
+}
+
 static void
 add_pipeline_statistics_query(struct brw_context *brw,
                               const char *name,
                               struct brw_perf_query_counter *counters,
                               int n_counters)
 {
-   struct brw_perf_query *query =
-      &brw->perfquery.queries[brw->perfquery.n_queries++];
+   struct brw_perf_query *query = append_query(brw);
+
+   if (!query)
+      return;
 
    query->kind = PIPELINE_STATS;
    query->name = name;
@@ -1454,6 +1468,132 @@ add_pipeline_statistics_query(struct brw_context *brw,
       struct brw_perf_query_counter *counter = &counters[i];
       counter->offset = sizeof(uint64_t) * i;
    }
+}
+
+static bool
+read_file_uint64(const char *file, uint64_t *val)
+{
+    char buf[32];
+    int fd, n;
+
+    fd = open(file, 0);
+    if (fd < 0)
+	return false;
+    n = read(fd, buf, sizeof (buf) - 1);
+    close(fd);
+    if (n < 0)
+	return false;
+
+    buf[n] = '\0';
+    *val = strtoull(buf, NULL, 0);
+
+    return true;
+}
+
+static void
+enumerate_sysfs_metrics(struct brw_context *brw)
+{
+   __DRIscreen *screen = brw->intelScreen->driScrnPriv;
+   struct stat sb;
+   int min, maj;
+   char buf[128];
+   DIR *drmdir, *metricsdir = NULL;
+   int name_max;
+   int entry_len;
+   struct dirent *entry0, *entry1;
+   struct dirent *drm_entry;
+   struct dirent *metric_entry;
+
+   if (fstat(screen->fd, &sb)) {
+      printf("Failed to stat DRM fd\n");
+      return;
+   }
+
+   maj = major(sb.st_rdev);
+   min = minor(sb.st_rdev);
+
+   if (!S_ISCHR(sb.st_mode)) {
+      printf("DRM fd is not a character device as expected\n");
+      return;
+   }
+
+   snprintf(buf, sizeof(buf), "/sys/dev/char/%d:%d/device/drm", maj, min);
+
+   drmdir = opendir(buf);
+   if (!drmdir) {
+      printf("Failed to open %s: %m\n", buf);
+      return;
+   }
+
+   name_max = pathconf(buf, _PC_NAME_MAX);
+   if (name_max == -1) /* Limit not defined, or error */
+      name_max = 255; /* Take a guess */
+
+   entry_len = offsetof(struct dirent, d_name) + name_max + 1;
+   entry0 = malloc(entry_len);
+   entry1 = malloc(entry_len);
+
+   while (readdir_r(drmdir, entry0, &drm_entry) == 0 && drm_entry != NULL) {
+      if (drm_entry->d_type == DT_DIR &&
+          strncmp(drm_entry->d_name, "card", 4) == 0)
+      {
+         snprintf(buf, sizeof(buf),
+                  "/sys/dev/char/%d:%d/device/drm/%s/metrics",
+                  maj, min, drm_entry->d_name);
+
+         metricsdir = opendir(buf);
+         if (!metricsdir) {
+            printf("Failed to open %s: %m\n", buf);
+            goto close_drm_dir;
+         }
+
+         while (readdir_r(metricsdir, entry1, &metric_entry) == 0 &&
+                metric_entry != NULL)
+         {
+            struct hash_entry *entry;
+
+            if (metric_entry->d_type != DT_DIR ||
+                metric_entry->d_name[0] == '.')
+               continue;
+
+            printf("metric set: %s\n", metric_entry->d_name);
+            entry = _mesa_hash_table_search(brw->perfquery.oa_metrics_table,
+                                            metric_entry->d_name);
+            if (entry) {
+               struct brw_perf_query *query;
+               uint64_t id;
+
+               snprintf(buf, sizeof(buf),
+                        "/sys/dev/char/%d:%d/device/drm/%s/metrics/%s/id",
+                        maj, min, drm_entry->d_name, metric_entry->d_name);
+
+               if (!read_file_uint64(buf, &id)) {
+                  DBG("Failed to read metric set id from %s: %m", buf);
+                  continue;
+               }
+
+               query = append_query(brw);
+               *query = *(struct brw_perf_query *)entry->data;
+               query->oa_metrics_set = id;
+
+               printf("metric set known by kernel: id = %" PRIu64"\n",
+                      query->oa_metrics_set);
+            } else
+               printf("metric set not known by kernel (skipping)\n");
+         }
+
+         break;
+      }
+   }
+
+   if (metricsdir)
+      closedir(metricsdir);
+
+close_drm_dir:
+   closedir(drmdir);
+
+   free(entry0);
+   free(entry1);
 }
 
 void
@@ -1489,6 +1629,12 @@ brw_init_performance_queries(struct brw_context *brw)
    /* The existence of this sysctl parameter implies the kernel supports
     * OA metrics... */
    if (stat("/proc/sys/dev/i915/perf_stream_paranoid", &sb) == 0) {
+      brw->perfquery.oa_metrics_table =
+         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                 _mesa_key_string_equal);
+
+      /* These function add the queries applicable to the system to
+       * metrics_table using the query's guid as a key */
       switch (brw->gen) {
       case 7:
          if (brw->is_haswell)
@@ -1506,6 +1652,8 @@ brw_init_performance_queries(struct brw_context *brw)
       default:
          unreachable("Unexpected gen during performance queries init");
       }
+
+      enumerate_sysfs_metrics(brw);
    }
 
    ctx->PerfQuery.NumQueries = brw->perfquery.n_queries;

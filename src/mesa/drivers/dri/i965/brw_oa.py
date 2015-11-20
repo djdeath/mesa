@@ -426,6 +426,8 @@ c(
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "util/hash_table.h"
+
 """)
 
 c("#include \"brw_oa_" + chipset + ".h\"")
@@ -462,48 +464,49 @@ for set in tree.findall(".//set"):
         max_values[counter.get('symbol_name')] = output_counter_max(set, counter, empty_vars)
         counter_vars["$" + counter.get('symbol_name')] = counter
 
+
+    c("\nstatic struct brw_perf_query_counter " + chipset + "_" + set.get('underscore_name') + "_query_counters[" + str(len(counters)) + "];\n")
+    c("static struct brw_perf_query " + chipset + "_" + set.get('underscore_name') + "_query = {\n")
+    c_indent(3)
+
+    c(".kind = OA_COUNTERS,\n")
+    c(".name = \"" + set.get('name') + "\",\n")
+    c(".guid = \"" + set.get('guid') + "\",\n")
+
+    c(".counters = " + chipset + "_" + set.get('underscore_name') + "_query_counters,")
+    c(".n_counters = 0,")
+    c(".oa_metrics_set = 0, /* determined at runtime, via sysfs */")
+
+    if chipset == "hsw":
+        c(""".oa_format = I915_OA_FORMAT_A45_B8_C8,
+
+/* Accumulation buffer offsets... */
+.gpu_time_offset = 0,
+.a_offset = 1,
+.b_offset = 46,
+.c_offset = 54,
+""")
+    else:
+        c(""".oa_format = I915_OA_FORMAT_A32u40_A4u32_B8_C8,
+
+/* Accumulation buffer offsets... */
+.gpu_time_offset = 0,
+.gpu_clock_offset = 1,
+.a_offset = 2,
+.b_offset = 38,
+.c_offset = 46,
+""")
+
+    c_outdent(3)
+    c("};\n")
+
     c("\nstatic void\n")
     c("add_" + set.get('underscore_name') + "_counter_query(struct brw_context *brw)\n")
     c("{\n")
     c_indent(3)
 
-    c("struct brw_perf_query *query;\n")
-    c("struct brw_perf_query_counter *counter;\n\n")
-
-    c("assert(brw->perfquery.n_queries < MAX_PERF_QUERIES);\n")
-
-    c("query = &brw->perfquery.queries[brw->perfquery.n_queries++];\n")
-
-    c("\nquery->kind = OA_COUNTERS;\n")
-    c("query->name = \"" + set.get('name') + "\";\n")
-
-    perf_id = metric_set_perf_name(set)
-
-    c("query->counters = rzalloc_array(brw, struct brw_perf_query_counter, " + str(len(counters)) + ");\n")
-    c("query->n_counters = 0;\n")
-    c("query->oa_metrics_set = " + perf_id + ";\n")
-
-    if chipset == "hsw":
-        c("""query->oa_format = I915_OA_FORMAT_A45_B8_C8;
-
-/* Accumulation buffer offsets... */
-query->gpu_time_offset = 0;
-query->a_offset = 1;
-query->b_offset = query->a_offset + 45;
-query->c_offset = query->b_offset + 8;
-
-""")
-    else:
-        c("""query->oa_format = I915_OA_FORMAT_A32u40_A4u32_B8_C8;
-
-/* Accumulation buffer offsets... */
-query->gpu_time_offset = 0;
-query->gpu_clock_offset = 1;
-query->a_offset = 2;
-query->b_offset = query->a_offset + 36;
-query->c_offset = query->b_offset + 8;
-
-""")
+    c("static struct brw_perf_query *query = &" + chipset + "_" + set.get('underscore_name') + "_query;\n")
+    c("struct brw_perf_query_counter *counter;\n")
 
     offset = 0
     for counter in counters:
@@ -511,6 +514,8 @@ query->c_offset = query->b_offset + 8;
 
 
     c("\nquery->data_size = counter->offset + counter->size;\n")
+
+    c("\n_mesa_hash_table_insert(brw->perfquery.oa_metrics_table, query->guid, query);")
 
     c_outdent(3)
     c("}\n")

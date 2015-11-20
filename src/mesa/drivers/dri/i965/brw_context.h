@@ -962,12 +962,13 @@ struct brw_perf_query
 {
    enum brw_query_kind kind;
    const char *name;
+   const char *guid;
    struct brw_perf_query_counter *counters;
    int n_counters;
    size_t data_size;
 
    /* OA specific */
-   int oa_metrics_set;
+   uint64_t oa_metrics_set;
    int oa_format;
 
    /* For indexing into the accumulator[] ... */
@@ -977,8 +978,6 @@ struct brw_perf_query
    int b_offset;
    int c_offset;
 };
-
-#define MAX_PERF_QUERIES 7
 
 /**
  * brw_context is derived from gl_context.
@@ -1421,7 +1420,8 @@ struct brw_context
       /* The system's page size */
       unsigned int page_size;
 
-      struct brw_perf_query queries[MAX_PERF_QUERIES];
+      struct hash_table *oa_metrics_table;
+      struct brw_perf_query *queries;
       int n_queries;
 
       /* The i915 perf event we open to setup + enable the OA counters */
