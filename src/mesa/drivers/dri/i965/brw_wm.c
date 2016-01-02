@@ -122,6 +122,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
    if (prog) {
       brw_nir_setup_glsl_uniforms(fp->program.nir, prog, &fp->program,
                                   &prog_data.base, true);
+      brw_nir_analyze_ubo_ranges(fp->program.nir, prog_data.base.ubo_ranges);
    } else {
       brw_nir_setup_arb_uniforms(fp->program.nir, &fp->program,
                                  &prog_data.base);

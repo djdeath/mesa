@@ -222,6 +222,8 @@ brw_codegen_tcs_prog(struct brw_context *brw,
       brw_nir_setup_glsl_uniforms(nir, shader_prog, &tcp->program,
                                   &prog_data.base.base,
                                   compiler->scalar_stage[MESA_SHADER_TESS_CTRL]);
+      brw_nir_analyze_ubo_ranges(tcp->program.nir,
+                                 prog_data.base.base.ubo_ranges);
    } else {
       /* Upload the Patch URB Header as the first two uniforms.
        * Do the annoying scrambling so the shader doesn't have to.

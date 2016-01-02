@@ -42,6 +42,7 @@ i965_compiler_FILES = \
 	brw_ir_vec4.h \
 	brw_nir.h \
 	brw_nir.c \
+	brw_nir_analyze_ubo_ranges.c \
 	brw_nir_analyze_boolean_resolves.c \
 	brw_nir_attribute_workarounds.c \
 	brw_nir_intrinsics.c \
