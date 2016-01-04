@@ -56,8 +56,7 @@ gen8_upload_ds_state(struct brw_context *brw)
                      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                      ffs(stage_state->per_thread_scratch) - 11);
       } else {
-         OUT_BATCH(0);
-         OUT_BATCH(0);
+         OUT_BATCH64(0);
       }
       OUT_BATCH(SET_FIELD(prog_data->dispatch_grf_start_reg,
                           GEN7_DS_DISPATCH_START_GRF) |

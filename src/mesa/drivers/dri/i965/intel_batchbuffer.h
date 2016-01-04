@@ -158,6 +158,7 @@ intel_batchbuffer_advance(struct brw_context *brw)
 
 #define OUT_BATCH(d) *__map++ = (d)
 #define OUT_BATCH_F(f) OUT_BATCH(float_as_int((f)))
+#define OUT_BATCH64(d) *((uint64_t *) __map) = (d); __map += 2
 
 #define OUT_RELOC(buf, read_domains, write_domain, delta) do { \
    uint32_t __offset = (__map - brw->batch.map) * 4;           \

@@ -57,8 +57,7 @@ gen8_upload_hs_state(struct brw_context *brw)
                      I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                      ffs(stage_state->per_thread_scratch) - 11);
       } else {
-         OUT_BATCH(0);
-         OUT_BATCH(0);
+         OUT_BATCH64(0);
       }
       OUT_BATCH(GEN7_HS_INCLUDE_VERTEX_HANDLES |
                 SET_FIELD(prog_data->dispatch_grf_start_reg,

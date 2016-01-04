@@ -72,8 +72,7 @@ emit_depth_packets(struct brw_context *brw,
       OUT_RELOC64(depth_mt->bo,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, 0);
    } else {
-      OUT_BATCH(0);
-      OUT_BATCH(0);
+      OUT_BATCH64(0);
    }
    OUT_BATCH(((width - 1) << 4) | ((height - 1) << 18) | lod);
    OUT_BATCH(((depth - 1) << 21) | (min_array_element << 10) | mocs_wb);
