@@ -27,6 +27,97 @@
 #include "intel_batchbuffer.h"
 #include "program/prog_parameter.h"
 
+#define F(RELOC, BATCH, buf, x) \
+   if (buf) { \
+      RELOC(buf, I915_GEM_DOMAIN_RENDER, 0, x); \
+   } else { \
+      BATCH(x); \
+   }
+#define OUT_PTR64(buf, x) F(OUT_RELOC64, OUT_BATCH64, buf, x)
+#define OUT_PTR(buf, x)   F(OUT_RELOC,   OUT_BATCH,   buf, x)
+
+static inline void
+emit_3dstate_constant(struct brw_context *brw,
+                      uint32_t opcode,
+                      uint32_t mocs,
+                      drm_intel_bo *bufs[4],
+                      uint16_t read_lengths[4],
+                      uint64_t offsets[4])
+{
+   /* Buffer 0 is relative to Dynamic State Base Address, which we program
+    * to the start of the batch buffer.  All others are graphics virtual
+    * addresses regardless of the INSTPM settings.
+    */
+   assert(bufs[0] == NULL || bufs[0] == brw->batch.bo);
+
+   assert(read_lengths[0] == 0 || bufs[0] != NULL);
+   assert(read_lengths[1] == 0 || bufs[1] != NULL);
+   assert(read_lengths[2] == 0 || bufs[2] != NULL);
+   assert(read_lengths[3] == 0 || bufs[3] != NULL);
+
+   if (brw->gen >= 8) {
+      BEGIN_BATCH(11);
+      OUT_BATCH(opcode << 16 | (11 - 2));
+      OUT_BATCH(read_lengths[0] | read_lengths[1] << 16);
+      OUT_BATCH(read_lengths[2] | read_lengths[3] << 16);
+      OUT_BATCH64(offsets[0]);
+      OUT_PTR64(bufs[1], offsets[1]);
+      OUT_PTR64(bufs[2], offsets[2]);
+      OUT_PTR64(bufs[3], offsets[3]);
+      ADVANCE_BATCH();
+   } else if (brw->gen == 7) {
+      /* From the Ivybridge PRM, Volume 2, Part 1, Page 112:
+       * "Constant buffers must be enabled in order from Constant Buffer 0 to
+       *  Constant Buffer 3 within this command.  For example, it is not
+       *  allowed to enable Constant Buffer 1 by programming a non-zero value
+       *  in the VS Constant Buffer 1 Read Length without a non-zero value in
+       *  VS Constant Buffer 0 Read Length."
+       *
+       * Haswell removes this restriction.
+       */
+      if (!brw->is_haswell) {
+         assert(read_lengths[3] == 0 || (read_lengths[2] > 0 &&
+                                         read_lengths[1] > 0 &&
+                                         read_lengths[0] > 0));
+         assert(read_lengths[2] == 0 || (read_lengths[1] > 0 &&
+                                         read_lengths[0] > 0));
+         assert(read_lengths[1] == 0 || read_lengths[0] > 0);
+      }
+
+      BEGIN_BATCH(7);
+      OUT_BATCH(opcode << 16 | (7 - 2));
+      OUT_BATCH(read_lengths[0] | read_lengths[1] << 16);
+      OUT_BATCH(read_lengths[2] | read_lengths[3] << 16);
+      OUT_BATCH(offsets[0]);
+      OUT_PTR(bufs[1], offsets[1]);
+      OUT_PTR(bufs[2], offsets[2]);
+      OUT_PTR(bufs[3], offsets[3]);
+      ADVANCE_BATCH();
+   } else if (brw->gen == 6) {
+      /* From the Sandybridge PRM, Volume 2, Part 1, Page 138:
+       * "The sum of all four read length fields (each incremented to
+       *  represent the actual read length) must be less than or equal
+       *  to 32."
+       */
+      assert(read_lengths[0] + read_lengths[1] +
+             read_lengths[2] + read_lengths[3] < 32);
+
+      BEGIN_BATCH(5);
+      OUT_BATCH(opcode << 16 | (5 - 2) |
+                (read_lengths[0] ? GEN6_CONSTANT_BUFFER_0_ENABLE : 0) |
+                (read_lengths[1] ? GEN6_CONSTANT_BUFFER_1_ENABLE : 0) |
+                (read_lengths[2] ? GEN6_CONSTANT_BUFFER_2_ENABLE : 0) |
+                (read_lengths[3] ? GEN6_CONSTANT_BUFFER_3_ENABLE : 0));
+      OUT_BATCH(offsets[0] | (read_lengths[0] - 1));
+      OUT_PTR(bufs[1], offsets[1] | (read_lengths[1] - 1));
+      OUT_PTR(bufs[2], offsets[2] | (read_lengths[2] - 1));
+      OUT_PTR(bufs[3], offsets[3] | (read_lengths[3] - 1));
+      ADVANCE_BATCH();
+   } else {
+      unreachable("unhandled gen in emit_3dstate_constant");
+   }
+}
+
 void
 gen7_upload_constant_state(struct brw_context *brw,
                            const struct brw_stage_state *stage_state,
@@ -37,60 +128,36 @@ gen7_upload_constant_state(struct brw_context *brw,
    /* Disable if the shader stage is inactive or there are no push constants. */
    active = active && stage_state->push_const_size != 0;
 
-   int dwords = brw->gen >= 8 ? 11 : 7;
-   BEGIN_BATCH(dwords);
-   OUT_BATCH(opcode << 16 | (dwords - 2));
+   drm_intel_bo *bufs[4] = { NULL, NULL, NULL, NULL };
+   uint16_t read_lengths[4] = { 0, 0, 0, 0 };
+   uint64_t offsets[4] = { 0, 0, 0, 0 };
 
-   /* Workaround for SKL+ (we use option #2 until we have a need for more
-    * constant buffers). This comes from the documentation for 3DSTATE_CONSTANT_*
-    *
-    * The driver must ensure The following case does not occur without a flush
-    * to the 3D engine: 3DSTATE_CONSTANT_* with buffer 3 read length equal to
-    * zero committed followed by a 3DSTATE_CONSTANT_* with buffer 0 read length
-    * not equal to zero committed. Possible ways to avoid this condition
-    * include:
-    *     1. always force buffer 3 to have a non zero read length
-    *     2. always force buffer 0 to a zero read length
-    */
-   if (brw->gen >= 9 && active) {
-      OUT_BATCH(0);
-      OUT_BATCH(stage_state->push_const_size);
-   } else {
-      OUT_BATCH(active ? stage_state->push_const_size : 0);
-      OUT_BATCH(0);
-   }
-   /* Pointer to the constant buffer.  Covered by the set of state flags
-    * from gen6_prepare_wm_contants
-    */
-   if (brw->gen >= 9 && active) {
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      /* XXX: When using buffers other than 0, you need to specify the
-       * graphics virtual address regardless of INSPM/debug bits
+   if (active) {
+      /* Workaround for SKL+ (we use option #2 until we have a need for more
+       * constant buffers).  This comes from the documentation for
+       * 3DSTATE_CONSTANT_*:
+       *
+       * "The driver must ensure The following case does not occur without a
+       *  flush to the 3D engine: 3DSTATE_CONSTANT_* with buffer 3 read length
+       *  equal to zero committed followed by a 3DSTATE_CONSTANT_* with buffer
+       *  0 read length not equal to zero committed. Possible ways to avoid
+       *  this condition include:
+       *
+       *     1. always force buffer 3 to have a non zero read length
+       *     2. always force buffer 0 to a zero read length"
        */
-      OUT_RELOC64(brw->batch.bo, I915_GEM_DOMAIN_RENDER, 0,
-                  stage_state->push_const_offset);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-   } else if (brw->gen >= 8) {
-      OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-   } else {
-      OUT_BATCH(active ? (stage_state->push_const_offset | mocs) : 0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
-      OUT_BATCH(0);
+      if (brw->gen >= 9) {
+         bufs[1] = brw->batch.bo;
+         offsets[1] = stage_state->push_const_offset;
+         read_lengths[1] = stage_state->push_const_size;
+      } else {
+         bufs[0] = brw->batch.bo;
+         offsets[0] = stage_state->push_const_offset;
+         read_lengths[0] = stage_state->push_const_size;
+      }
    }
 
-   ADVANCE_BATCH();
+   emit_3dstate_constant(brw, opcode, mocs, bufs, read_lengths, offsets);
 
    /* On SKL+ the new constants don't take effect until the next corresponding
     * 3DSTATE_BINDING_TABLE_POINTER_* command is parsed so we need to ensure
