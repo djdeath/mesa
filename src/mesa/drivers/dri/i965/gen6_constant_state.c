@@ -25,6 +25,7 @@
 #include "brw_state.h"
 #include "brw_defines.h"
 #include "intel_batchbuffer.h"
+#include "intel_buffer_objects.h"
 #include "program/prog_parameter.h"
 
 #define F(RELOC, BATCH, buf, x) \
@@ -123,39 +124,58 @@ gen7_upload_constant_state(struct brw_context *brw,
                            const struct brw_stage_state *stage_state,
                            bool active, unsigned opcode)
 {
-   uint32_t mocs = brw->gen < 8 ? GEN7_MOCS_L3 : 0;
+   struct gl_context *ctx = &brw->ctx;
+   const struct gl_shader_program *shader_prog =
+      ctx->_Shader->CurrentProgram[stage_state->stage];
+   const struct gl_linked_shader *shader = shader_prog ?
+      shader_prog->_LinkedShaders[stage_state->stage] : NULL;
 
-   /* Disable if the shader stage is inactive or there are no push constants. */
-   active = active && stage_state->push_const_size != 0;
+   uint32_t mocs = brw->gen < 8 ? GEN7_MOCS_L3 : 0;
 
    drm_intel_bo *bufs[4] = { NULL, NULL, NULL, NULL };
    uint16_t read_lengths[4] = { 0, 0, 0, 0 };
    uint64_t offsets[4] = { 0, 0, 0, 0 };
 
    if (active) {
-      /* Workaround for SKL+ (we use option #2 until we have a need for more
-       * constant buffers).  This comes from the documentation for
-       * 3DSTATE_CONSTANT_*:
-       *
-       * "The driver must ensure The following case does not occur without a
-       *  flush to the 3D engine: 3DSTATE_CONSTANT_* with buffer 3 read length
-       *  equal to zero committed followed by a 3DSTATE_CONSTANT_* with buffer
-       *  0 read length not equal to zero committed. Possible ways to avoid
-       *  this condition include:
-       *
-       *     1. always force buffer 3 to have a non zero read length
-       *     2. always force buffer 0 to a zero read length"
+      /* XXX: Have to start at 1 because of INSTPM rubbish.
+       * XXX: Won't work for IVB
        */
-      if (brw->gen >= 9) {
-         bufs[1] = brw->batch.bo;
-         offsets[1] = stage_state->push_const_offset;
-         read_lengths[1] = stage_state->push_const_size;
-      } else {
+      int start_ubo = 1;
+
+      if (stage_state->push_const_size > 0) {
          bufs[0] = brw->batch.bo;
          offsets[0] = stage_state->push_const_offset;
          read_lengths[0] = stage_state->push_const_size;
       }
+
+      if (shader_prog) {
+         for (int i = 0; i < 4; i++) {
+            const struct brw_ubo_range *range =
+               &stage_state->prog_data->ubo_ranges[i];
+
+            if (range->length == 0)
+               break;
+
+            const struct gl_uniform_block *block =
+               shader->UniformBlocks[range->block];
+            const struct gl_uniform_buffer_binding *binding =
+               &ctx->UniformBufferBindings[block->Binding];
+
+            if (binding->BufferObject != ctx->Shared->NullBufferObj) {
+               assert(binding->Offset % 32 == 0);
+               offsets[start_ubo+i] = range->start * 32 + binding->Offset;
+               read_lengths[start_ubo+i] = range->length;
+               bufs[start_ubo+i] = intel_bufferobj_buffer(brw,
+                  intel_buffer_object(binding->BufferObject),
+                  binding->Offset, range->length * 32);
+            } else {
+               assert(!"XXX: UBO not bound?  What do we do?");
+            }
+         }
+      }
    }
+
+   /* XXX: SKL workaround */
 
    emit_3dstate_constant(brw, opcode, mocs, bufs, read_lengths, offsets);
 

@@ -212,7 +212,8 @@ gen8_upload_ps_state(struct brw_context *brw,
    else
       dw6 |= (64 - 2) << HSW_PS_MAX_THREADS_SHIFT;
 
-   if (prog_data->base.nr_params > 0)
+   if (prog_data->base.nr_params > 0 ||
+       prog_data->base.ubo_ranges[0].length > 0)
       dw6 |= GEN7_PS_PUSH_CONSTANT_ENABLE;
 
    /* From the documentation for this packet:

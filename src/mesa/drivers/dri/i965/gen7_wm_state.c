@@ -176,7 +176,8 @@ gen7_upload_ps_state(struct brw_context *brw,
 
    dw4 |= (devinfo->max_wm_threads - 1) << max_threads_shift;
 
-   if (prog_data->base.nr_params > 0)
+   if (prog_data->base.nr_params > 0 ||
+       prog_data->base.ubo_ranges[0].length > 0)
       dw4 |= GEN7_PS_PUSH_CONSTANT_ENABLE;
 
    /* From the IVB PRM, volume 2 part 1, page 287:
