@@ -142,15 +142,12 @@ anv_shader_compile_to_nir(struct anv_device *device,
       free(spec_entries);
 
       if (stage == MESA_SHADER_FRAGMENT) {
-         nir_lower_wpos_center(nir);
-         nir_validate_shader(nir);
+         NIR_PASS_V(nir, nir_lower_wpos_center);
       }
 
-      nir_lower_returns(nir);
-      nir_validate_shader(nir);
+      NIR_PASS_V(nir, nir_lower_returns);
 
-      nir_inline_functions(nir);
-      nir_validate_shader(nir);
+      NIR_PASS_V(nir, nir_inline_functions);
 
       /* Pick off the single entrypoint that we want */
       foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
@@ -160,19 +157,16 @@ anv_shader_compile_to_nir(struct anv_device *device,
       assert(exec_list_length(&nir->functions) == 1);
       entry_point->name = ralloc_strdup(entry_point, "main");
 
-      nir_remove_dead_variables(nir, nir_var_shader_in);
-      nir_remove_dead_variables(nir, nir_var_shader_out);
-      nir_remove_dead_variables(nir, nir_var_system_value);
-      nir_validate_shader(nir);
+      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_in);
+      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_out);
+      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_system_value);
 
-      nir_propagate_invariant(nir);
-      nir_validate_shader(nir);
+      NIR_PASS_V(nir, nir_propagate_invariant);
 
-      nir_lower_io_to_temporaries(entry_point->shader, entry_point->impl,
-                                  true, false);
+      NIR_PASS_V(nir, nir_lower_io_to_temporaries, entry_point->impl,
+                 true, false);
 
-      nir_lower_system_values(nir);
-      nir_validate_shader(nir);
+      NIR_PASS_V(nir, nir_lower_system_values);
    }
 
    /* Vulkan uses the separate-shader linking model */
@@ -180,7 +174,7 @@ anv_shader_compile_to_nir(struct anv_device *device,
 
    nir = brw_preprocess_nir(compiler, nir);
 
-   nir_shader_gather_info(nir, entry_point->impl);
+   NIR_PASS_V(nir, nir_shader_gather_info, entry_point->impl);
 
    nir_variable_mode indirect_mask = 0;
    if (compiler->glsl_compiler_options[stage].EmitNoIndirectInput)
@@ -188,7 +182,7 @@ anv_shader_compile_to_nir(struct anv_device *device,
    if (compiler->glsl_compiler_options[stage].EmitNoIndirectTemp)
       indirect_mask |= nir_var_local;
 
-   nir_lower_indirect_derefs(nir, indirect_mask);
+   NIR_PASS_V(nir, nir_lower_indirect_derefs, indirect_mask);
 
    return nir;
 }
