@@ -157,10 +157,6 @@ anv_shader_compile_to_nir(struct anv_device *device,
       assert(exec_list_length(&nir->functions) == 1);
       entry_point->name = ralloc_strdup(entry_point, "main");
 
-      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_in);
-      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_out);
-      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_system_value);
-
       NIR_PASS_V(nir, nir_propagate_invariant);
 
       NIR_PASS_V(nir, nir_lower_io_to_temporaries, entry_point->impl,
@@ -173,6 +169,12 @@ anv_shader_compile_to_nir(struct anv_device *device,
    nir->info.separate_shader = true;
 
    nir = brw_preprocess_nir(compiler, nir);
+
+   if (!module->nir) {
+      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_in);
+      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_shader_out);
+      NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_system_value);
+   }
 
    NIR_PASS_V(nir, nir_shader_gather_info, entry_point->impl);
 
