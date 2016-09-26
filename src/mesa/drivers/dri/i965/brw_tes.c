@@ -161,7 +161,6 @@ brw_codegen_tes_prog(struct brw_context *brw,
    prog_data.base.base.image_param =
       rzalloc_array(NULL, struct brw_image_param, tes->NumImages);
    prog_data.base.base.nr_params = param_count;
-   prog_data.base.base.nr_image_params = tes->NumImages;
 
    prog_data.base.cull_distance_mask =
       ((1 << tep->program.Base.CullDistanceArraySize) - 1) <<

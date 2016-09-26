@@ -344,7 +344,6 @@ struct brw_stage_prog_data {
 
    GLuint nr_params;       /**< number of float params/constants */
    GLuint nr_pull_params;
-   unsigned nr_image_params;
 
    unsigned curb_read_length;
    unsigned total_scratch;

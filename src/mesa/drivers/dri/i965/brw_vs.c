@@ -123,9 +123,6 @@ brw_codegen_vs_prog(struct brw_context *brw,
     */
    int param_count = vp->program.Base.nir->num_uniforms / 4;
 
-   if (vs)
-      prog_data.base.base.nr_image_params = vs->base.NumImages;
-
    /* vec4_visitor::setup_uniform_clipplane_values() also uploads user clip
     * planes as uniforms.
     */
@@ -137,7 +134,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
       rzalloc_array(NULL, const gl_constant_value *, param_count);
    stage_prog_data->image_param =
       rzalloc_array(NULL, struct brw_image_param,
-                    stage_prog_data->nr_image_params);
+                    vs ? vs->base.NumImages : 0);
    stage_prog_data->nr_params = param_count;
 
    if (prog) {

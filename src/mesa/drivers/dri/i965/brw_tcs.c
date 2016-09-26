@@ -216,7 +216,6 @@ brw_codegen_tcs_prog(struct brw_context *brw,
 
       prog_data.base.base.image_param =
          rzalloc_array(NULL, struct brw_image_param, tcs->NumImages);
-      prog_data.base.base.nr_image_params = tcs->NumImages;
 
       brw_nir_setup_glsl_uniforms(nir, shader_prog, &tcp->program.Base,
                                   &prog_data.base.base,
