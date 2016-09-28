@@ -27,7 +27,9 @@
 #include "intel_fbo.h"
 #include "brw_context.h"
 #include "brw_state.h"
-#include "brw_defines.h"
+//#include "brw_defines.h"
+
+#include "genxml/gen7_pack.h"
 
 void
 gen7_emit_depth_stencil_hiz(struct brw_context *brw,
@@ -40,7 +42,7 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
                             uint32_t tile_x, uint32_t tile_y)
 {
    struct gl_context *ctx = &brw->ctx;
-   const uint8_t mocs = GEN7_MOCS_L3;
+   const uint8_t mocs = GEN7_MOCS;
    struct gl_framebuffer *fb = ctx->DrawBuffer;
    uint32_t surftype;
    unsigned int depth = 1;
@@ -75,10 +77,10 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
    case GL_TEXTURE_CUBE_MAP:
       /* The PRM claims that we should use BRW_SURFACE_CUBE for this
        * situation, but experiments show that gl_Layer doesn't work when we do
-       * this.  So we use BRW_SURFACE_2D, since for rendering purposes this is
+       * this.  So we use SURFTYPE_2D, since for rendering purposes this is
        * equivalent.
        */
-      surftype = BRW_SURFACE_2D;
+      surftype = SURFTYPE_2D;
       depth *= 6;
       break;
    case GL_TEXTURE_3D:
@@ -99,44 +101,66 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       height = mt->logical_height0;
    }
 
-   /* _NEW_DEPTH, _NEW_STENCIL, _NEW_BUFFERS */
-   BEGIN_BATCH(7);
-   /* 3DSTATE_DEPTH_BUFFER dw0 */
-   OUT_BATCH(GEN7_3DSTATE_DEPTH_BUFFER << 16 | (7 - 2));
+   I965_BATCH_EMIT(GEN7_3DSTATE_DEPTH_BUFFER, db) {
+      db.SurfaceType = surftype;
+      db.DepthWriteEnable = ctx->Depth.Mask != 0;
+      db.StencilWriteEnable = stencil_mt != NULL && ctx->Stencil._WriteEnabled;
+      db.HierarchicalDepthBufferEnable = hiz ? 1 : 0;
+      db.SurfaceFormat = depthbuffer_format;
+      db.SurfacePitch = depth_mt ? depth_mt->pitch - 1 : 0;
+      db.Width = width - 1;
+      db.Height = height - 1;
+      db.LOD = lod;
+      db.Depth = depth - 1;
+      db.MinimumArrayElement = min_array_element;
+      db.DepthBufferObjectControlState = mocs;
 
-   /* 3DSTATE_DEPTH_BUFFER dw1 */
-   OUT_BATCH((depth_mt ? depth_mt->pitch - 1 : 0) |
-             (depthbuffer_format << 18) |
-             ((hiz ? 1 : 0) << 22) |
-             ((stencil_mt != NULL && ctx->Stencil._WriteEnabled) << 27) |
-             ((ctx->Depth.Mask != 0) << 28) |
-             (surftype << 29));
-
-   /* 3DSTATE_DEPTH_BUFFER dw2 */
-   if (depth_mt) {
-      OUT_RELOC(depth_mt->bo,
-	        I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
-	        0);
-   } else {
-      OUT_BATCH(0);
+      if (depth_mt) {
+         db.SurfaceBaseAddress = I965_RELOC(depth_mt->bo,
+                                            I915_GEM_DOMAIN_RENDER,
+                                            I915_GEM_DOMAIN_RENDER,
+                                            0);
+      }
    }
 
-   /* 3DSTATE_DEPTH_BUFFER dw3 */
-   OUT_BATCH(((width - 1) << 4) |
-             ((height - 1) << 18) |
-             lod);
+   /* /\* _NEW_DEPTH, _NEW_STENCIL, _NEW_BUFFERS *\/ */
+   /* BEGIN_BATCH(7); */
+   /* /\* 3DSTATE_DEPTH_BUFFER dw0 *\/ */
+   /* OUT_BATCH(GEN7_3DSTATE_DEPTH_BUFFER << 16 | (7 - 2)); */
 
-   /* 3DSTATE_DEPTH_BUFFER dw4 */
-   OUT_BATCH(((depth - 1) << 21) |
-             (min_array_element << 10) |
-             mocs);
+   /* 3DSTATE_DEPTH_BUFFER dw1 */
+   /* OUT_BATCH((depth_mt ? depth_mt->pitch - 1 : 0) | */
+   /*           (depthbuffer_format << 18) | */
+   /*           ((hiz ? 1 : 0) << 22) | */
+   /*           ((stencil_mt != NULL && ctx->Stencil._WriteEnabled) << 27) | */
+   /*           ((ctx->Depth.Mask != 0) << 28) | */
+   /*           (surftype << 29)); */
 
-   /* 3DSTATE_DEPTH_BUFFER dw5 */
-   OUT_BATCH(0);
+   /* /\* 3DSTATE_DEPTH_BUFFER dw2 *\/ */
+   /* if (depth_mt) { */
+   /*    OUT_RELOC(depth_mt->bo, */
+   /*              I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, */
+   /*              0); */
+   /* } else { */
+   /*    OUT_BATCH(0); */
+   /* } */
 
-   /* 3DSTATE_DEPTH_BUFFER dw6 */
-   OUT_BATCH((depth - 1) << 21);
-   ADVANCE_BATCH();
+   /* /\* 3DSTATE_DEPTH_BUFFER dw3 *\/ */
+   /* OUT_BATCH(((width - 1) << 4) | */
+   /*           ((height - 1) << 18) | */
+   /*           lod); */
+
+   /* /\* 3DSTATE_DEPTH_BUFFER dw4 *\/ */
+   /* OUT_BATCH(((depth - 1) << 21) | */
+   /*           (min_array_element << 10) | */
+   /*           mocs); */
+
+   /* /\* 3DSTATE_DEPTH_BUFFER dw5 *\/ */
+   /* OUT_BATCH(0); */
+
+   /* /\* 3DSTATE_DEPTH_BUFFER dw6 *\/ */
+   /* OUT_BATCH((depth - 1) << 21); */
+   /* ADVANCE_BATCH(); */
 
    if (!hiz) {
       BEGIN_BATCH(3);
