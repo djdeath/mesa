@@ -179,7 +179,7 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &gen7_l3_state,
    &gen7_push_constant_space,
    &gen7_urb,
-   &gen6_blend_state,		/* must do before cc unit */
+   &gen7_blend_state,		/* must do before cc unit */
    &gen6_color_calc_state,	/* must do before cc unit */
    &gen6_depth_stencil_state,	/* must do before cc unit */
 

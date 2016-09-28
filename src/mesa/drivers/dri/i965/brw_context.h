@@ -1202,7 +1202,6 @@ struct brw_context
 
    struct {
       uint32_t state_offset;
-      uint32_t blend_state_offset;
       uint32_t depth_stencil_state_offset;
       uint32_t vp_offset;
    } cc;

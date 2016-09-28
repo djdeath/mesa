@@ -180,48 +180,6 @@ struct brw_clip_unit_state
    float viewport_ymax;
 };
 
-struct gen6_blend_state
-{
-   struct {
-      unsigned dest_blend_factor:5;
-      unsigned source_blend_factor:5;
-      unsigned pad3:1;
-      unsigned blend_func:3;
-      unsigned pad2:1;
-      unsigned ia_dest_blend_factor:5;
-      unsigned ia_source_blend_factor:5;
-      unsigned pad1:1;
-      unsigned ia_blend_func:3;
-      unsigned pad0:1;
-      unsigned ia_blend_enable:1;
-      unsigned blend_enable:1;
-   } blend0;
-
-   struct {
-      unsigned post_blend_clamp_enable:1;
-      unsigned pre_blend_clamp_enable:1;
-      unsigned clamp_range:2;
-      unsigned pad0:4;
-      unsigned x_dither_offset:2;
-      unsigned y_dither_offset:2;
-      unsigned dither_enable:1;
-      unsigned alpha_test_func:3;
-      unsigned alpha_test_enable:1;
-      unsigned pad1:1;
-      unsigned logic_op_func:4;
-      unsigned logic_op_enable:1;
-      unsigned pad2:1;
-      unsigned write_disable_b:1;
-      unsigned write_disable_g:1;
-      unsigned write_disable_r:1;
-      unsigned write_disable_a:1;
-      unsigned pad3:1;
-      unsigned alpha_to_coverage_dither:1;
-      unsigned alpha_to_one:1;
-      unsigned alpha_to_coverage:1;
-   } blend1;
-};
-
 struct gen6_color_calc_state
 {
    struct {

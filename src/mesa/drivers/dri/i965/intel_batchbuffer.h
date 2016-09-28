@@ -117,7 +117,7 @@ intel_batchbuffer_emit_float(struct brw_context *brw, float f)
    intel_batchbuffer_emit_dword(brw, float_as_int(f));
 }
 
-static inline uint32_t *
+static inline void *
 intel_batchbuffer_begin(struct brw_context *brw, int n, enum brw_gpu_ring ring)
 {
    intel_batchbuffer_require_space(brw, n * 4, ring);
