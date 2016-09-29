@@ -12,7 +12,7 @@ COMMON_FILES = \
 	common/gen_l3_config.c \
 	common/gen_l3_config.h
 
-GENXML_GENERATED_FILES = \
+GENXML_PACK_GENERATED_FILES = \
 	genxml/gen4_pack.h \
 	genxml/gen45_pack.h \
 	genxml/gen5_pack.h \
@@ -21,6 +21,16 @@ GENXML_GENERATED_FILES = \
 	genxml/gen75_pack.h \
 	genxml/gen8_pack.h \
 	genxml/gen9_pack.h
+
+GENXML_PRINT_GENERATED_FILES = \
+	genxml/gen4_print.h \
+	genxml/gen45_print.h \
+	genxml/gen5_print.h \
+	genxml/gen6_print.h \
+	genxml/gen7_print.h \
+	genxml/gen75_print.h \
+	genxml/gen8_print.h \
+	genxml/gen9_print.h
 
 ISL_FILES = \
 	isl/isl.c \

@@ -19,15 +19,20 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-BUILT_SOURCES += $(GENXML_GENERATED_FILES)
+BUILT_SOURCES += $(GENXML_PACK_GENERATED_FILES) $(GENXML_PRINT_GENERATED_FILES)
 
-SUFFIXES = _pack.h .xml
+SUFFIXES = _pack.h _print.h .xml
 
-$(GENXML_GENERATED_FILES): genxml/gen_pack_header.py
+$(GENXML_PACK_GENERATED_FILES): genxml/gen_pack_header.py
+$(GENXML_PRINT_GENERATED_FILES): genxml/gen_print_header.py
 
 .xml_pack.h:
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/genxml/gen_pack_header.py $< > $@
+
+.xml_print.h:
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/genxml/gen_print_header.py $< > $@
 
 EXTRA_DIST += \
 	genxml/gen4.xml \

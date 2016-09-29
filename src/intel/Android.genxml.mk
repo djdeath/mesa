@@ -41,7 +41,8 @@ $(intermediates)/dummy.c:
 	$(hide) touch $@
 
 # This is the list of auto-generated files headers
-LOCAL_GENERATED_SOURCES += $(addprefix $(intermediates)/, $(GENXML_GENERATED_FILES))
+LOCAL_GENERATED_SOURCES += g$(addprefix $(intermediates)/, $(GENXML_PACK_GENERATED_FILES))
+LOCAL_GENERATED_SOURCES += g$(addprefix $(intermediates)/, $(GENXML_PRINT_GENERATED_FILES))
 
 define header-gen
 	@mkdir -p $(dir $@)
