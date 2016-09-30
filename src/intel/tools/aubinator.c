@@ -60,7 +60,7 @@ static enum { COLOR_AUTO, COLOR_ALWAYS, COLOR_NEVER } option_color;
 
 /* state */
 
-struct gen_disasm *disasm;
+struct aub_disasm *disasm;
 
 uint64_t gtt_size, gtt_end;
 void *gtt;
@@ -305,7 +305,7 @@ handle_media_interface_descriptor_load(struct gen_spec *spec, uint32_t *p)
       }
 
       insns = (struct brw_instruction *) (gtt + start);
-      gen_disasm_disassemble(disasm, insns, 0, stdout);
+      aub_disasm_disassemble(disasm, insns, 0, stdout);
 
       dump_samplers(spec, descriptors[3] & ~0x1f);
       dump_binding_table(spec, descriptors[4] & ~0x1f);
@@ -403,7 +403,7 @@ handle_3dstate_vs(struct gen_spec *spec, uint32_t *p)
              instruction_base, start);
 
       insns = (struct brw_instruction *) (gtt + instruction_base + start);
-      gen_disasm_disassemble(disasm, insns, 0, stdout);
+      aub_disasm_disassemble(disasm, insns, 0, stdout);
    }
 }
 
@@ -427,7 +427,7 @@ handle_3dstate_hs(struct gen_spec *spec, uint32_t *p)
              instruction_base, start);
 
       insns = (struct brw_instruction *) (gtt + instruction_base + start);
-      gen_disasm_disassemble(disasm, insns, 0, stdout);
+      aub_disasm_disassemble(disasm, insns, 0, stdout);
    }
 }
 
@@ -521,21 +521,21 @@ handle_3dstate_ps(struct gen_spec *spec, uint32_t *p)
    printf("  Kernel[0] %s\n", k0);
    if (k0 != unused) {
       insns = (struct brw_instruction *) (gtt + start);
-      gen_disasm_disassemble(disasm, insns, 0, stdout);
+      aub_disasm_disassemble(disasm, insns, 0, stdout);
    }
 
    start = instruction_base + (p[k1_offset] & mask);
    printf("  Kernel[1] %s\n", k1);
    if (k1 != unused) {
       insns = (struct brw_instruction *) (gtt + start);
-      gen_disasm_disassemble(disasm, insns, 0, stdout);
+      aub_disasm_disassemble(disasm, insns, 0, stdout);
    }
 
    start = instruction_base + (p[k2_offset] & mask);
    printf("  Kernel[2] %s\n", k2);
    if (k2 != unused) {
       insns = (struct brw_instruction *) (gtt + start);
-      gen_disasm_disassemble(disasm, insns, 0, stdout);
+      aub_disasm_disassemble(disasm, insns, 0, stdout);
    }
 }
 
@@ -1156,7 +1156,7 @@ int main(int argc, char *argv[])
       setup_pager();
 
    spec = gen_spec_load(&devinfo);
-   disasm = gen_disasm_create(gen->pci_id);
+   disasm = aub_disasm_create(&devinfo);
 
    if (input_file == NULL) {
        print_help(argv[0], stderr);

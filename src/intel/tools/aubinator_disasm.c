@@ -31,7 +31,7 @@
 
 uint64_t INTEL_DEBUG;
 
-struct gen_disasm {
+struct aub_disasm {
     struct gen_device_info devinfo;
 };
 
@@ -45,7 +45,7 @@ is_send(uint32_t opcode)
 }
 
 void
-gen_disasm_disassemble(struct gen_disasm *disasm, void *assembly,
+aub_disasm_disassemble(struct aub_disasm *disasm, void *assembly,
                        int start, FILE *out)
 {
    struct gen_device_info *devinfo = &disasm->devinfo;
@@ -92,27 +92,23 @@ gen_disasm_disassemble(struct gen_disasm *disasm, void *assembly,
    }
 }
 
-struct gen_disasm *
-gen_disasm_create(int pciid)
+struct aub_disasm *
+aub_disasm_create(const struct gen_device_info *devinfo)
 {
-   struct gen_disasm *gd;
+   struct aub_disasm *gd;
 
    gd = malloc(sizeof *gd);
    if (gd == NULL)
       return NULL;
 
-   if (!gen_get_device_info(pciid, &gd->devinfo)) {
-      free(gd);
-      return NULL;
-   }
-
+   gd->devinfo = *devinfo;
    brw_init_compaction_tables(&gd->devinfo);
 
    return gd;
 }
 
 void
-gen_disasm_destroy(struct gen_disasm *disasm)
+aub_disasm_destroy(struct aub_disasm *disasm)
 {
    free(disasm);
 }

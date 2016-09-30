@@ -24,12 +24,14 @@
 #ifndef AUBINATOR_DISASM_H
 #define AUBINATOR_DISASM_H
 
-struct gen_disasm;
+#include "common/gen_device_info.h"
 
-struct gen_disasm *gen_disasm_create(int pciid);
-void gen_disasm_disassemble(struct gen_disasm *disasm,
+struct aub_disasm;
+
+struct aub_disasm *aub_disasm_create(const struct gen_device_info *devinfo);
+void aub_disasm_disassemble(struct aub_disasm *disasm,
                             void *assembly, int start, FILE *out);
 
-void gen_disasm_destroy(struct gen_disasm *disasm);
+void aub_disasm_destroy(struct aub_disasm *disasm);
 
 #endif /* AUBINATOR_DISASM_H */
