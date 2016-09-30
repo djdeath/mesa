@@ -27,7 +27,7 @@
 #include "brw_inst.h"
 #include "brw_eu.h"
 
-#include "gen_disasm.h"
+#include "aubinator_disasm.h"
 
 uint64_t INTEL_DEBUG;
 

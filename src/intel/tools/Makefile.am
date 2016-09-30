@@ -49,10 +49,10 @@ noinst_PROGRAMS = aubinator
 
 aubinator_SOURCES = \
 	aubinator.c \
-	decoder.c \
-	decoder.h \
-	disasm.c \
-	gen_disasm.h
+	aubinator_decoder.c \
+	aubinator_decoder.h \
+	aubinator_disasm.c \
+	aubinator_disasm.h
 
 aubinator_LDADD = \
 	$(aubinator_DEPS) \

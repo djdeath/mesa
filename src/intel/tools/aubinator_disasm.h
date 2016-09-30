@@ -21,8 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef GEN_DISASM_H
-#define GEN_DISASM_H
+#ifndef AUBINATOR_DISASM_H
+#define AUBINATOR_DISASM_H
 
 struct gen_disasm;
 
@@ -32,4 +32,4 @@ void gen_disasm_disassemble(struct gen_disasm *disasm,
 
 void gen_disasm_destroy(struct gen_disasm *disasm);
 
-#endif /* GEN_DISASM_H */
+#endif /* AUBINATOR_DISASM_H */

@@ -30,7 +30,7 @@
 
 #include <util/macros.h>
 
-#include "decoder.h"
+#include "aubinator_decoder.h"
 
 #define XML_BUFFER_SIZE 4096
 

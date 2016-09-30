@@ -21,7 +21,8 @@
  * IN THE SOFTWARE.
  */
 
-#pragma once
+#ifndef AUBINATOR_DECODER_H
+#define AUBINATOR_DECODER_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -99,3 +100,5 @@ void gen_field_iterator_init(struct gen_field_iterator *iter,
                              struct gen_group *group, const uint32_t *p);
 
 bool gen_field_iterator_next(struct gen_field_iterator *iter);
+
+#endif /* AUBINATOR_DECODER_H */

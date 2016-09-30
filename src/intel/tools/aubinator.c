@@ -35,9 +35,9 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 
-#include "decoder.h"
+#include "aubinator_decoder.h"
 #include "intel_aub.h"
-#include "gen_disasm.h"
+#include "aubinator_disasm.h"
 
 /* Below is the only command missing from intel_aub.h in libdrm
  * So, reuse intel_aub.h from libdrm and #define the
