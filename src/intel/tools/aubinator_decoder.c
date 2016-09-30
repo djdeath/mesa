@@ -42,15 +42,15 @@
 
 #define MAKE_GEN(major, minor) ( ((major) << 8) | (minor) )
 
-struct gen_spec {
+struct aub_spec {
    uint32_t gen;
 
    int ncommands;
-   struct gen_group *commands[256];
+   struct aub_group *commands[256];
    int nstructs;
-   struct gen_group *structs[256];
+   struct aub_group *structs[256];
    int nregisters;
-   struct gen_group *registers[256];
+   struct aub_group *registers[256];
 };
 
 struct location {
@@ -64,28 +64,28 @@ struct parser_context {
    struct location loc;
    const char *platform;
 
-   struct gen_group *group;
+   struct aub_group *group;
 
    int nfields;
-   struct gen_field *fields[128];
+   struct aub_field *fields[128];
 
-   struct gen_spec *spec;
+   struct aub_spec *spec;
 };
 
 const char *
-gen_group_get_name(struct gen_group *group)
+aub_group_get_name(struct aub_group *group)
 {
    return group->name;
 }
 
 uint32_t
-gen_group_get_opcode(struct gen_group *group)
+aub_group_get_opcode(struct aub_group *group)
 {
    return group->opcode;
 }
 
-struct gen_group *
-gen_spec_find_struct(struct gen_spec *spec, const char *name)
+struct aub_group *
+aub_spec_find_struct(struct aub_spec *spec, const char *name)
 {
    for (int i = 0; i < spec->nstructs; i++)
       if (strcmp(spec->structs[i]->name, name) == 0)
@@ -94,8 +94,8 @@ gen_spec_find_struct(struct gen_spec *spec, const char *name)
    return NULL;
 }
 
-struct gen_group *
-gen_spec_find_register(struct gen_spec *spec, uint32_t offset)
+struct aub_group *
+aub_spec_find_register(struct aub_spec *spec, uint32_t offset)
 {
    for (int i = 0; i < spec->nregisters; i++)
       if (spec->registers[i]->register_offset == offset)
@@ -105,7 +105,7 @@ gen_spec_find_register(struct gen_spec *spec, uint32_t offset)
 }
 
 uint32_t
-gen_spec_get_gen(struct gen_spec *spec)
+aub_spec_get_gen(struct aub_spec *spec)
 {
    return spec->gen;
 }
@@ -153,10 +153,10 @@ xzalloc(size_t s)
    return fail_on_null(zalloc(s));
 }
 
-static struct gen_group *
+static struct aub_group *
 create_group(struct parser_context *ctx, const char *name, const char **atts)
 {
-   struct gen_group *group;
+   struct aub_group *group;
 
    group = xzalloc(sizeof(*group));
    if (name)
@@ -242,40 +242,40 @@ field_address(uint64_t value, int start, int end)
    return (value & mask(start, end));
 }
 
-static struct gen_type
+static struct aub_type
 string_to_type(struct parser_context *ctx, const char *s)
 {
    int i, f;
-   struct gen_group *g;
+   struct aub_group *g;
 
    if (strcmp(s, "int") == 0)
-      return (struct gen_type) { .kind = GEN_TYPE_INT };
+      return (struct aub_type) { .kind = AUB_TYPE_INT };
    else if (strcmp(s, "uint") == 0)
-      return (struct gen_type) { .kind = GEN_TYPE_UINT };
+      return (struct aub_type) { .kind = AUB_TYPE_UINT };
    else if (strcmp(s, "bool") == 0)
-      return (struct gen_type) { .kind = GEN_TYPE_BOOL };
+      return (struct aub_type) { .kind = AUB_TYPE_BOOL };
    else if (strcmp(s, "float") == 0)
-      return (struct gen_type) { .kind = GEN_TYPE_FLOAT };
+      return (struct aub_type) { .kind = AUB_TYPE_FLOAT };
    else if (strcmp(s, "address") == 0)
-      return (struct gen_type) { .kind = GEN_TYPE_ADDRESS };
+      return (struct aub_type) { .kind = AUB_TYPE_ADDRESS };
    else if (strcmp(s, "offset") == 0)
-      return (struct gen_type) { .kind = GEN_TYPE_OFFSET };
+      return (struct aub_type) { .kind = AUB_TYPE_OFFSET };
    else if (sscanf(s, "u%d.%d", &i, &f) == 2)
-      return (struct gen_type) { .kind = GEN_TYPE_UFIXED, .i = i, .f = f };
+      return (struct aub_type) { .kind = AUB_TYPE_UFIXED, .i = i, .f = f };
    else if (sscanf(s, "s%d.%d", &i, &f) == 2)
-      return (struct gen_type) { .kind = GEN_TYPE_SFIXED, .i = i, .f = f };
-   else if (g = gen_spec_find_struct(ctx->spec, s), g != NULL)
-      return (struct gen_type) { .kind = GEN_TYPE_STRUCT, .gen_struct = g };
+      return (struct aub_type) { .kind = AUB_TYPE_SFIXED, .i = i, .f = f };
+   else if (g = aub_spec_find_struct(ctx->spec, s), g != NULL)
+      return (struct aub_type) { .kind = AUB_TYPE_STRUCT, .aub_struct = g };
    else if (strcmp(s, "mbo") == 0)
-      return (struct gen_type) { .kind = GEN_TYPE_MBO };
+      return (struct aub_type) { .kind = AUB_TYPE_MBO };
    else
       fail(&ctx->loc, "invalid type: %s", s);
 }
 
-static struct gen_field *
+static struct aub_field *
 create_field(struct parser_context *ctx, const char **atts)
 {
-   struct gen_field *field;
+   struct aub_field *field;
    char *p;
    int i;
 
@@ -363,7 +363,7 @@ end_element(void *data, const char *name)
       strcmp(name, "struct") == 0 ||
       strcmp(name, "register") == 0) {
       size_t size = ctx->nfields * sizeof(ctx->fields[0]);
-      struct gen_group *group = ctx->group;
+      struct aub_group *group = ctx->group;
 
       group->fields = xzalloc(size);
       group->nfields = ctx->nfields;
@@ -382,7 +382,7 @@ end_element(void *data, const char *name)
          }
       }
 
-      struct gen_spec *spec = ctx->spec;
+      struct aub_spec *spec = ctx->spec;
       if (strcmp(name, "instruction") == 0)
          spec->commands[spec->ncommands++] = group;
       else if (strcmp(name, "struct") == 0)
@@ -426,8 +426,8 @@ devinfo_to_xml_data(const struct gen_device_info *devinfo,
    }
 }
 
-struct gen_spec *
-gen_spec_load(const struct gen_device_info *devinfo)
+struct aub_spec *
+aub_spec_load(const struct gen_device_info *devinfo)
 {
    struct parser_context ctx;
    void *buf, *data;
@@ -467,8 +467,8 @@ gen_spec_load(const struct gen_device_info *devinfo)
    return ctx.spec;
 }
 
-struct gen_group *
-gen_spec_find_instruction(struct gen_spec *spec, const uint32_t *p)
+struct aub_group *
+aub_spec_find_instruction(struct aub_spec *spec, const uint32_t *p)
 {
    for (int i = 0; i < spec->ncommands; i++) {
       uint32_t opcode = *p & spec->commands[i]->opcode_mask;
@@ -480,7 +480,7 @@ gen_spec_find_instruction(struct gen_spec *spec, const uint32_t *p)
 }
 
 int
-gen_group_get_length(struct gen_group *group, const uint32_t *p)
+aub_group_get_length(struct aub_group *group, const uint32_t *p)
 {
    uint32_t h = p[0];
    uint32_t type = field(h, 29, 31);
@@ -514,8 +514,8 @@ gen_group_get_length(struct gen_group *group, const uint32_t *p)
 }
 
 void
-gen_field_iterator_init(struct gen_field_iterator *iter,
-                        struct gen_group *group, const uint32_t *p)
+aub_field_iterator_init(struct aub_field_iterator *iter,
+                        struct aub_group *group, const uint32_t *p)
 {
    iter->group = group;
    iter->p = p;
@@ -523,9 +523,9 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
 }
 
 bool
-gen_field_iterator_next(struct gen_field_iterator *iter)
+aub_field_iterator_next(struct aub_field_iterator *iter)
 {
-   struct gen_field *f;
+   struct aub_field *f;
    union {
       uint64_t qw;
       float f;
@@ -544,40 +544,40 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
       v.qw = iter->p[index];
 
    switch (f->type.kind) {
-   case GEN_TYPE_UNKNOWN:
-   case GEN_TYPE_INT:
+   case AUB_TYPE_UNKNOWN:
+   case AUB_TYPE_INT:
       snprintf(iter->value, sizeof(iter->value),
                "%ld", field(v.qw, f->start, f->end));
       break;
-   case GEN_TYPE_UINT:
+   case AUB_TYPE_UINT:
       snprintf(iter->value, sizeof(iter->value),
                "%lu", field(v.qw, f->start, f->end));
       break;
-   case GEN_TYPE_BOOL:
+   case AUB_TYPE_BOOL:
       snprintf(iter->value, sizeof(iter->value),
                "%s", field(v.qw, f->start, f->end) ? "true" : "false");
       break;
-   case GEN_TYPE_FLOAT:
+   case AUB_TYPE_FLOAT:
       snprintf(iter->value, sizeof(iter->value), "%f", v.f);
       break;
-   case GEN_TYPE_ADDRESS:
-   case GEN_TYPE_OFFSET:
+   case AUB_TYPE_ADDRESS:
+   case AUB_TYPE_OFFSET:
       snprintf(iter->value, sizeof(iter->value),
                "0x%08lx", field_address(v.qw, f->start, f->end));
       break;
-   case GEN_TYPE_STRUCT:
+   case AUB_TYPE_STRUCT:
       snprintf(iter->value, sizeof(iter->value),
-               "<struct %s %d>", f->type.gen_struct->name, (f->start / 32));
+               "<struct %s %d>", f->type.aub_struct->name, (f->start / 32));
       break;
-   case GEN_TYPE_UFIXED:
+   case AUB_TYPE_UFIXED:
       snprintf(iter->value, sizeof(iter->value),
                "%f", (float) field(v.qw, f->start, f->end) / (1 << f->type.f));
       break;
-   case GEN_TYPE_SFIXED:
+   case AUB_TYPE_SFIXED:
       /* FIXME: Sign extend extracted field. */
       snprintf(iter->value, sizeof(iter->value), "%s", "foo");
       break;
-   case GEN_TYPE_MBO:
+   case AUB_TYPE_MBO:
        break;
    }
 

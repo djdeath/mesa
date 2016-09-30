@@ -89,10 +89,10 @@ valid_offset(uint32_t offset)
 }
 
 static void
-print_dword_val(struct gen_field_iterator *iter, uint64_t offset,
+print_dword_val(struct aub_field_iterator *iter, uint64_t offset,
                 int *dword_num)
 {
-   struct gen_field *f;
+   struct aub_field *f;
 
    f = iter->group->fields[iter->i - 1];
    const int dword = f->start / 32;
@@ -105,7 +105,7 @@ print_dword_val(struct gen_field_iterator *iter, uint64_t offset,
 }
 
 static char *
-print_iterator_values(struct gen_field_iterator *iter, int *idx)
+print_iterator_values(struct aub_field_iterator *iter, int *idx)
 {
     char *token = NULL;
     if (strstr(iter->value, "struct") == NULL) {
@@ -124,10 +124,10 @@ print_iterator_values(struct gen_field_iterator *iter, int *idx)
 }
 
 static void
-decode_structure(struct gen_spec *spec, struct gen_group *strct,
+decode_structure(struct aub_spec *spec, struct aub_group *strct,
                  const uint32_t *p)
 {
-   struct gen_field_iterator iter;
+   struct aub_field_iterator iter;
    char *token = NULL;
    int idx = 0, dword_num = 0;
    uint64_t offset = 0;
@@ -137,13 +137,13 @@ decode_structure(struct gen_spec *spec, struct gen_group *strct,
    else
       offset = 0;
 
-   gen_field_iterator_init(&iter, strct, p);
-   while (gen_field_iterator_next(&iter)) {
+   aub_field_iterator_init(&iter, strct, p);
+   while (aub_field_iterator_next(&iter)) {
       idx = 0;
       print_dword_val(&iter, offset, &dword_num);
       token = print_iterator_values(&iter, &idx);
       if (token != NULL) {
-         struct gen_group *struct_val = gen_spec_find_struct(spec, token);
+         struct aub_group *struct_val = aub_spec_find_struct(spec, token);
          decode_structure(spec, struct_val, &p[idx]);
          token = NULL;
       }
@@ -151,22 +151,22 @@ decode_structure(struct gen_spec *spec, struct gen_group *strct,
 }
 
 static void
-handle_struct_decode(struct gen_spec *spec, char *struct_name, uint32_t *p)
+handle_struct_decode(struct aub_spec *spec, char *struct_name, uint32_t *p)
 {
    if (struct_name == NULL)
       return;
-   struct gen_group *struct_val = gen_spec_find_struct(spec, struct_name);
+   struct aub_group *struct_val = aub_spec_find_struct(spec, struct_name);
    decode_structure(spec, struct_val, p);
 }
 
 static void
-dump_binding_table(struct gen_spec *spec, uint32_t offset)
+dump_binding_table(struct aub_spec *spec, uint32_t offset)
 {
    uint32_t *pointers, i;
    uint64_t start;
-   struct gen_group *surface_state;
+   struct aub_group *surface_state;
 
-   surface_state = gen_spec_find_struct(spec, "RENDER_SURFACE_STATE");
+   surface_state = aub_spec_find_struct(spec, "RENDER_SURFACE_STATE");
    if (surface_state == NULL) {
       printf("did not find RENDER_SURFACE_STATE info\n");
       return;
@@ -191,7 +191,7 @@ dump_binding_table(struct gen_spec *spec, uint32_t offset)
 }
 
 static void
-handle_3dstate_index_buffer(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_index_buffer(struct aub_spec *spec, uint32_t *p)
 {
    void *start;
    uint32_t length, i, type, size;
@@ -231,11 +231,11 @@ get_qword(uint32_t *p)
 }
 
 static void
-handle_state_base_address(struct gen_spec *spec, uint32_t *p)
+handle_state_base_address(struct aub_spec *spec, uint32_t *p)
 {
    uint64_t mask = ~((1 << 12) - 1);
 
-   if (gen_spec_get_gen(spec) >= gen_make_gen(8,0)) {
+   if (aub_spec_get_gen(spec) >= aub_make_gen(8,0)) {
       if (p[1] & 1)
          general_state_base = get_qword(&p[1]) & mask;
       if (p[4] & 1)
@@ -259,13 +259,13 @@ handle_state_base_address(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
-dump_samplers(struct gen_spec *spec, uint32_t offset)
+dump_samplers(struct aub_spec *spec, uint32_t offset)
 {
    uint32_t i;
    uint64_t start;
-   struct gen_group *sampler_state;
+   struct aub_group *sampler_state;
 
-   sampler_state = gen_spec_find_struct(spec, "SAMPLER_STATE");
+   sampler_state = aub_spec_find_struct(spec, "SAMPLER_STATE");
 
    start = dynamic_state_base + offset;
    for (i = 0; i < 4; i++) {
@@ -275,16 +275,16 @@ dump_samplers(struct gen_spec *spec, uint32_t offset)
 }
 
 static void
-handle_media_interface_descriptor_load(struct gen_spec *spec, uint32_t *p)
+handle_media_interface_descriptor_load(struct aub_spec *spec, uint32_t *p)
 {
    int i, length = p[2] / 32;
-   struct gen_group *descriptor_structure;
+   struct aub_group *descriptor_structure;
    uint32_t *descriptors;
    uint64_t start;
    struct brw_instruction *insns;
 
    descriptor_structure =
-      gen_spec_find_struct(spec, "INTERFACE_DESCRIPTOR_DATA");
+      aub_spec_find_struct(spec, "INTERFACE_DESCRIPTOR_DATA");
    if (descriptor_structure == NULL) {
       printf("did not find INTERFACE_DESCRIPTOR_DATA info\n");
       return;
@@ -338,7 +338,7 @@ probably_float(uint32_t bits)
 }
 
 static void
-handle_3dstate_vertex_buffers(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_vertex_buffers(struct aub_spec *spec, uint32_t *p)
 {
    uint32_t *end, *s, *dw, *dwend;
    uint64_t offset;
@@ -346,7 +346,7 @@ handle_3dstate_vertex_buffers(struct gen_spec *spec, uint32_t *p)
 
    end = (p[0] & 0xff) + p + 2;
    for (s = &p[1], n = 0; s < end; s += 4, n++) {
-      if (gen_spec_get_gen(spec) >= gen_make_gen(8, 0)) {
+      if (aub_spec_get_gen(spec) >= aub_make_gen(8, 0)) {
          offset = *(uint64_t *) &s[1];
          dwend = gtt + offset + s[3];
       } else {
@@ -384,13 +384,13 @@ handle_3dstate_vertex_buffers(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
-handle_3dstate_vs(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_vs(struct aub_spec *spec, uint32_t *p)
 {
    uint64_t start;
    struct brw_instruction *insns;
    int vs_enable;
 
-   if (gen_spec_get_gen(spec) >= gen_make_gen(8, 0)) {
+   if (aub_spec_get_gen(spec) >= aub_make_gen(8, 0)) {
       start = get_qword(&p[1]);
       vs_enable = p[7] & 1;
    } else {
@@ -408,13 +408,13 @@ handle_3dstate_vs(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
-handle_3dstate_hs(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_hs(struct aub_spec *spec, uint32_t *p)
 {
    uint64_t start;
    struct brw_instruction *insns;
    int hs_enable;
 
-   if (gen_spec_get_gen(spec) >= gen_make_gen(8, 0)) {
+   if (aub_spec_get_gen(spec) >= aub_make_gen(8, 0)) {
       start = get_qword(&p[4]);
    } else {
       start = p[4];
@@ -432,7 +432,7 @@ handle_3dstate_hs(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
-handle_3dstate_constant(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_constant(struct aub_spec *spec, uint32_t *p)
 {
    int i, j, length;
    uint32_t *dw;
@@ -455,7 +455,7 @@ handle_3dstate_constant(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
-handle_3dstate_ps(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_ps(struct aub_spec *spec, uint32_t *p)
 {
    uint32_t mask = ~((1 << 6) - 1);
    uint64_t start;
@@ -465,7 +465,7 @@ handle_3dstate_ps(struct gen_spec *spec, uint32_t *p)
    const char *k0, *k1, *k2;
    uint32_t k_mask, k1_offset, k2_offset;
 
-   if (gen_spec_get_gen(spec) >= gen_make_gen(8, 0)) {
+   if (aub_spec_get_gen(spec) >= aub_make_gen(8, 0)) {
       k_mask = p[6] & 7;
       k1_offset = 8;
       k2_offset = 10;
@@ -540,24 +540,24 @@ handle_3dstate_ps(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
-handle_3dstate_binding_table_pointers(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_binding_table_pointers(struct aub_spec *spec, uint32_t *p)
 {
    dump_binding_table(spec, p[1]);
 }
 
 static void
-handle_3dstate_sampler_state_pointers(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_sampler_state_pointers(struct aub_spec *spec, uint32_t *p)
 {
    dump_samplers(spec, p[1]);
 }
 
 static void
-handle_3dstate_viewport_state_pointers_cc(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_viewport_state_pointers_cc(struct aub_spec *spec, uint32_t *p)
 {
    uint64_t start;
-   struct gen_group *cc_viewport;
+   struct aub_group *cc_viewport;
 
-   cc_viewport = gen_spec_find_struct(spec, "CC_VIEWPORT");
+   cc_viewport = aub_spec_find_struct(spec, "CC_VIEWPORT");
 
    start = dynamic_state_base + (p[1] & ~0x1fu);
    for (uint32_t i = 0; i < 4; i++) {
@@ -567,13 +567,13 @@ handle_3dstate_viewport_state_pointers_cc(struct gen_spec *spec, uint32_t *p)
 }
 
 static void
-handle_3dstate_viewport_state_pointers_sf_clip(struct gen_spec *spec,
+handle_3dstate_viewport_state_pointers_sf_clip(struct aub_spec *spec,
                                                uint32_t *p)
 {
    uint64_t start;
-   struct gen_group *sf_clip_viewport;
+   struct aub_group *sf_clip_viewport;
 
-   sf_clip_viewport = gen_spec_find_struct(spec, "SF_CLIP_VIEWPORT");
+   sf_clip_viewport = aub_spec_find_struct(spec, "SF_CLIP_VIEWPORT");
 
    start = dynamic_state_base + (p[1] & ~0x3fu);
    for (uint32_t i = 0; i < 4; i++) {
@@ -583,45 +583,45 @@ handle_3dstate_viewport_state_pointers_sf_clip(struct gen_spec *spec,
 }
 
 static void
-handle_3dstate_blend_state_pointers(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_blend_state_pointers(struct aub_spec *spec, uint32_t *p)
 {
    uint64_t start;
-   struct gen_group *blend_state;
+   struct aub_group *blend_state;
 
-   blend_state = gen_spec_find_struct(spec, "BLEND_STATE");
+   blend_state = aub_spec_find_struct(spec, "BLEND_STATE");
 
    start = dynamic_state_base + (p[1] & ~0x3fu);
    decode_structure(spec, blend_state, gtt + start);
 }
 
 static void
-handle_3dstate_cc_state_pointers(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_cc_state_pointers(struct aub_spec *spec, uint32_t *p)
 {
    uint64_t start;
-   struct gen_group *cc_state;
+   struct aub_group *cc_state;
 
-   cc_state = gen_spec_find_struct(spec, "COLOR_CALC_STATE");
+   cc_state = aub_spec_find_struct(spec, "COLOR_CALC_STATE");
 
    start = dynamic_state_base + (p[1] & ~0x3fu);
    decode_structure(spec, cc_state, gtt + start);
 }
 
 static void
-handle_3dstate_scissor_state_pointers(struct gen_spec *spec, uint32_t *p)
+handle_3dstate_scissor_state_pointers(struct aub_spec *spec, uint32_t *p)
 {
    uint64_t start;
-   struct gen_group *scissor_rect;
+   struct aub_group *scissor_rect;
 
-   scissor_rect = gen_spec_find_struct(spec, "SCISSOR_RECT");
+   scissor_rect = aub_spec_find_struct(spec, "SCISSOR_RECT");
 
    start = dynamic_state_base + (p[1] & ~0x1fu);
    decode_structure(spec, scissor_rect, gtt + start);
 }
 
 static void
-handle_load_register_imm(struct gen_spec *spec, uint32_t *p)
+handle_load_register_imm(struct aub_spec *spec, uint32_t *p)
 {
-   struct gen_group *reg = gen_spec_find_register(spec, p[1]);
+   struct aub_group *reg = aub_spec_find_register(spec, p[1]);
 
    if (reg != NULL) {
       printf("register %s (0x%x): 0x%x\n",
@@ -672,7 +672,7 @@ handle_load_register_imm(struct gen_spec *spec, uint32_t *p)
 
 struct custom_handler {
    uint32_t opcode;
-   void (*handle)(struct gen_spec *spec, uint32_t *p);
+   void (*handle)(struct aub_spec *spec, uint32_t *p);
 } custom_handlers[] = {
    { STATE_BASE_ADDRESS, handle_state_base_address },
    { MEDIA_INTERFACE_DESCRIPTOR_LOAD, handle_media_interface_descriptor_load },
@@ -708,20 +708,20 @@ struct custom_handler {
 };
 
 static void
-parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
+parse_commands(struct aub_spec *spec, uint32_t *cmds, int size, int engine)
 {
    uint32_t *p, *end = cmds + size / 4;
    unsigned int length, i;
-   struct gen_group *inst;
+   struct aub_group *inst;
 
    for (p = cmds; p < end; p += length) {
-      inst = gen_spec_find_instruction(spec, p);
+      inst = aub_spec_find_instruction(spec, p);
       if (inst == NULL) {
          printf("unknown instruction %08x\n", p[0]);
          length = (p[0] & 0xff) + 2;
          continue;
       }
-      length = gen_group_get_length(inst, p);
+      length = aub_group_get_length(inst, p);
 
       const char *color, *reset_color = CLEAR_TO_EOL NORMAL;
       uint64_t offset;
@@ -743,14 +743,14 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
 
       printf("%s0x%08lx:  0x%08x:  %s%s\n",
              color, offset, p[0],
-             gen_group_get_name(inst), reset_color);
+             aub_group_get_name(inst), reset_color);
 
       if (option_full_decode) {
-         struct gen_field_iterator iter;
+         struct aub_field_iterator iter;
          char *token = NULL;
          int idx = 0, dword_num = 0;
-         gen_field_iterator_init(&iter, inst, p);
-         while (gen_field_iterator_next(&iter)) {
+         aub_field_iterator_init(&iter, inst, p);
+         while (aub_field_iterator_next(&iter)) {
             idx = 0;
             print_dword_val(&iter, offset, &dword_num);
             if (dword_num > 0)
@@ -764,7 +764,7 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
          }
 
          for (i = 0; i < ARRAY_LENGTH(custom_handlers); i++) {
-            if (gen_group_get_opcode(inst) ==
+            if (aub_group_get_opcode(inst) ==
                 custom_handlers[i].opcode)
                custom_handlers[i].handle(spec, p);
          }
@@ -772,7 +772,7 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
 
       if ((p[0] & 0xffff0000) == AUB_MI_BATCH_BUFFER_START) {
          uint64_t start;
-         if (gen_spec_get_gen(spec) >= gen_make_gen(8,0))
+         if (aub_spec_get_gen(spec) >= aub_make_gen(8,0))
             start = get_qword(&p[1]);
          else
             start = p[1];
@@ -784,11 +784,11 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
    }
 }
 
-#define GEN_ENGINE_RENDER 1
-#define GEN_ENGINE_BLITTER 2
+#define AUB_ENGINE_RENDER 1
+#define AUB_ENGINE_BLITTER 2
 
 static void
-handle_trace_block(struct gen_spec *spec, uint32_t *p)
+handle_trace_block(struct aub_spec *spec, uint32_t *p)
 {
    int operation = p[1] & AUB_TRACE_OPERATION_MASK;
    int type = p[1] & AUB_TRACE_TYPE_MASK;
@@ -797,9 +797,9 @@ handle_trace_block(struct gen_spec *spec, uint32_t *p)
    uint32_t size = p[4];
    int header_length = p[0] & 0xffff;
    uint32_t *data = p + header_length + 2;
-   int engine = GEN_ENGINE_RENDER;
+   int engine = AUB_ENGINE_RENDER;
 
-   if (gen_spec_get_gen(spec) >= gen_make_gen(8,0))
+   if (aub_spec_get_gen(spec) >= aub_make_gen(8,0))
       offset += (uint64_t) p[5] << 32;
 
    switch (operation) {
@@ -817,10 +817,10 @@ handle_trace_block(struct gen_spec *spec, uint32_t *p)
    case AUB_TRACE_OP_COMMAND_WRITE:
       switch (type) {
       case AUB_TRACE_TYPE_RING_PRB0:
-         engine = GEN_ENGINE_RENDER;
+         engine = AUB_ENGINE_RENDER;
          break;
       case AUB_TRACE_TYPE_RING_PRB2:
-         engine = GEN_ENGINE_BLITTER;
+         engine = AUB_ENGINE_BLITTER;
          break;
       default:
          printf("command write to unknown ring %d\n", type);
@@ -926,7 +926,7 @@ struct {
 };
 
 static void
-aub_file_decode_batch(struct aub_file *file, struct gen_spec *spec)
+aub_file_decode_batch(struct aub_file *file, struct aub_spec *spec)
 {
    uint32_t *p, h, device, data_type;
    int header_length, payload_size, bias;
@@ -1059,7 +1059,7 @@ is_prefix(const char *arg, const char *prefix, const char **value)
 
 int main(int argc, char *argv[])
 {
-   struct gen_spec *spec;
+   struct aub_spec *spec;
    struct aub_file *file;
    int i;
    bool found_arg_gen = false, pager = true;
@@ -1155,7 +1155,7 @@ int main(int argc, char *argv[])
    if (isatty(1) && pager)
       setup_pager();
 
-   spec = gen_spec_load(&devinfo);
+   spec = aub_spec_load(&devinfo);
    disasm = aub_disasm_create(&devinfo);
 
    if (input_file == NULL) {

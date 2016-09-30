@@ -29,36 +29,36 @@
 
 #include "common/gen_device_info.h"
 
-struct gen_spec;
-struct gen_group;
-struct gen_field;
+struct aub_spec;
+struct aub_group;
+struct aub_field;
 
-static inline uint32_t gen_make_gen(uint32_t major, uint32_t minor)
+static inline uint32_t aub_make_gen(uint32_t major, uint32_t minor)
 {
    return (major << 8) | minor;
 }
 
-struct gen_group *gen_spec_find_struct(struct gen_spec *spec, const char *name);
-struct gen_spec *gen_spec_load(const struct gen_device_info *devinfo);
-uint32_t gen_spec_get_gen(struct gen_spec *spec);
-struct gen_group *gen_spec_find_instruction(struct gen_spec *spec, const uint32_t *p);
-struct gen_group *gen_spec_find_register(struct gen_spec *spec, uint32_t offset);
-int gen_group_get_length(struct gen_group *group, const uint32_t *p);
-const char *gen_group_get_name(struct gen_group *group);
-uint32_t gen_group_get_opcode(struct gen_group *group);
+struct aub_group *aub_spec_find_struct(struct aub_spec *spec, const char *name);
+struct aub_spec *aub_spec_load(const struct gen_device_info *devinfo);
+uint32_t aub_spec_get_gen(struct aub_spec *spec);
+struct aub_group *aub_spec_find_instruction(struct aub_spec *spec, const uint32_t *p);
+struct aub_group *aub_spec_find_register(struct aub_spec *spec, uint32_t offset);
+int aub_group_get_length(struct aub_group *group, const uint32_t *p);
+const char *aub_group_get_name(struct aub_group *group);
+uint32_t aub_group_get_opcode(struct aub_group *group);
 
-struct gen_field_iterator {
-   struct gen_group *group;
+struct aub_field_iterator {
+   struct aub_group *group;
    const char *name;
    char value[128];
    const uint32_t *p;
    int i;
 };
 
-struct gen_group {
+struct aub_group {
    char *name;
    int nfields;
-   struct gen_field **fields;
+   struct aub_field **fields;
    uint32_t group_offset, group_count;
 
    uint32_t opcode_mask;
@@ -68,39 +68,39 @@ struct gen_group {
    uint32_t register_offset;
 };
 
-struct gen_type {
+struct aub_type {
    enum {
-      GEN_TYPE_UNKNOWN,
-      GEN_TYPE_INT,
-      GEN_TYPE_UINT,
-      GEN_TYPE_BOOL,
-      GEN_TYPE_FLOAT,
-      GEN_TYPE_ADDRESS,
-      GEN_TYPE_OFFSET,
-      GEN_TYPE_STRUCT,
-      GEN_TYPE_UFIXED,
-      GEN_TYPE_SFIXED,
-      GEN_TYPE_MBO
+      AUB_TYPE_UNKNOWN,
+      AUB_TYPE_INT,
+      AUB_TYPE_UINT,
+      AUB_TYPE_BOOL,
+      AUB_TYPE_FLOAT,
+      AUB_TYPE_ADDRESS,
+      AUB_TYPE_OFFSET,
+      AUB_TYPE_STRUCT,
+      AUB_TYPE_UFIXED,
+      AUB_TYPE_SFIXED,
+      AUB_TYPE_MBO
    } kind;
 
-   /* Struct definition for  GEN_TYPE_STRUCT */
-   struct gen_group *gen_struct;
+   /* Struct definition for  AUB_TYPE_STRUCT */
+   struct aub_group *aub_struct;
 
-   /* Integer and fractional sizes for GEN_TYPE_UFIXED and GEN_TYPE_SFIXED */
+   /* Integer and fractional sizes for AUB_TYPE_UFIXED and AUB_TYPE_SFIXED */
    int i, f;
 };
 
-struct gen_field {
+struct aub_field {
    char *name;
    int start, end;
-   struct gen_type type;
+   struct aub_type type;
    bool has_default;
    uint32_t default_value;
 };
 
-void gen_field_iterator_init(struct gen_field_iterator *iter,
-                             struct gen_group *group, const uint32_t *p);
+void aub_field_iterator_init(struct aub_field_iterator *iter,
+                             struct aub_group *group, const uint32_t *p);
 
-bool gen_field_iterator_next(struct gen_field_iterator *iter);
+bool aub_field_iterator_next(struct aub_field_iterator *iter);
 
 #endif /* AUBINATOR_DECODER_H */
