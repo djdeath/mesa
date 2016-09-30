@@ -32,6 +32,12 @@
 
 #include "aubinator_decoder.h"
 
+#include "gen6_aubinator_xml.h"
+#include "gen7_aubinator_xml.h"
+#include "gen75_aubinator_xml.h"
+#include "gen8_aubinator_xml.h"
+#include "gen9_aubinator_xml.h"
+
 #define XML_BUFFER_SIZE 4096
 
 #define MAKE_GEN(major, minor) ( ((major) << 8) | (minor) )
@@ -394,57 +400,69 @@ character_data(void *data, const XML_Char *s, int len)
 {
 }
 
+static void *
+devinfo_to_xml_data(const struct gen_device_info *devinfo,
+                    uint32_t *data_length)
+{
+   switch (devinfo->gen) {
+   case 6:
+      *data_length = sizeof(genxml_gen6_xml);
+      return genxml_gen6_xml;
+   case 7:
+      if (devinfo->is_haswell) {
+         *data_length = sizeof(genxml_gen75_xml);
+         return genxml_gen75_xml;
+      }
+      *data_length = sizeof(genxml_gen7_xml);
+      return genxml_gen7_xml;
+   case 8:
+      *data_length = sizeof(genxml_gen8_xml);
+      return genxml_gen8_xml;
+   case 9:
+      *data_length = sizeof(genxml_gen9_xml);
+      return genxml_gen9_xml;
+   default:
+      return NULL;
+   }
+}
+
 struct gen_spec *
-gen_spec_load(const char *filename)
+gen_spec_load(const struct gen_device_info *devinfo)
 {
    struct parser_context ctx;
-   void *buf;
-   int len;
-   FILE *input;
-
-   input = fopen(filename, "r");
-   printf("xml filename = %s\n", filename);
-   if (input == NULL) {
-      fprintf(stderr, "failed to open xml description\n");
-      exit(EXIT_FAILURE);
-   }
+   void *buf, *data;
+   uint32_t data_length = 0;
 
    memset(&ctx, 0, sizeof ctx);
    ctx.parser = XML_ParserCreate(NULL);
    XML_SetUserData(ctx.parser, &ctx);
    if (ctx.parser == NULL) {
       fprintf(stderr, "failed to create parser\n");
-      fclose(input);
       return NULL;
    }
 
    XML_SetElementHandler(ctx.parser, start_element, end_element);
    XML_SetCharacterDataHandler(ctx.parser, character_data);
-   ctx.loc.filename = filename;
 
    ctx.spec = xzalloc(sizeof(*ctx.spec));
 
-   do {
-      buf = XML_GetBuffer(ctx.parser, XML_BUFFER_SIZE);
-      len = fread(buf, 1, XML_BUFFER_SIZE, input);
-      if (len < 0) {
-         fprintf(stderr, "fread: %m\n");
-         fclose(input);
-         return NULL;
-      }
-      if (XML_ParseBuffer(ctx.parser, len, len == 0) == 0) {
-         fprintf(stderr,
-                 "Error parsing XML at line %ld col %ld: %s\n",
-                 XML_GetCurrentLineNumber(ctx.parser),
-                 XML_GetCurrentColumnNumber(ctx.parser),
-                 XML_ErrorString(XML_GetErrorCode(ctx.parser)));
-         fclose(input);
-         return NULL;
-      }
-   } while (len > 0);
+
+   data = devinfo_to_xml_data(devinfo, &data_length);
+   buf = XML_GetBuffer(ctx.parser, data_length);
+
+   memcpy(buf, data, data_length);
+
+   if (XML_ParseBuffer(ctx.parser, data_length, data_length == 0) == 0) {
+      fprintf(stderr,
+              "Error parsing XML at line %ld col %ld: %s\n",
+              XML_GetCurrentLineNumber(ctx.parser),
+              XML_GetCurrentColumnNumber(ctx.parser),
+              XML_ErrorString(XML_GetErrorCode(ctx.parser)));
+      XML_ParserFree(ctx.parser);
+      return NULL;
+   }
 
    XML_ParserFree(ctx.parser);
-   fclose(input);
 
    return ctx.spec;
 }

@@ -1,3 +1,10 @@
+AUBINATOR_GENERATED_FILES = \
+	tools/gen6_aubinator_xml.h \
+	tools/gen7_aubinator_xml.h \
+	tools/gen75_aubinator_xml.h \
+	tools/gen8_aubinator_xml.h \
+	tools/gen9_aubinator_xml.h
+
 BLORP_FILES = \
 	blorp/blorp.c \
 	blorp/blorp.h \

@@ -35,6 +35,8 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 
+#include "util/macros.h"
+
 #include "aubinator_decoder.h"
 #include "intel_aub.h"
 #include "aubinator_disasm.h"
@@ -1059,11 +1061,24 @@ int main(int argc, char *argv[])
 {
    struct gen_spec *spec;
    struct aub_file *file;
-   int i, pci_id = 0;
+   int i;
    bool found_arg_gen = false, pager = true;
-   int gen_major, gen_minor;
-   const char *value;
-   char gen_file[256], gen_val[24];
+   const char *value, *input_file = NULL;
+   char gen_val[24];
+   const struct {
+      const char *name;
+      int pci_id;
+   } gens[] = {
+      { "ivb", 0x0166 }, /* Intel(R) Ivybridge Mobile GT2 */
+      { "hsw", 0x0416 }, /* Intel(R) Haswell Mobile GT2 */
+      { "byt", 0x0155 }, /* Intel(R) Bay Trail */
+      { "bdw", 0x1616 }, /* Intel(R) HD Graphics 5500 (Broadwell GT2) */
+      { "chv", 0x22B3 }, /* Intel(R) HD Graphics (Cherryview) */
+      { "skl", 0x1912 }, /* Intel(R) HD Graphics 530 (Skylake GT2) */
+      { "kbl", 0x591D }, /* Intel(R) Kabylake GT2 */
+      { "bxt", 0x0A84 }  /* Intel(R) HD Graphics (Broxton) */
+   }, *gen = NULL;
+   struct gen_device_info devinfo;
 
    if (argc == 1) {
       print_help(argv[0], stderr);
@@ -1081,8 +1096,6 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
          }
          found_arg_gen = true;
-         gen_major = 0;
-         gen_minor = 0;
          snprintf(gen_val, sizeof(gen_val), "%s", value);
       } else if (strcmp(argv[i], "--headers") == 0) {
          option_full_decode = false;
@@ -1105,6 +1118,7 @@ int main(int argc, char *argv[])
             fprintf(stderr, "unknown option %s\n", argv[i]);
             exit(EXIT_FAILURE);
          }
+         input_file = argv[i];
          break;
       }
    }
@@ -1114,51 +1128,25 @@ int main(int argc, char *argv[])
       exit(EXIT_FAILURE);
    }
 
-   if (strstr(gen_val, "ivb") != NULL) {
-      /* Intel(R) Ivybridge Mobile GT2 */
-      pci_id = 0x0166;
-      gen_major = 7;
-      gen_minor = 0;
-   } else if (strstr(gen_val, "hsw") != NULL) {
-      /* Intel(R) Haswell Mobile GT2 */
-      pci_id = 0x0416;
-      gen_major = 7;
-      gen_minor = 5;
-   } else if (strstr(gen_val, "byt") != NULL) {
-      /* Intel(R) Bay Trail */
-      pci_id = 0x0155;
-      gen_major = 7;
-      gen_minor = 5;
-   } else if (strstr(gen_val, "bdw") != NULL) {
-      /* Intel(R) HD Graphics 5500 (Broadwell GT2) */
-      pci_id = 0x1616;
-      gen_major = 8;
-      gen_minor = 0;
-   }  else if (strstr(gen_val, "chv") != NULL) {
-      /* Intel(R) HD Graphics (Cherryview) */
-      pci_id = 0x22B3;
-      gen_major = 8;
-      gen_minor = 0;
-   } else if (strstr(gen_val, "skl") != NULL) {
-      /* Intel(R) HD Graphics 530 (Skylake GT2) */
-      pci_id = 0x1912;
-      gen_major = 9;
-      gen_minor = 0;
-   } else if (strstr(gen_val, "kbl") != NULL) {
-      /* Intel(R) Kabylake GT2 */
-      pci_id = 0x591D;
-      gen_major = 9;
-      gen_minor = 0;
-   } else if (strstr(gen_val, "bxt") != NULL) {
-      /* Intel(R) HD Graphics (Broxton) */
-      pci_id = 0x0A84;
-      gen_major = 9;
-      gen_minor = 0;
-   } else {
+   for (i = 0; i < ARRAY_SIZE(gens); i++) {
+      if (!strcmp(gen_val, gens[i].name)) {
+         gen = &gens[i];
+         break;
+      }
+   }
+
+   if (gen == NULL) {
       fprintf(stderr, "can't parse gen: %s, expected ivb, byt, hsw, "
                              "bdw, chv, skl, kbl or bxt\n", gen_val);
       exit(EXIT_FAILURE);
    }
+
+   if (!gen_get_device_info(gen->pci_id, &devinfo)) {
+      fprintf(stderr, "can't find device information: pci_id=0x%x name=%s\n",
+              gen->pci_id, gen->name);
+      exit(EXIT_FAILURE);
+   }
+
 
    /* Do this before we redirect stdout to pager. */
    if (option_color == COLOR_AUTO)
@@ -1167,21 +1155,14 @@ int main(int argc, char *argv[])
    if (isatty(1) && pager)
       setup_pager();
 
-   if (gen_minor > 0) {
-      snprintf(gen_file, sizeof(gen_file), "../genxml/gen%d%d.xml",
-               gen_major, gen_minor);
-   } else {
-      snprintf(gen_file, sizeof(gen_file), "../genxml/gen%d.xml", gen_major);
-   }
+   spec = gen_spec_load(&devinfo);
+   disasm = gen_disasm_create(gen->pci_id);
 
-   spec = gen_spec_load(gen_file);
-   disasm = gen_disasm_create(pci_id);
-
-   if (argv[i] == NULL) {
+   if (input_file == NULL) {
        print_help(argv[0], stderr);
        exit(EXIT_FAILURE);
    } else {
-       file = aub_file_open(argv[i]);
+       file = aub_file_open(input_file);
    }
 
    while (aub_file_more_stuff(file))
