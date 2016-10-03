@@ -26,6 +26,8 @@
 
 #include "common/gen_device_info.h"
 
+#include <stdio.h>
+
 struct aub_disasm;
 
 struct aub_disasm *aub_disasm_create(const struct gen_device_info *devinfo);

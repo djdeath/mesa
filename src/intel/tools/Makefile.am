@@ -49,6 +49,8 @@ noinst_PROGRAMS = aubinator
 
 aubinator_SOURCES = \
 	aubinator.c \
+	aubinator_batch_decoder.c \
+	aubinator_batch_decoder.h \
 	aubinator_decoder.c \
 	aubinator_decoder.h \
 	aubinator_disasm.c \
