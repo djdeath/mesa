@@ -56,6 +56,13 @@ union __gen_value {
    uint32_t dw;
 };
 
+struct __gen_instruction {
+   uint32_t opcode;
+   uint32_t opcode_mask;
+   uint32_t dword_count;
+   void (* print_func) (__gen_print_user_data *, const void *restrict);
+};
+
 static inline uint64_t
 __gen_get_uint(uint32_t dw, uint32_t start, uint32_t end)
 {
@@ -99,6 +106,14 @@ __gen_get_sfixed(uint32_t dw, uint32_t start, uint32_t end, uint32_t fract_bits)
 
 #ifndef __gen_print_user_data
 #error #define __gen_print_user_data before including this file
+#endif
+
+#ifndef __gen_print
+#error #define __gen_print before including this file
+#endif
+
+#ifndef __gen_print_section
+#error #define __gen_print_section before including this file
 #endif
 
 #endif
@@ -154,6 +169,7 @@ class Field(object):
     def __init__(self, parser, attrs):
         self.parser = parser
         if "name" in attrs:
+            self.full_name = attrs["name"]
             self.name = safe_name(attrs["name"])
         self.start = int(attrs["start"])
         self.end = int(attrs["end"])
@@ -180,9 +196,10 @@ class Field(object):
             self.fractional_size = int(sfixed_match.group(2))
 
 class Group(object):
-    def __init__(self, parser, parent, start, count, size):
+    def __init__(self, parser, parent, name, start, count, size):
         self.parser = parser
         self.parent = parent
+        self.name = name
         self.start = start
         self.count = count
         self.size = size
@@ -193,6 +210,18 @@ class Group(object):
             self.size = 32
             self.fields = []
             self.address = None
+
+    def compute_instruction_opcode(self):
+        opcode = 0
+        opcode_mask = 0
+        names = ("Command Type", "Command SubType",
+                 "3D Command Opcode", "3D Command Sub Opcode",
+                 "MI Command Opcode")
+        for field in self.fields:
+            if hasattr(field, 'full_name') and field.full_name in names:
+                opcode |= field.default << field.start
+                opcode_mask |= ((1 << (field.end - field.start + 1)) - 1) << field.start
+        return (opcode, opcode_mask)
 
     def collect_dwords(self, dwords, start, dim):
         for field in self.fields:
@@ -265,15 +294,6 @@ class Group(object):
             else:
                 address_count = 1
 
-            # if dw.size == 32 and dw.address == None:
-            #     v = None
-            #     # print("   dw[%d] =" % index)
-            # elif len(dw.fields) > address_count:
-            #     v = "v%d" % index
-            #     print("   const uint%d_t %s =" % (dw.size, v))
-            # else:
-            #     v = "0"
-
             has_values = False
             for field in dw.fields:
                 if len(field.values) == 0:
@@ -292,8 +312,8 @@ class Group(object):
             field_names = []
             field_index = 0
             for field in dw.fields:
-                if field.type != "mbo":
-                    name = field.name + field.dim
+                if field.type == "mbo":
+                    continue;
 
                 if field.type == "address":
                     if dw.size == 32:
@@ -347,20 +367,22 @@ class Group(object):
                     print("   data->indent -= 1;")
                     print("")
                     field_index = field_index + 1
+                    continue
                 else:
-                    print("/* unhandled field %s, type %s */\n" % (name, field.type))
+                    print("   /* unhandled field %s, type %s */\n" % \
+                          (field.name, field.type))
                     d = None
                     s = None
+                    continue
 
-                if not s == None:
-                    if len(field.values) > 0:
-                        d = "%%s: %s (%%s)" % d
-                        s = "%s, %s_values[(int) %s]" % (s, field.name, s)
-                    else:
-                        d = "%%s: %s" % d
-                    field_fmts.append(d)
-                    field_args.append(s)
-                    field_names.append(name)
+                if len(field.values) > 0:
+                    d = "%%s: %s (%%s)" % d
+                    s = "%s, %s_values[(int) %s]" % (s, field.name, s)
+                else:
+                    d = "%%s: %s" % d
+                field_fmts.append(d)
+                field_args.append(s)
+                field_names.append(field.full_name)
 
             if len(field_fmts) > 0:
                 print("   __gen_print(")
@@ -393,6 +415,7 @@ class Parser(object):
         self.instruction = None
         self.structs = {}
         self.registers = {}
+        self.instructions = {}
 
     def start_element(self, name, attrs):
         if name == "genxml":
@@ -400,26 +423,30 @@ class Parser(object):
             self.gen = attrs["gen"].replace('.', '')
             print(pack_header % {'license': license, 'platform': self.platform})
         elif name in ("instruction", "struct", "register"):
-            if name == "instruction":
-                self.instruction = safe_name(attrs["name"])
-                self.length_bias = int(attrs["bias"])
-            elif name == "struct":
-                self.struct = safe_name(attrs["name"])
-                self.structs[attrs["name"]] = 1
-            elif name == "register":
-                self.register = safe_name(attrs["name"])
-                self.reg_num = num_from_str(attrs["num"])
-                self.registers[attrs["name"]] = 1
+            sname = safe_name(attrs["name"])
             if "length" in attrs:
                 self.length = int(attrs["length"])
                 size = self.length * 32
+                self.group = Group(self, None, sname, 0, 1, size)
             else:
                 self.length = None
                 size = 0
-            self.group = Group(self, None, 0, 1, size)
+                self.group = Group(self, None, sname, 0, 1, size)
+
+            if name == "instruction":
+                self.instruction = sname
+                self.length_bias = int(attrs["bias"])
+                self.instructions[sname] = self.group
+            elif name == "struct":
+                self.struct = sname
+                self.structs[sname] = self.group
+            elif name == "register":
+                self.register = sname
+                self.reg_num = num_from_str(attrs["num"])
+                self.registers[sname] = self.group
 
         elif name == "group":
-            group = Group(self, self.group,
+            group = Group(self, self.group, None,
                           int(attrs["start"]), int(attrs["count"]), int(attrs["size"]))
             self.group.fields.append(group)
             self.group = group
@@ -462,29 +489,66 @@ class Parser(object):
             return 'GEN%s_%s' % (self.gen, name)
 
     def emit_print_function(self, name, group):
-        name = self.gen_prefix(name)
+        prefix_name = self.gen_prefix(name)
         print("static inline void\n%s_print(__gen_print_user_data *data, const void * restrict src)\n{" %
-              name)
+              prefix_name)
 
-        # Cast dst to make header C++ friendly
+        # Cast src to make header C++ friendly
         print("   const uint32_t * restrict dw = (const uint32_t * restrict) src;")
+        print("")
+        print("   __gen_print_section(data, \"%s\", dw);" % name)
 
         group.emit_print_function(0)
 
         print("}\n")
 
+    def emit_opcode_macros(self, name, group):
+        opcode = group.compute_instruction_opcode()
+        print("#define %-33s 0x%x" % (self.gen_prefix(name + "_opcode"), opcode[0]))
+        print("#define %-33s 0x%x" % \
+              (self.gen_prefix(name + "_opcode_mask"), opcode[1]))
+
     def emit_instruction(self):
+        name = self.instruction
+        if not self.length == None:
+            print('#define %-33s %6d' %
+                  (self.gen_prefix(name + "_length"), self.length))
+        print('#define %-33s %6d' %
+              (self.gen_prefix(name + "_length_bias"), self.length_bias))
+
+        self.emit_opcode_macros(self.instruction, self.group)
         self.emit_print_function(self.instruction, self.group)
 
     def emit_register(self):
+        name = self.register
+        if not self.reg_num == None:
+            print('#define %-33s 0x%04x' %
+                  (self.gen_prefix(name + "_num"), self.reg_num))
+
         self.emit_print_function(self.register, self.group)
 
     def emit_struct(self):
+        name = self.struct
+        if not self.length == None:
+            print('#define %-33s %6d' %
+                  (self.gen_prefix(name + "_length"), self.length))
+
         self.emit_print_function(self.struct, self.group)
+
+    def emit_instruction_table(self):
+        print("const struct __gen_instruction %s[] = {" % \
+              self.gen_prefix("_instruction_table"))
+        for name, instr in self.instructions.items():
+            print("   { %s_opcode," % self.gen_prefix(name))
+            print("     %s_opcode_mask," % self.gen_prefix(name))
+            print("     %s_length," % self.gen_prefix(name))
+            print("     %s_print }," % self.gen_prefix(name))
+        print("};")
 
     def parse(self, filename):
         file = open(filename, "rb")
         self.parser.ParseFile(file)
+        self.emit_instruction_table()
         file.close()
 
 if len(sys.argv) < 2:
