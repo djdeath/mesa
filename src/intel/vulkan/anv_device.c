@@ -920,24 +920,7 @@ VkResult anv_CreateDevice(
 
    anv_queue_init(device, &device->queue);
 
-   switch (device->info.gen) {
-   case 7:
-      if (!device->info.is_haswell)
-         result = gen7_init_device_state(device);
-      else
-         result = gen75_init_device_state(device);
-      break;
-   case 8:
-      result = gen8_init_device_state(device);
-      break;
-   case 9:
-      result = gen9_init_device_state(device);
-      break;
-   default:
-      /* Shouldn't get here as we don't create physical devices for any other
-       * gens. */
-      unreachable("unhandled gen");
-   }
+   result = ANV_GEN_DISPATCH(device, init_device_state, device);
    if (result != VK_SUCCESS)
       goto fail_fd;
 

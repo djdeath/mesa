@@ -356,19 +356,9 @@ VkResult anv_ResetCommandBuffer(
 void
 anv_cmd_buffer_emit_state_base_address(struct anv_cmd_buffer *cmd_buffer)
 {
-   switch (cmd_buffer->device->info.gen) {
-   case 7:
-      if (cmd_buffer->device->info.is_haswell)
-         return gen75_cmd_buffer_emit_state_base_address(cmd_buffer);
-      else
-         return gen7_cmd_buffer_emit_state_base_address(cmd_buffer);
-   case 8:
-      return gen8_cmd_buffer_emit_state_base_address(cmd_buffer);
-   case 9:
-      return gen9_cmd_buffer_emit_state_base_address(cmd_buffer);
-   default:
-      unreachable("unsupported gen\n");
-   }
+   ANV_GEN_DISPATCH(cmd_buffer->device,
+                    cmd_buffer_emit_state_base_address,
+                    cmd_buffer);
 }
 
 VkResult anv_BeginCommandBuffer(
@@ -714,20 +704,9 @@ static struct anv_state
 anv_cmd_buffer_alloc_null_surface_state(struct anv_cmd_buffer *cmd_buffer,
                                         struct anv_framebuffer *fb)
 {
-   switch (cmd_buffer->device->info.gen) {
-   case 7:
-      if (cmd_buffer->device->info.is_haswell) {
-         return gen75_cmd_buffer_alloc_null_surface_state(cmd_buffer, fb);
-      } else {
-         return gen7_cmd_buffer_alloc_null_surface_state(cmd_buffer, fb);
-      }
-   case 8:
-      return gen8_cmd_buffer_alloc_null_surface_state(cmd_buffer, fb);
-   case 9:
-      return gen9_cmd_buffer_alloc_null_surface_state(cmd_buffer, fb);
-   default:
-      unreachable("Invalid hardware generation");
-   }
+   return ANV_GEN_DISPATCH(cmd_buffer->device,
+                           cmd_buffer_alloc_null_surface_state,
+                           cmd_buffer, fb);
 }
 
 VkResult

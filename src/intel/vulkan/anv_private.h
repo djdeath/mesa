@@ -1879,6 +1879,29 @@ ANV_DEFINE_STRUCT_CASTS(anv_common, VkMemoryBarrier)
 ANV_DEFINE_STRUCT_CASTS(anv_common, VkBufferMemoryBarrier)
 ANV_DEFINE_STRUCT_CASTS(anv_common, VkImageMemoryBarrier)
 
+#define ANV_GEN_DISPATCH(device, name, ...)      \
+   ({                                            \
+      __typeof(gen7_ ## name)* __func = NULL;    \
+      switch ((device)->info.gen) {              \
+      case 7:                                    \
+         if ((device)->info.is_haswell) {        \
+            __func = gen75_ ## name;             \
+         } else {                                \
+            __func = gen7_ ## name;              \
+         }                                       \
+         break;                                  \
+      case 8:                                    \
+         __func = gen8_ ## name;                 \
+         break;                                  \
+      case 9:                                    \
+         __func = gen9_ ## name;                 \
+         break;                                  \
+      default:                                   \
+         unreachable("unhandled gen");           \
+      };                                         \
+      __func( __VA_ARGS__);                      \
+   })
+
 /* Gen-specific function declarations */
 #ifdef genX
 #  include "anv_genX.h"
