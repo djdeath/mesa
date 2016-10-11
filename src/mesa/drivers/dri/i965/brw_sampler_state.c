@@ -321,7 +321,8 @@ upload_default_color(struct brw_context *brw,
          ((uint16_t *) sdc)[1] = c[1]; /* G -> DWord 0, bits 31:16 */
          /* DWord 1 is Reserved/MBZ! */
          ((uint16_t *) sdc)[4] = c[2]; /* B -> DWord 2, bits 15:0  */
-         ((uint16_t *) sdc)[5] = c[3]; /* A -> DWord 3, bits 31:16 */
+         ((uint16_t *) sdc)[5] = c[3]; /* A -> DWord 2, bits 31:16 */
+         /* DWord 3 is Reserved/MBZ! */
          break;
       case 32:
          if (base_format == GL_RG) {
