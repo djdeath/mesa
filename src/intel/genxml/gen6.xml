@@ -1969,4 +1969,9 @@
     <field name="System Instruction Pointer" start="36" end="63" type="offset"/>
   </instruction>
 
+  <register name="SO_WRITE_OFFSET" length="1" num="0x5280">
+    <field name="Write Offset" start="2" end="31" type="uint"/>
+    <field name="Reserved" start="0" end="1" type="uint"/>
+  </register>
+
 </genxml>

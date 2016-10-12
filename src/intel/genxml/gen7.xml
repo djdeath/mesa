@@ -2522,6 +2522,11 @@
     <field name="SW Tessellation Memory Object Control State" start="40" end="43" type="MEMORY_OBJECT_CONTROL_STATE"/>
   </instruction>
 
+  <register name="SO_WRITE_OFFSET" length="1" num="0x5280">
+    <field name="Write Offset" start="2" end="31" type="uint"/>
+    <field name="Reserved" start="0" end="1" type="uint"/>
+  </register>
+
   <register name="L3SQCREG1" length="1" num="0xb010">
     <field name="Convert DC_UC" start="24" end="24" type="uint"/>
     <field name="Convert IS_UC" start="25" end="25" type="uint"/>

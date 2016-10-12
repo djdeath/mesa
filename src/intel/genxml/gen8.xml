@@ -3167,6 +3167,11 @@
     <field name="SW Tessellation Memory Object Control State" start="40" end="43" type="MEMORY_OBJECT_CONTROL_STATE"/>
   </instruction>
 
+  <register name="SO_WRITE_OFFSET" length="1" num="0x5280">
+    <field name="Write Offset" start="2" end="31" type="uint"/>
+    <field name="Reserved" start="0" end="1" type="uint"/>
+  </register>
+
   <register name="L3CNTLREG" length="1" num="0x7034">
     <field name="SLM Enable" start="0" end="0" type="uint"/>
     <field name="URB Allocation" start="1" end="7" type="uint"/>
