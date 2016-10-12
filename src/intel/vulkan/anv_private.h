@@ -196,7 +196,13 @@ void anv_loge_v(const char *format, va_list va);
  * Print a FINISHME message, including its source location.
  */
 #define anv_finishme(format, ...) \
-   __anv_finishme(__FILE__, __LINE__, format, ##__VA_ARGS__);
+   do { \
+      static bool __once_warned = false; \
+      if (unlikely(!__once_warned)) { \
+         __once_warned = true; \
+         __anv_finishme(__FILE__, __LINE__, format, ##__VA_ARGS__); \
+      } \
+   } while (0)
 
 /* A non-fatal assert.  Useful for debugging. */
 #ifdef DEBUG
