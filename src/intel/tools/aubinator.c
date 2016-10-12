@@ -265,13 +265,20 @@ dump_samplers(struct gen_spec *spec, uint32_t offset)
    uint32_t i;
    uint64_t start;
    struct gen_group *sampler_state;
+   struct gen_group *border_color;
 
    sampler_state = gen_spec_find_struct(spec, "SAMPLER_STATE");
+   border_color = gen_spec_find_struct(spec, "SAMPLER_BORDER_COLOR_STATE");
 
    start = dynamic_state_base + offset;
    for (i = 0; i < 4; i++) {
+      uint32_t *border_color_offset = gtt + start + i * 16 + 8;
+
       printf("sampler state %d\n", i);
       decode_structure(spec, sampler_state, gtt + start + i * 16);
+      printf("sampler state border color %d\n", i);
+      decode_structure(spec, border_color,
+                       gtt + dynamic_state_base + *border_color_offset);
    }
 }
 
