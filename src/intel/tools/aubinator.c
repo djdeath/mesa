@@ -639,6 +639,24 @@ handle_load_register_imm(struct gen_spec *spec, uint32_t *p)
    }
 }
 
+static void
+handle_load_register_mem(struct gen_spec *spec, uint32_t *p)
+{
+   struct gen_group *reg = gen_spec_find_register(spec, p[1]);
+   uint64_t offset;
+
+   if (gen_spec_get_gen(spec) >= gen_make_gen(8,0))
+      offset = get_qword(&p[2]);
+   else
+      offset = p[2];
+
+   if (reg != NULL) {
+      printf("register %s (0x%x): 0x%lx\n",
+             reg->name, reg->register_offset, offset);
+      decode_structure(spec, reg, gtt + offset);
+   }
+}
+
 #define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
 
 #define STATE_BASE_ADDRESS                  0x61010000
@@ -678,6 +696,7 @@ handle_load_register_imm(struct gen_spec *spec, uint32_t *p)
 #define _3DSTATE_SCISSOR_STATE_POINTERS     0x780f0000
 
 #define _MI_LOAD_REGISTER_IMM               0x11000000
+#define _MI_LOAD_REGISTER_MEM               0x14800000
 
 struct custom_handler {
    uint32_t opcode;
@@ -713,7 +732,8 @@ struct custom_handler {
    { _3DSTATE_BLEND_STATE_POINTERS, handle_3dstate_blend_state_pointers },
    { _3DSTATE_CC_STATE_POINTERS, handle_3dstate_cc_state_pointers },
    { _3DSTATE_SCISSOR_STATE_POINTERS, handle_3dstate_scissor_state_pointers },
-   { _MI_LOAD_REGISTER_IMM, handle_load_register_imm }
+   { _MI_LOAD_REGISTER_IMM, handle_load_register_imm },
+   { _MI_LOAD_REGISTER_MEM, handle_load_register_mem }
 };
 
 static void
