@@ -28,10 +28,171 @@
 #include <fcntl.h>
 
 #include "anv_private.h"
+#include "vk_format_info.h"
 
 #include "common/gen_sample_positions.h"
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
+
+uint32_t
+genX(sampler_index)(VkFormat format)
+{
+#if ! GEN_IS_HASWELL
+   return 0;
+#else
+   if (!vk_format_is_integer(format))
+      return 0;
+
+   uint32_t index = 3 * (vk_format_n_channels(format) - 1);
+
+   switch(vk_format_max_bpc(format)) {
+   case 8:
+      index += 1;
+      break;
+
+   case 10:
+   case 16:
+   case 24:
+      index += 2;
+      break;
+
+   case 32:
+      index += 3;
+      break;
+   default:
+      anv_finishme("unsupported sampling format with border color");
+      return 0;
+   }
+
+   return index;
+#endif
+}
+
+#define BORDER_COLOR(name, r, g, b, a) {           \
+      .BorderColor##name##Red   = r,               \
+      .BorderColor##name##Green = g,               \
+      .BorderColor##name##Blue  = b,               \
+      .BorderColor##name##Alpha = a,               \
+   }
+
+static void
+border_colors_setup(struct anv_device *device)
+{
+#if GEN_IS_HASWELL
+   /* We order things differently for Haswell and only ever care about the
+    * color, not whether the color integer or float (see genX(sampler_index)).
+    * This consumes 13 * 3 * 512 ~= 20kb of memory. */
+   static const struct GENX(SAMPLER_BORDER_COLOR_STATE) border_colors[] = {
+      /* Transparent black: */
+      BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      /*  - R textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   1),
+      BORDER_COLOR(16bit, 0,   0,   0,   1),
+      BORDER_COLOR(32bit, 0,   0,   0,   1),
+      /*  - RG textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   1),
+      BORDER_COLOR(16bit, 0,   0,   0,   1),
+      BORDER_COLOR(32bit, 0,   0,   0,   1),
+      /*  - RGB textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   1),
+      BORDER_COLOR(16bit, 0,   0,   0,   1),
+      BORDER_COLOR(32bit, 0,   0,   0,   1),
+      /*  - RBGA textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   0),
+      BORDER_COLOR(16bit, 0,   0,   0,   0),
+      BORDER_COLOR(32bit, 0,   0,   0,   0),
+
+      /* Opaque black: */
+      BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      /*  - R textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   1),
+      BORDER_COLOR(16bit, 0,   0,   0,   1),
+      BORDER_COLOR(32bit, 0,   0,   0,   1),
+      /*  - RG textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   1),
+      BORDER_COLOR(16bit, 0,   0,   0,   1),
+      BORDER_COLOR(32bit, 0,   0,   0,   1),
+      /*  - RGB textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   1),
+      BORDER_COLOR(16bit, 0,   0,   0,   1),
+      BORDER_COLOR(32bit, 0,   0,   0,   1),
+      /*  - RGBA textures */
+      BORDER_COLOR(8bit,  0,   0,   0,   1),
+      BORDER_COLOR(16bit, 0,   0,   0,   1),
+      BORDER_COLOR(32bit, 0,   0,   0,   1),
+
+      /* Opaque white: */
+      BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0),
+      /*  - R textures */
+      BORDER_COLOR(8bit,  1,   0,   0,   1),
+      BORDER_COLOR(16bit, 1,   0,   0,   1),
+      BORDER_COLOR(32bit, 1,   0,   0,   1),
+      /*  - RG textures */
+      BORDER_COLOR(8bit,  1,   1,   0,   1),
+      BORDER_COLOR(16bit, 1,   1,   0,   1),
+      BORDER_COLOR(32bit, 1,   1,   0,   1),
+      /*  - RGB textures */
+      BORDER_COLOR(8bit,  1,   1,   1,   1),
+      BORDER_COLOR(16bit, 1,   1,   1,   1),
+      BORDER_COLOR(32bit, 1,   1,   1,   1),
+      /*  - RGBA textures */
+      BORDER_COLOR(8bit,  1,   1,   1,   1),
+      BORDER_COLOR(16bit, 1,   1,   1,   1),
+      BORDER_COLOR(32bit, 1,   1,   1,   1),
+   };
+   static_assert(sizeof(struct anv_sampler) / (4 * GENX(SAMPLER_STATE_length)) ==
+                 ARRAY_SIZE(border_colors) / 3,
+                 "struct anv_sampler size doesn't match border_colors");
+   device->border_color_align = 512;
+#elif GEN_GEN == 7
+   static const struct GENX(SAMPLER_BORDER_COLOR_STATE) border_colors[] = {
+      [VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE] =
+         BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0),
+      [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      [VK_BORDER_COLOR_INT_OPAQUE_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      [VK_BORDER_COLOR_INT_OPAQUE_WHITE] =
+         BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0)
+   };
+   device->border_color_align = 64;
+#else /* GEN_GEN >= 8 */
+   static const struct GENX(SAMPLER_BORDER_COLOR_STATE) border_colors[] = {
+      [VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE] =
+         BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0),
+      [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(32bit, 0, 0, 0, 0),
+      [VK_BORDER_COLOR_INT_OPAQUE_BLACK] =
+         BORDER_COLOR(32bit, 0, 0, 0, 1),
+      [VK_BORDER_COLOR_INT_OPAQUE_WHITE] =
+         BORDER_COLOR(32bit, 1, 1, 1, 1)
+   };
+   device->border_color_align = 64;
+#endif
+
+   device->border_colors =
+      anv_state_pool_alloc(&device->dynamic_state_pool,
+                           ARRAY_SIZE(border_colors) * device->border_color_align,
+                           device->border_color_align);
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(border_colors); i++) {
+      GENX(SAMPLER_BORDER_COLOR_STATE_pack)(
+         NULL,
+         device->border_colors.map + i * device->border_color_align,
+         &border_colors[i]);
+   }
+
+   if (!device->info.has_llc)
+      anv_state_clflush(device->border_colors);
+}
 
 VkResult
 genX(init_device_state)(struct anv_device *device)
@@ -91,6 +252,8 @@ genX(init_device_state)(struct anv_device *device)
 
    assert(batch.next <= batch.end);
 
+   border_colors_setup(device);
+
    return anv_device_submit_simple_batch(device, &batch);
 }
 
@@ -148,24 +311,34 @@ static const uint32_t vk_to_gen_shadow_compare_op[] = {
    [VK_COMPARE_OP_ALWAYS]                       = PREFILTEROPNEVER,
 };
 
-VkResult genX(CreateSampler)(
-    VkDevice                                    _device,
+static void
+pack_sampler_state(
+   struct anv_device *                          device,
+   struct anv_sampler *                         sampler,
     const VkSamplerCreateInfo*                  pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkSampler*                                  pSampler)
+   uint32_t                                     offset,
+   void *                                       dest)
 {
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   struct anv_sampler *sampler;
+#if GEN_IS_HASWELL
+   static const uint32_t haswell_border_color_offset[] = {
+      [VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK] = 0,
+      [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] = 0,
 
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK] = 1,
+      [VK_BORDER_COLOR_INT_OPAQUE_BLACK] = 1,
 
-   sampler = anv_alloc2(&device->alloc, pAllocator, sizeof(*sampler), 8,
-                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (!sampler)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   uint32_t border_color_offset = device->border_colors.offset +
-                                  pCreateInfo->borderColor * 64;
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE] = 2,
+      [VK_BORDER_COLOR_INT_OPAQUE_WHITE] = 2,
+   };
+   uint32_t color_index =
+      ARRAY_SIZE(sampler->state) *
+      haswell_border_color_offset[pCreateInfo->borderColor] + offset;
+#else
+   uint32_t color_index = pCreateInfo->borderColor;
+#endif
+   uint32_t color_offset =
+      device->border_colors.offset +
+      color_index * device->border_color_align;
 
    struct GENX(SAMPLER_STATE) sampler_state = {
       .SamplerDisable = false,
@@ -195,7 +368,7 @@ VkResult genX(CreateSampler)(
       .ShadowFunction = vk_to_gen_shadow_compare_op[pCreateInfo->compareOp],
       .CubeSurfaceControlMode = OVERRIDE,
 
-      .BorderColorPointer = border_color_offset,
+      .BorderColorPointer = color_offset,
 
 #if GEN_GEN >= 8
       .LODClampMagnificationMode = MIPNONE,
@@ -215,7 +388,31 @@ VkResult genX(CreateSampler)(
       .TCZAddressControlMode = vk_to_gen_tex_address[pCreateInfo->addressModeW],
    };
 
-   GENX(SAMPLER_STATE_pack)(NULL, sampler->state, &sampler_state);
+   GENX(SAMPLER_STATE_pack)(NULL, dest, &sampler_state);
+}
+
+
+VkResult genX(CreateSampler)(
+    VkDevice                                    _device,
+    const VkSamplerCreateInfo*                  pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSampler*                                  pSampler)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   struct anv_sampler *sampler;
+
+   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
+
+   sampler = anv_alloc2(&device->alloc, pAllocator, sizeof(*sampler), 8,
+                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!sampler)
+      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   pack_sampler_state(device, sampler, pCreateInfo, 0, sampler->state[0]);
+#if GEN_IS_HASWELL
+   for (uint32_t i = 1; i < ARRAY_SIZE(sampler->state); i++)
+      pack_sampler_state(device, sampler, pCreateInfo, i, sampler->state[i]);
+#endif
 
    *pSampler = anv_sampler_to_handle(sampler);
 

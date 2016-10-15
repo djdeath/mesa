@@ -724,46 +724,6 @@ anv_queue_finish(struct anv_queue *queue)
 {
 }
 
-static struct anv_state
-anv_state_pool_emit_data(struct anv_state_pool *pool, size_t size, size_t align, const void *p)
-{
-   struct anv_state state;
-
-   state = anv_state_pool_alloc(pool, size, align);
-   memcpy(state.map, p, size);
-
-   if (!pool->block_pool->device->info.has_llc)
-      anv_state_clflush(state);
-
-   return state;
-}
-
-struct gen8_border_color {
-   union {
-      float float32[4];
-      uint32_t uint32[4];
-   };
-   /* Pad out to 64 bytes */
-   uint32_t _pad[12];
-};
-
-static void
-anv_device_init_border_colors(struct anv_device *device)
-{
-   static const struct gen8_border_color border_colors[] = {
-      [VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK] =  { .float32 = { 0.0, 0.0, 0.0, 0.0 } },
-      [VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK] =       { .float32 = { 0.0, 0.0, 0.0, 1.0 } },
-      [VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE] =       { .float32 = { 1.0, 1.0, 1.0, 1.0 } },
-      [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] =    { .uint32 = { 0, 0, 0, 0 } },
-      [VK_BORDER_COLOR_INT_OPAQUE_BLACK] =         { .uint32 = { 0, 0, 0, 1 } },
-      [VK_BORDER_COLOR_INT_OPAQUE_WHITE] =         { .uint32 = { 1, 1, 1, 1 } },
-   };
-
-   device->border_colors = anv_state_pool_emit_data(&device->dynamic_state_pool,
-                                                    sizeof(border_colors), 64,
-                                                    border_colors);
-}
-
 VkResult
 anv_device_submit_simple_batch(struct anv_device *device,
                                struct anv_batch *batch)
@@ -942,8 +902,6 @@ VkResult anv_CreateDevice(
       goto fail_fd;
 
    anv_device_init_blorp(device);
-
-   anv_device_init_border_colors(device);
 
    *pDevice = anv_device_to_handle(device);
 

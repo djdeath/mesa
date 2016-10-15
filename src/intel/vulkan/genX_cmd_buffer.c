@@ -894,19 +894,28 @@ emit_samplers(struct anv_cmd_buffer *cmd_buffer,
       struct anv_descriptor *desc = &set->descriptors[offset + binding->index];
 
       if (desc->type != VK_DESCRIPTOR_TYPE_SAMPLER &&
-          desc->type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+          desc->type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+         anv_pack_struct(state->map + (s * 16),
+                         GENX(SAMPLER_STATE),
+                         .SamplerDisable = true);
          continue;
+      }
 
       struct anv_sampler *sampler = desc->sampler;
 
       /* This can happen if we have an unfilled slot since TYPE_SAMPLER
        * happens to be zero.
        */
-      if (sampler == NULL)
+      if (sampler == NULL) {
+         anv_pack_struct(state->map + (s * 16),
+                         GENX(SAMPLER_STATE),
+                         .SamplerDisable = true);
          continue;
+      }
 
-      memcpy(state->map + (s * 16),
-             sampler->state, sizeof(sampler->state));
+      uint32_t sampler_index = genX(sampler_index)(desc->image_view->vk_format);
+      memcpy(state->map + (s * 16), sampler->state[sampler_index],
+             GENX(SAMPLER_STATE_length) * 4);
    }
 
    if (!cmd_buffer->device->info.has_llc)

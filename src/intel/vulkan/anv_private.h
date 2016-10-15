@@ -643,6 +643,7 @@ struct anv_device {
     struct blorp_context                        blorp;
 
     struct anv_state                            border_colors;
+    uint32_t                                    border_color_align;
 
     struct anv_queue                            queue;
 
@@ -1733,7 +1734,15 @@ void anv_buffer_view_fill_image_param(struct anv_device *device,
                                       struct brw_image_param *param);
 
 struct anv_sampler {
-   uint32_t state[4];
+   /* On Haswell we need to have all samplers declined per possible formats :
+    *    - float (1)
+    *    - RGBA integer for each 8, 16 and 32 bits (3)
+    *    - RGB integer for each 8, 16 and 32 bits (3)
+    *    - RG integer for each 8, 16 and 32 bits (3)
+    *    - R integer for each 8, 16 and 32 bits (3)
+    * In total 13 different configurations. On all other platforms, only
+    * state[0] is used. */
+   uint32_t state[13][4];
 };
 
 struct anv_framebuffer {
