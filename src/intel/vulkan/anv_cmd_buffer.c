@@ -931,6 +931,16 @@ anv_cmd_buffer_emit_samplers(struct anv_cmd_buffer *cmd_buffer,
       if (sampler == NULL)
          continue;
 
+      /* On Haswell, although the border color structures are 20 dwords long
+       * and must be aligned at 512 bytes, the position of the 8/16/32bits
+       * colors overlap, meaning we can't have a single color structure
+       * configured for all formats. We therefore need to reemit the sampler
+       * structure for the used format. */
+      if (cmd_buffer->device->info.is_haswell) {
+         gen75_pack_sampler_state(cmd_buffer->device, sampler,
+                                  desc->image_view->vk_format);
+      }
+
       memcpy(state->map + (s * 16),
              sampler->state, sizeof(sampler->state));
    }

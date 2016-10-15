@@ -28,10 +28,143 @@
 #include <fcntl.h>
 
 #include "anv_private.h"
+#include "vk_format_info.h"
 
 #include "common/gen_sample_positions.h"
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
+
+static uint32_t
+border_color_index(VkBorderColor border_color, VkFormat format)
+{
+#if GEN_IS_HASWELL
+   if (!vk_format_is_integer(format))
+      return border_color;
+
+   uint32_t max_bpc = vk_format_max_bpc(format);
+   uint32_t index = 0;
+
+   if (max_bpc <= 8)
+      return border_color;
+
+   if (max_bpc <= 16)
+      index = VK_BORDER_COLOR_END_RANGE + 1;
+   else
+      index = VK_BORDER_COLOR_END_RANGE + 4;
+
+   switch (border_color) {
+   case VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK:
+   case VK_BORDER_COLOR_INT_TRANSPARENT_BLACK:
+      index += 0;
+      break;
+
+   case VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK:
+   case VK_BORDER_COLOR_INT_OPAQUE_BLACK:
+      index += 1;
+      break;
+
+   case VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE:
+   case VK_BORDER_COLOR_INT_OPAQUE_WHITE:
+      index += 2;
+      break;
+
+   default:
+      unreachable("invalid border color");
+   }
+
+   return index;
+#else
+   return border_color;
+#endif
+}
+
+#define BORDER_COLOR(name, r, g, b, a) {           \
+      .BorderColor##name##Red   = r,               \
+      .BorderColor##name##Green = g,               \
+      .BorderColor##name##Blue  = b,               \
+      .BorderColor##name##Alpha = a,               \
+   }
+
+void
+genX(border_colors_setup)(struct anv_device *device)
+{
+#if GEN_IS_HASWELL
+   static const struct GENX(SAMPLER_BORDER_COLOR_STATE) border_colors[] = {
+      [VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE] =
+         BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0),
+      [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(8bit, 0, 0, 0, 0),
+      [VK_BORDER_COLOR_INT_OPAQUE_BLACK] =
+         BORDER_COLOR(8bit, 0, 0, 0, 1),
+      [VK_BORDER_COLOR_INT_OPAQUE_WHITE] =
+         BORDER_COLOR(8bit, 1, 1, 1, 1),
+      [VK_BORDER_COLOR_END_RANGE + 1] =
+         BORDER_COLOR(16bit, 0, 0, 0, 0),
+      [VK_BORDER_COLOR_END_RANGE + 2] =
+         BORDER_COLOR(16bit, 0, 0, 0, 1),
+      [VK_BORDER_COLOR_END_RANGE + 3] =
+         BORDER_COLOR(16bit, 1, 1, 1, 1),
+      [VK_BORDER_COLOR_END_RANGE + 4] =
+         BORDER_COLOR(32bit, 0, 0, 0, 0),
+      [VK_BORDER_COLOR_END_RANGE + 5] =
+         BORDER_COLOR(32bit, 0, 0, 0, 1),
+      [VK_BORDER_COLOR_END_RANGE + 6] =
+         BORDER_COLOR(32bit, 1, 1, 1, 1)
+   };
+   device->border_color_align = 512;
+#elif GEN_GEN == 7
+   static const struct GENX(SAMPLER_BORDER_COLOR_STATE) border_colors[] = {
+      [VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE] =
+         BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0),
+      [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      [VK_BORDER_COLOR_INT_OPAQUE_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      [VK_BORDER_COLOR_INT_OPAQUE_WHITE] =
+         BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0)
+   };
+   device->border_color_align = 64;
+#else /* GEN_GEN >= 8 */
+   static const struct GENX(SAMPLER_BORDER_COLOR_STATE) border_colors[] = {
+      [VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 0.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK] =
+         BORDER_COLOR(Float, 0.0, 0.0, 0.0, 1.0),
+      [VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE] =
+         BORDER_COLOR(Float, 1.0, 1.0, 1.0, 1.0),
+      [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] =
+         BORDER_COLOR(32bit, 0, 0, 0, 0),
+      [VK_BORDER_COLOR_INT_OPAQUE_BLACK] =
+         BORDER_COLOR(32bit, 0, 0, 0, 1),
+      [VK_BORDER_COLOR_INT_OPAQUE_WHITE] =
+         BORDER_COLOR(32bit, 1, 1, 1, 1)
+   };
+   device->border_color_align = 64;
+#endif
+
+   device->border_colors =
+      anv_state_pool_alloc(&device->dynamic_state_pool,
+                           ARRAY_SIZE(border_colors) * device->border_color_align,
+                           device->border_color_align);
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(border_colors); i++) {
+      GENX(SAMPLER_BORDER_COLOR_STATE_pack)(
+         NULL,
+         device->border_colors.map + i * device->border_color_align,
+         &border_colors[i]);
+   }
+
+   if (!device->info.has_llc)
+      anv_state_clflush(device->border_colors);
+}
 
 VkResult
 genX(init_device_state)(struct anv_device *device)
@@ -148,6 +281,74 @@ static const uint32_t vk_to_gen_shadow_compare_op[] = {
    [VK_COMPARE_OP_ALWAYS]                       = PREFILTEROPNEVER,
 };
 
+#if GEN_IS_HASWELL
+void
+#else
+static void
+#endif
+genX(pack_sampler_state)(
+   struct anv_device *                          device,
+   struct anv_sampler *                         sampler,
+   VkFormat                                     format)
+{
+   uint32_t color_index =
+      border_color_index(sampler->info.borderColor, format);
+   uint32_t color_offset =
+      device->border_colors.offset +
+      color_index * device->border_color_align;
+
+   struct GENX(SAMPLER_STATE) sampler_state = {
+      .SamplerDisable = false,
+      .TextureBorderColorMode = DX10OGL,
+
+#if GEN_GEN >= 8
+      .LODPreClampMode = CLAMP_MODE_OGL,
+#else
+      .LODPreClampEnable = CLAMP_ENABLE_OGL,
+#endif
+
+#if GEN_GEN == 8
+      .BaseMipLevel = 0.0,
+#endif
+      .MipModeFilter = vk_to_gen_mipmap_mode[sampler->info.mipmapMode],
+      .MagModeFilter = vk_to_gen_tex_filter(sampler->info.magFilter,
+                                            sampler->info.anisotropyEnable),
+      .MinModeFilter = vk_to_gen_tex_filter(sampler->info.minFilter,
+                                            sampler->info.anisotropyEnable),
+      .TextureLODBias = anv_clamp_f(sampler->info.mipLodBias, -16, 15.996),
+      .AnisotropicAlgorithm = EWAApproximation,
+      .MinLOD = anv_clamp_f(sampler->info.minLod, 0, 14),
+      .MaxLOD = anv_clamp_f(sampler->info.maxLod, 0, 14),
+      .ChromaKeyEnable = 0,
+      .ChromaKeyIndex = 0,
+      .ChromaKeyMode = 0,
+      .ShadowFunction = vk_to_gen_shadow_compare_op[sampler->info.compareOp],
+      .CubeSurfaceControlMode = OVERRIDE,
+
+      .BorderColorPointer = color_offset,
+
+#if GEN_GEN >= 8
+      .LODClampMagnificationMode = MIPNONE,
+#endif
+
+      .MaximumAnisotropy = vk_to_gen_max_anisotropy(sampler->info.maxAnisotropy),
+      .RAddressMinFilterRoundingEnable = 0,
+      .RAddressMagFilterRoundingEnable = 0,
+      .VAddressMinFilterRoundingEnable = 0,
+      .VAddressMagFilterRoundingEnable = 0,
+      .UAddressMinFilterRoundingEnable = 0,
+      .UAddressMagFilterRoundingEnable = 0,
+      .TrilinearFilterQuality = 0,
+      .NonnormalizedCoordinateEnable = sampler->info.unnormalizedCoordinates,
+      .TCXAddressControlMode = vk_to_gen_tex_address[sampler->info.addressModeU],
+      .TCYAddressControlMode = vk_to_gen_tex_address[sampler->info.addressModeV],
+      .TCZAddressControlMode = vk_to_gen_tex_address[sampler->info.addressModeW],
+   };
+
+   GENX(SAMPLER_STATE_pack)(NULL, sampler->state, &sampler_state);
+}
+
+
 VkResult genX(CreateSampler)(
     VkDevice                                    _device,
     const VkSamplerCreateInfo*                  pCreateInfo,
@@ -164,58 +365,13 @@ VkResult genX(CreateSampler)(
    if (!sampler)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   uint32_t border_color_offset = device->border_colors.offset +
-                                  pCreateInfo->borderColor * 64;
+   sampler->info = *pCreateInfo;
 
-   struct GENX(SAMPLER_STATE) sampler_state = {
-      .SamplerDisable = false,
-      .TextureBorderColorMode = DX10OGL,
-
-#if GEN_GEN >= 8
-      .LODPreClampMode = CLAMP_MODE_OGL,
-#else
-      .LODPreClampEnable = CLAMP_ENABLE_OGL,
+   /* No need to pack the sampler state on HSW, as the packing will depend on
+    * the format of the associated texture. */
+#if ! GEN_IS_HASWELL
+   genX(pack_sampler_state)(device, sampler, VK_FORMAT_UNDEFINED);
 #endif
-
-#if GEN_GEN == 8
-      .BaseMipLevel = 0.0,
-#endif
-      .MipModeFilter = vk_to_gen_mipmap_mode[pCreateInfo->mipmapMode],
-      .MagModeFilter = vk_to_gen_tex_filter(pCreateInfo->magFilter,
-                                            pCreateInfo->anisotropyEnable),
-      .MinModeFilter = vk_to_gen_tex_filter(pCreateInfo->minFilter,
-                                            pCreateInfo->anisotropyEnable),
-      .TextureLODBias = anv_clamp_f(pCreateInfo->mipLodBias, -16, 15.996),
-      .AnisotropicAlgorithm = EWAApproximation,
-      .MinLOD = anv_clamp_f(pCreateInfo->minLod, 0, 14),
-      .MaxLOD = anv_clamp_f(pCreateInfo->maxLod, 0, 14),
-      .ChromaKeyEnable = 0,
-      .ChromaKeyIndex = 0,
-      .ChromaKeyMode = 0,
-      .ShadowFunction = vk_to_gen_shadow_compare_op[pCreateInfo->compareOp],
-      .CubeSurfaceControlMode = OVERRIDE,
-
-      .BorderColorPointer = border_color_offset,
-
-#if GEN_GEN >= 8
-      .LODClampMagnificationMode = MIPNONE,
-#endif
-
-      .MaximumAnisotropy = vk_to_gen_max_anisotropy(pCreateInfo->maxAnisotropy),
-      .RAddressMinFilterRoundingEnable = 0,
-      .RAddressMagFilterRoundingEnable = 0,
-      .VAddressMinFilterRoundingEnable = 0,
-      .VAddressMagFilterRoundingEnable = 0,
-      .UAddressMinFilterRoundingEnable = 0,
-      .UAddressMagFilterRoundingEnable = 0,
-      .TrilinearFilterQuality = 0,
-      .NonnormalizedCoordinateEnable = pCreateInfo->unnormalizedCoordinates,
-      .TCXAddressControlMode = vk_to_gen_tex_address[pCreateInfo->addressModeU],
-      .TCYAddressControlMode = vk_to_gen_tex_address[pCreateInfo->addressModeV],
-      .TCZAddressControlMode = vk_to_gen_tex_address[pCreateInfo->addressModeW],
-   };
-
-   GENX(SAMPLER_STATE_pack)(NULL, sampler->state, &sampler_state);
 
    *pSampler = anv_sampler_to_handle(sampler);
 

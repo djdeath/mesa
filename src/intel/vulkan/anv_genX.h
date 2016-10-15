@@ -28,7 +28,7 @@
 /*
  * Gen-specific function declarations.  This header must *not* be included
  * directly.  Instead, it is included multiple times by anv_private.h.
- * 
+ *
  * In this header file, the usual genx() macro is available.
  */
 
@@ -37,6 +37,7 @@
 #endif
 
 VkResult genX(init_device_state)(struct anv_device *device);
+void genX(border_colors_setup)(struct anv_device *device);
 
 void genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer);
 

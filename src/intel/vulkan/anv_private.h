@@ -649,6 +649,7 @@ struct anv_device {
     struct blorp_context                        blorp;
 
     struct anv_state                            border_colors;
+    uint32_t                                    border_color_align;
 
     struct anv_queue                            queue;
 
@@ -1738,6 +1739,8 @@ void anv_buffer_view_fill_image_param(struct anv_device *device,
 
 struct anv_sampler {
    uint32_t state[4];
+
+   VkSamplerCreateInfo info;
 };
 
 struct anv_framebuffer {
@@ -1788,6 +1791,10 @@ struct anv_query_pool {
    uint32_t                                     slots;
    struct anv_bo                                bo;
 };
+
+void gen75_pack_sampler_state(struct anv_device *device,
+                              struct anv_sampler *sampler,
+                              VkFormat format);
 
 void *anv_lookup_entrypoint(const struct gen_device_info *devinfo,
                             const char *name);
