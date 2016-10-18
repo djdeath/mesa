@@ -106,6 +106,15 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
       sba.IndirectObjectBufferSizeModifyEnable  = true;
       sba.InstructionBufferSize                 = 0xfffff;
       sba.InstructionBuffersizeModifyEnable     = true;
+#  else
+      /* Dynamic state upper bound. Although the documentation says that
+       * programming it to zero will cause it to be ignored, that is a lie. If
+       * this isn't programmed to a real bound, the sampler border color
+       * pointer is rejected, causing border color to mysteriously fail.
+       */
+      sba.DynamicStateAccessUpperBound =
+         (struct anv_address) { NULL, 0xfffff000 };
+      sba.DynamicStateAccessUpperBoundModifyEnable = true;
 #  endif
    }
 
