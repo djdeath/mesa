@@ -821,6 +821,9 @@ struct anv_descriptor_set_binding_layout {
    /* Index into the descriptor set buffer views */
    int16_t buffer_index;
 
+   /* Index into the border color array */
+   int16_t border_color_array_index;
+
    struct {
       /* Index into the binding table for the associated surface */
       int16_t surface_index;
@@ -851,6 +854,12 @@ struct anv_descriptor_set_layout {
 
    /* Number of dynamic offsets used by this descriptor set */
    uint16_t dynamic_offset_count;
+
+   /* Number of samplers used by this descriptor set */
+   uint16_t border_color_count;
+
+   /* Index of the border color buffer into the descriptor set buffer views */
+   int16_t border_color_index;
 
    /* Bindings in this descriptor set */
    struct anv_descriptor_set_binding_layout binding[0];

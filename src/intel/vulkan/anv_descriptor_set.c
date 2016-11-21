@@ -48,11 +48,32 @@ VkResult anv_CreateDescriptorSetLayout(
 
    uint32_t max_binding = 0;
    uint32_t immutable_sampler_count = 0;
+   uint32_t gen7_border_color_wa = 0;
    for (uint32_t j = 0; j < pCreateInfo->bindingCount; j++) {
       max_binding = MAX2(max_binding, pCreateInfo->pBindings[j].binding);
       if (pCreateInfo->pBindings[j].pImmutableSamplers)
          immutable_sampler_count += pCreateInfo->pBindings[j].descriptorCount;
+
+
+      /* We need an additional buffer slot on Ivybridge/Haswell to store
+       * integer border color values. Count how many entries we need in that
+       * buffer. */
+      const VkDescriptorSetLayoutBinding *binding = &pCreateInfo->pBindings[j];
+      switch (binding->descriptorType) {
+      case VK_DESCRIPTOR_TYPE_SAMPLER:
+      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+         gen7_border_color_wa += binding->descriptorCount;
+         break;
+
+      default:
+         continue;
+      }
    }
+
+   if (device->info.gen == 7 && gen7_border_color_wa > 0)
+      max_binding++;
+   else
+      gen7_border_color_wa = 0;
 
    size_t size = sizeof(struct anv_descriptor_set_layout) +
                  (max_binding + 1) * sizeof(set_layout->binding[0]) +
@@ -69,6 +90,7 @@ VkResult anv_CreateDescriptorSetLayout(
 
    memset(set_layout, 0, sizeof(*set_layout));
    set_layout->binding_count = max_binding + 1;
+   set_layout->border_color_index = -1;
 
    for (uint32_t b = 0; b <= max_binding; b++) {
       /* Initialize all binding_layout entries to -1 */
@@ -119,6 +141,9 @@ VkResult anv_CreateDescriptorSetLayout(
             set_layout->binding[b].stage[s].sampler_index = sampler_count[s];
             sampler_count[s] += binding->descriptorCount;
          }
+         set_layout->binding[b].border_color_array_index =
+            set_layout->border_color_count;
+         set_layout->border_color_count += binding->descriptorCount;
          break;
       default:
          break;
@@ -182,6 +207,23 @@ VkResult anv_CreateDescriptorSetLayout(
       }
 
       set_layout->shader_stages |= binding->stageFlags;
+   }
+
+   if (gen7_border_color_wa > 0) {
+      uint32_t index = max_binding;
+      set_layout->border_color_index = index;
+      set_layout->binding[index].buffer_index = buffer_count;
+#ifndef NDEBUG
+      set_layout->binding[index].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+#endif
+      set_layout->binding[index].array_size = 1;
+      set_layout->binding[index].descriptor_index = set_layout->size;
+      for (int s = 0; s < ARRAY_SIZE(set_layout->binding[index].stage); s++) {
+         set_layout->binding[index].stage[s].surface_index = surface_count[s];
+         surface_count[s]++;
+      }
+      set_layout->size++;
+      buffer_count++;
    }
 
    set_layout->buffer_count = buffer_count;
