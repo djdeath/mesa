@@ -500,6 +500,7 @@ anv_descriptor_set_create(struct anv_device *device,
    set->buffer_views =
       (struct anv_buffer_view *) &set->descriptors[layout->size];
    set->buffer_count = layout->buffer_count;
+   memset(&set->gen7, 0, sizeof(set->gen7));
 
    /* By defining the descriptors to be zero now, we can later verify that
     * a descriptor has not been populated with user data.
@@ -542,6 +543,15 @@ anv_descriptor_set_create(struct anv_device *device,
       set->buffer_views[b].surface_state = state;
    }
 
+   /* Allocate border color workaround buffer if needed. */
+   if (layout->border_color_index > 0) {
+      set->gen7.border_colors_state =
+         anv_state_pool_alloc(&device->dynamic_state_pool,
+                              sizeof(*set->gen7.border_colors) *
+                              layout->border_color_count, 64);
+      set->gen7.border_colors = set->gen7.border_colors_state.map;
+   }
+
    *out_set = set;
 
    return VK_SUCCESS;
@@ -552,6 +562,12 @@ anv_descriptor_set_destroy(struct anv_device *device,
                            struct anv_descriptor_pool *pool,
                            struct anv_descriptor_set *set)
 {
+   /* Free border color workaround buffer if it was allocated. */
+   if (set->gen7.border_colors_state.alloc_size > 0) {
+      anv_state_pool_free(&device->dynamic_state_pool,
+                          set->gen7.border_colors_state);
+   }
+
    /* Put the buffer view surface state back on the free list. */
    for (uint32_t b = 0; b < set->buffer_count; b++) {
       struct surface_state_free_list_entry *entry =

@@ -878,8 +878,21 @@ struct anv_descriptor {
    };
 };
 
+struct gen7_border_color {
+   uint32_t color[4];
+   uint32_t color_mask[4];
+   uint32_t alpha_overwrite;
+   uint32_t wrapping;
+};
+
 struct anv_descriptor_set {
    const struct anv_descriptor_set_layout *layout;
+
+   struct {
+      struct anv_state border_colors_state;
+      struct gen7_border_color *border_colors;
+   } gen7;
+
    uint32_t size;
    uint32_t buffer_count;
    struct anv_buffer_view *buffer_views;
