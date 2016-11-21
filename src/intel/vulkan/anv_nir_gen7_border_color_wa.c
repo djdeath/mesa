@@ -70,16 +70,15 @@ wrap_tex_instr(nir_builder *b,
    if (glsl_sampler_type_is_array(sampler->type))
       coord_components -= 1;
    for (unsigned i = 0; i < coord_components; ++i) {
-      nir_ssa_def *lt_def = nir_flt(b, nir_channel(b, tex_coords, i), zerof),
-         *gt_def = nir_flt(b, onef, nir_channel(b, tex_coords, i)),
+      nir_ssa_def *component = nir_channel(b, tex_coords, i),
+         *lt_def = nir_flt(b, component, zerof),
+         *gt_def = nir_flt(b, onef, component),
          *bounds_cond = nir_ior(b, lt_def, gt_def),
          *border_cond =
-            nir_inot(b, nir_ieq(b,
-                                nir_iand(b, &load_wrapping_instr->dest.ssa,
-                                         nir_imm_int(b, 1 << i)),
+            nir_inot(b, nir_ieq(b, nir_iand(b, &load_wrapping_instr->dest.ssa,
+                                            nir_imm_int(b, 1 << i)),
                                 zeroi)),
-         *inner_cond = nir_iand(b, border_cond,
-                                bounds_cond);
+         *inner_cond = nir_iand(b, border_cond, bounds_cond);
 
       if (cond == NULL)
          cond = inner_cond;
