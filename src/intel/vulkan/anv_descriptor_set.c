@@ -640,6 +640,21 @@ VkResult anv_FreeDescriptorSets(
    return VK_SUCCESS;
 }
 
+static void
+border_color_mask_from_isl_view (uint32_t *mask,
+                                 uint32_t *alpha_overwrite,
+                                 const struct isl_view *view) {
+   const struct isl_format_layout *layout = &isl_format_layouts[view->format];
+
+   mask[0] = layout->channels.r.bits > 0 ? 0xffffffff : 0;
+   mask[1] = layout->channels.g.bits > 0 ? 0xffffffff : 0;
+   mask[2] = layout->channels.b.bits > 0 ? 0xffffffff : 0;
+   mask[3] = 0xffffffff;
+
+   *alpha_overwrite = (layout->channels.a.bits == 0 ||
+                       view->swizzle.a == ISL_CHANNEL_SELECT_ONE) ? 1 : 0;
+}
+
 void anv_UpdateDescriptorSets(
     VkDevice                                    _device,
     uint32_t                                    descriptorWriteCount,
@@ -656,10 +671,12 @@ void anv_UpdateDescriptorSets(
          &set->layout->binding[write->dstBinding];
       struct anv_descriptor *desc =
          &set->descriptors[bind_layout->descriptor_index];
+      int16_t border_color_index = bind_layout->border_color_array_index;
       desc += write->dstArrayElement;
 
       assert(write->descriptorType == bind_layout->type);
 
+      bool sampler_write = false;
       switch (write->descriptorType) {
       case VK_DESCRIPTOR_TYPE_SAMPLER:
          for (uint32_t j = 0; j < write->descriptorCount; j++) {
@@ -670,6 +687,12 @@ void anv_UpdateDescriptorSets(
                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
                .sampler = sampler,
             };
+
+            set->gen7.border_colors[border_color_index].wrapping =
+               sampler->wrapping;
+            memcpy(set->gen7.border_colors[border_color_index].color,
+                   sampler->color, sizeof(sampler->color));
+            sampler_write = true;
          }
          break;
 
@@ -683,11 +706,23 @@ void anv_UpdateDescriptorSets(
             desc[j].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             desc[j].image_view = iview;
 
+            border_color_mask_from_isl_view(
+               set->gen7.border_colors[border_color_index].color_mask,
+               &set->gen7.border_colors[border_color_index].alpha_overwrite,
+               &iview->isl);
+
             /* If this descriptor has an immutable sampler, we don't want
              * to stomp on it.
              */
-            if (sampler)
+            if (sampler) {
                desc[j].sampler = sampler;
+
+               set->gen7.border_colors[border_color_index].wrapping =
+                  sampler->wrapping;
+               memcpy(set->gen7.border_colors[border_color_index].color,
+                      sampler->color, sizeof(sampler->color));
+            }
+            sampler_write = true;
          }
          break;
 
@@ -762,6 +797,29 @@ void anv_UpdateDescriptorSets(
 
       default:
          break;
+      }
+
+      if (sampler_write && set->gen7.border_colors_state.alloc_size > 0) {
+         anv_state_clflush(set->gen7.border_colors_state);
+         const struct anv_descriptor_set_binding_layout *ubo_bind_layout =
+            &set->layout->binding[set->layout->border_color_index];
+         struct anv_buffer_view *view =
+            &set->buffer_views[ubo_bind_layout->buffer_index];
+
+         view->format =
+            anv_isl_format_for_descriptor_type(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+         view->bo = &device->dynamic_state_pool.block_pool->bo;
+         view->offset = set->gen7.border_colors_state.offset;
+         view->range = set->gen7.border_colors_state.alloc_size;
+
+         anv_fill_buffer_surface_state(device, view->surface_state,
+                                       view->format,
+                                       view->offset, view->range, 1);
+
+         desc[set->layout->border_color_index] = (struct anv_descriptor) {
+            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .buffer_view = view,
+         };
       }
    }
 
