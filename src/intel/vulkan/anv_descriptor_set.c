@@ -371,6 +371,24 @@ VkResult anv_CreateDescriptorPool(
       }
    }
 
+   if (device->info.gen == 7) {
+      uint32_t sampler_count = 0;
+      for (uint32_t i = 0; i < pCreateInfo->poolSizeCount; i++) {
+         switch (pCreateInfo->pPoolSizes[i].type) {
+         case VK_DESCRIPTOR_TYPE_SAMPLER:
+         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            sampler_count += pCreateInfo->pPoolSizes[i].descriptorCount;
+            break;
+         default:
+            break;
+         }
+      }
+      if (sampler_count > 0) {
+         buffer_count++;
+         descriptor_count++;
+      }
+   }
+
    const size_t size =
       sizeof(*pool) +
       pCreateInfo->maxSets * sizeof(struct anv_descriptor_set) +
