@@ -166,6 +166,27 @@ VkResult genX(CreateSampler)(
 
    uint32_t border_color_offset = device->border_colors.offset +
                                   pCreateInfo->borderColor * 64;
+#if GEN_GEN == 7
+   if (pCreateInfo->borderColor == VK_BORDER_COLOR_INT_TRANSPARENT_BLACK ||
+       pCreateInfo->borderColor == VK_BORDER_COLOR_INT_OPAQUE_BLACK ||
+       pCreateInfo->borderColor == VK_BORDER_COLOR_INT_OPAQUE_WHITE) {
+      sampler->wrapping =
+         (pCreateInfo->addressModeU == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ?
+          0x1 : 0) |
+         (pCreateInfo->addressModeV == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ?
+          0x2 : 0) |
+         (pCreateInfo->addressModeW == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ?
+          0x4 : 0);
+
+      static const uint32_t border_colors[][4] = {
+         [VK_BORDER_COLOR_INT_TRANSPARENT_BLACK] = { 0, 0, 0, 0 },
+         [VK_BORDER_COLOR_INT_OPAQUE_BLACK]      = { 0, 0, 0, 1 },
+         [VK_BORDER_COLOR_INT_OPAQUE_WHITE]      = { 1, 1, 1, 1 }
+      };
+      memcpy(sampler->color, border_colors[pCreateInfo->borderColor],
+             sizeof(sampler->color));
+   }
+#endif
 
    bool enable_min_filter_addr_rounding =
       pCreateInfo->minFilter != VK_FILTER_NEAREST;

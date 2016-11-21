@@ -1688,7 +1688,9 @@ void anv_buffer_view_fill_image_param(struct anv_device *device,
                                       struct brw_image_param *param);
 
 struct anv_sampler {
-   uint32_t state[4];
+   uint32_t                                     state[4];
+   uint32_t                                     color[4];
+   uint32_t                                     wrapping;
 };
 
 struct anv_framebuffer {
