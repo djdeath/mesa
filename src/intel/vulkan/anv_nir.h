@@ -40,6 +40,9 @@ void anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
                                    nir_shader *shader,
                                    struct brw_stage_prog_data *prog_data,
                                    struct anv_pipeline_bind_map *map);
+void anv_nir_apply_gen7_border_color(struct anv_pipeline *pipeline,
+                                     nir_shader *shader,
+                                     struct brw_stage_prog_data *prog_data);
 
 #ifdef __cplusplus
 }

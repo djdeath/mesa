@@ -316,6 +316,9 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
    if (nir == NULL)
       return NULL;
 
+   if (pipeline->device->info.gen == 7)
+      anv_nir_apply_gen7_border_color(pipeline, nir, prog_data);
+
    anv_nir_lower_push_constants(nir);
 
    /* Figure out the number of parameters */
