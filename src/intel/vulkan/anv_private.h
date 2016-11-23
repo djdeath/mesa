@@ -77,7 +77,7 @@ extern "C" {
 #define MAX_RTS          8
 #define MAX_VIEWPORTS   16
 #define MAX_SCISSORS    16
-#define MAX_PUSH_CONSTANTS_SIZE 128
+#define MAX_PUSH_CONSTANTS_SIZE (4 * 8 * 16) /* 16 (256-bits) registers */
 #define MAX_DYNAMIC_BUFFERS 16
 #define MAX_IMAGES 8
 #define MAX_SAMPLES_LOG2 4 /* SKL supports 16 samples */
