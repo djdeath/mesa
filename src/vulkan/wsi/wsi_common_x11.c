@@ -381,7 +381,7 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
     *  3) One to be currently held by the X server
     *  4) One to render to
     */
-   caps->minImageCount = 2;
+   caps->minImageCount = 4;
    /* There is no real maximum */
    caps->maxImageCount = 0;
 
