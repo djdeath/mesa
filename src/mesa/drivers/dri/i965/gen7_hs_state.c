@@ -44,7 +44,7 @@ gen7_upload_tcs_push_constants(struct brw_context *brw)
                                  AUB_TRACE_VS_CONSTANTS);
    }
 
-   gen7_upload_constant_state(brw, stage_state, active, _3DSTATE_CONSTANT_HS);
+   stage_state->push_constants_dirty = true;
 }
 
 const struct brw_tracked_state gen7_tcs_push_constants = {

@@ -51,10 +51,7 @@ gen6_upload_wm_push_constants(struct brw_context *brw)
    gen6_upload_push_constants(brw, &fp->program, prog_data,
                               stage_state, AUB_TRACE_WM_CONSTANTS);
 
-   if (brw->gen >= 7) {
-      gen7_upload_constant_state(brw, &brw->wm.base, true,
-                                 _3DSTATE_CONSTANT_PS);
-   }
+   stage_state->push_constants_dirty = true;
 }
 
 const struct brw_tracked_state gen6_wm_push_constants = {

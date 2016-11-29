@@ -118,7 +118,7 @@ emit_3dstate_constant(struct brw_context *brw,
    }
 }
 
-void
+static void
 gen7_upload_constant_state(struct brw_context *brw,
                            const struct brw_stage_state *stage_state,
                            bool active, unsigned opcode)
@@ -166,6 +166,56 @@ gen7_upload_constant_state(struct brw_context *brw,
    if (brw->gen >= 9)
       brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
 }
+
+static void
+gen7_upload_push_constant_packets(struct brw_context *brw)
+{
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   struct brw_stage_state *stage_states[] = {
+      &brw->vs.base,
+      &brw->tcs.base,
+      &brw->tes.base,
+      &brw->gs.base,
+      &brw->wm.base,
+   };
+
+   bool active[] = {
+      true,
+      brw->tess_eval_program != NULL,
+      brw->tess_eval_program != NULL,
+      brw->geometry_program != NULL,
+      true,
+   };
+
+   unsigned cmds[] = {
+      _3DSTATE_CONSTANT_VS,
+      _3DSTATE_CONSTANT_HS,
+      _3DSTATE_CONSTANT_DS,
+      _3DSTATE_CONSTANT_GS,
+      _3DSTATE_CONSTANT_PS,
+   };
+
+   if (devinfo->is_ivybridge &&
+       stage_states[MESA_SHADER_VERTEX]->push_constants_dirty) {
+      gen7_emit_vs_workaround_flush(brw);
+   }
+
+   for (int i = 0; i <= MESA_SHADER_FRAGMENT; i++) {
+      if (stage_states[i]->push_constants_dirty) {
+         gen7_upload_constant_state(brw, stage_states[i], active[i], cmds[i]);
+         stage_states[i]->push_constants_dirty = false;
+      }
+   }
+}
+
+const struct brw_tracked_state gen7_push_constant_packets = {
+   .dirty = {
+      .mesa  = 0,
+      .brw   = BRW_NEW_DRAW_CALL,
+   },
+   .emit = gen7_upload_push_constant_packets,
+};
 
 /**
  * Creates a streamed BO containing the push constants for the VS or GS on

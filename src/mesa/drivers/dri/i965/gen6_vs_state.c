@@ -48,13 +48,7 @@ gen6_upload_vs_push_constants(struct brw_context *brw)
    gen6_upload_push_constants(brw, &vp->program, prog_data, stage_state,
                               AUB_TRACE_VS_CONSTANTS);
 
-   if (brw->gen >= 7) {
-      if (brw->gen == 7 && !brw->is_haswell && !brw->is_baytrail)
-         gen7_emit_vs_workaround_flush(brw);
-
-      gen7_upload_constant_state(brw, stage_state, true /* active */,
-                                 _3DSTATE_CONSTANT_VS);
-   }
+   stage_state->push_constants_dirty = true;
 }
 
 const struct brw_tracked_state gen6_vs_push_constants = {

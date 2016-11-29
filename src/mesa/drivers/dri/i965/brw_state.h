@@ -168,6 +168,8 @@ extern const struct brw_tracked_state gen8_vertices;
 extern const struct brw_tracked_state gen8_vf_topology;
 extern const struct brw_tracked_state gen8_vs_state;
 extern const struct brw_tracked_state brw_cs_work_groups_surface;
+extern const struct brw_tracked_state gen7_tes_push_constants;
+extern const struct brw_tracked_state gen7_push_constant_packets;
 
 static inline bool
 brw_state_dirty(const struct brw_context *brw,
@@ -366,11 +368,6 @@ brw_upload_pull_constants(struct brw_context *brw,
                           const struct brw_stage_prog_data *prog_data);
 
 /* gen7_vs_state.c */
-void
-gen7_upload_constant_state(struct brw_context *brw,
-                           const struct brw_stage_state *stage_state,
-                           bool active, unsigned opcode);
-
 void gen7_rs_control(struct brw_context *brw, int enable);
 
 void gen7_edit_hw_binding_table_entry(struct brw_context *brw,

@@ -48,8 +48,7 @@ gen6_upload_gs_push_constants(struct brw_context *brw)
                                  AUB_TRACE_VS_CONSTANTS);
    }
 
-   if (brw->gen >= 7)
-      gen7_upload_constant_state(brw, stage_state, gp, _3DSTATE_CONSTANT_GS);
+   stage_state->push_constants_dirty = true;
 }
 
 const struct brw_tracked_state gen6_gs_push_constants = {

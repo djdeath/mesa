@@ -216,6 +216,9 @@ static const struct brw_tracked_state *gen7_render_atoms[] =
    &gen6_renderbuffer_surfaces,
    &brw_renderbuffer_read_surfaces,
    &brw_texture_surfaces,
+
+   &gen7_push_constant_packets,
+
    &brw_vs_binding_table,
    &brw_tcs_binding_table,
    &brw_tes_binding_table,
@@ -319,6 +322,9 @@ static const struct brw_tracked_state *gen8_render_atoms[] =
    &gen6_renderbuffer_surfaces,
    &brw_renderbuffer_read_surfaces,
    &brw_texture_surfaces,
+
+   &gen7_push_constant_packets,
+
    &brw_vs_binding_table,
    &brw_tcs_binding_table,
    &brw_tes_binding_table,
