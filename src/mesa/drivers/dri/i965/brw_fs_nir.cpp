@@ -3747,6 +3747,23 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
    }
 }
 
+static int
+ubo_push_loc(const struct brw_stage_prog_data *prog_data,
+             int ubo_index, int offset)
+{
+   int reg = 0;
+
+   for (int i = 0; i < 4; i++) {
+      const struct brw_ubo_range *range = &prog_data->ubo_ranges[i];
+      if (range->block == ubo_index &&
+          offset >= range->start && offset < range->start + range->length) {
+         return reg + offset - range->start;
+      }
+      reg += range->length;
+   }
+   return -1;
+}
+
 void
 fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr)
 {
@@ -4059,6 +4076,23 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
           * and we have to split it if necessary.
           */
          const unsigned type_size = type_sz(dest.type);
+
+         const int push_loc = !const_index ? -1 :
+            ubo_push_loc(prog_data, const_index->u32[0],
+                         const_offset->u32[0] / 32);
+
+         if (push_loc != -1 && !getenv("PULL")) {
+            fs_reg consts =
+               byte_offset(fs_reg(UNIFORM, uniforms + 8 * push_loc,
+                                  dest.type), const_offset->u32[0] % 32);
+
+            for (unsigned i = 0; i < instr->num_components; i++) {
+               bld.MOV(offset(dest, bld, i),
+                       byte_offset(consts, i * type_size));
+            }
+            break;
+         }
+
          const fs_reg packed_consts = bld.vgrf(BRW_REGISTER_TYPE_F);
          for (unsigned c = 0; c < instr->num_components;) {
             const unsigned base = const_offset->u32[0] + c * type_size;

@@ -1411,8 +1411,13 @@ fs_visitor::assign_curb_setup()
 	 if (inst->src[i].file == UNIFORM) {
             int uniform_nr = inst->src[i].nr + inst->src[i].offset / 4;
             int constant_nr;
+
             if (uniform_nr >= 0 && uniform_nr < (int) uniforms) {
                constant_nr = push_constant_loc[uniform_nr];
+            } else if (uniform_nr >= uniforms &&
+                       uniform_nr - uniforms < 8 * ubo_push_length) {
+               /* Pushed UBO data */
+               constant_nr = 8 * uniform_push_length + (uniform_nr - uniforms);
             } else {
                /* Section 5.11 of the OpenGL 4.1 spec says:
                 * "Out-of-bounds reads return undefined values, which include
@@ -1422,9 +1427,10 @@ fs_visitor::assign_curb_setup()
                constant_nr = 0;
             }
 
-	    struct brw_reg brw_reg = brw_vec1_grf(payload.num_regs +
-						  constant_nr / 8,
-						  constant_nr % 8);
+            struct brw_reg brw_reg = brw_vec1_grf(payload.num_regs +
+                                                  constant_nr / 8,
+                                                  constant_nr % 8);
+
             brw_reg.abs = inst->src[i].abs;
             brw_reg.negate = inst->src[i].negate;
 
