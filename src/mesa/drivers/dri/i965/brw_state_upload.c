@@ -663,6 +663,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_CC_STATE),
    DEFINE_BIT(BRW_NEW_BLORP),
    DEFINE_BIT(BRW_NEW_VIEWPORT_COUNT),
+   DEFINE_BIT(BRW_NEW_DRAW_CALL),
    {0, 0, 0}
 };
 
