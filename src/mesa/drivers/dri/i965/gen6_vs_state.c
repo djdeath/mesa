@@ -57,7 +57,6 @@ const struct brw_tracked_state gen6_vs_push_constants = {
                _NEW_TRANSFORM,
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
-               BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                BRW_NEW_VERTEX_PROGRAM |
                BRW_NEW_VS_PROG_DATA,
    },
@@ -170,7 +169,6 @@ const struct brw_tracked_state gen6_vs_state = {
       .brw   = BRW_NEW_BATCH |
                BRW_NEW_BLORP |
                BRW_NEW_CONTEXT |
-               BRW_NEW_PUSH_CONSTANT_ALLOCATION |
                BRW_NEW_VERTEX_PROGRAM |
                BRW_NEW_VS_PROG_DATA,
    },
