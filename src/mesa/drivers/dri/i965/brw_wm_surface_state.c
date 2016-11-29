@@ -1430,6 +1430,8 @@ brw_upload_ubo_surfaces(struct brw_context *brw,
       }
    }
 
+   stage_state->push_constants_dirty = true;
+
    if (shader->NumUniformBlocks || shader->NumShaderStorageBlocks)
       brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
 }
