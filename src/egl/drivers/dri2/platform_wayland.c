@@ -798,7 +798,7 @@ dri2_wl_query_buffer_age(_EGLDriver *drv,
 {
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surface);
 
-   if (get_back_bo(dri2_surf) < 0) {
+   if (dri2_surf->back == NULL && get_back_bo(dri2_surf) < 0) {
       _eglError(EGL_BAD_ALLOC, "dri2_query_buffer_age");
       return 0;
    }
