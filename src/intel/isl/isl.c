@@ -654,6 +654,11 @@ isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
                       __FILE__, __func__);
       }
 
+      fprintf(stderr, "\tcalc phys0 level: %lux%lux%u\n",
+              isl_align(info->width, fmtl->bw),
+              isl_align(info->height, fmtl->bh),
+              info->depth);
+
       switch (dim_layout) {
       case ISL_DIM_LAYOUT_GEN9_1D:
          unreachable("bad isl_dim_layout");
@@ -1188,6 +1193,9 @@ isl_surf_init_s(const struct isl_device *dev,
       .d = info->depth,
       .a = info->array_len,
    };
+   fprintf(stderr, "logical=%ix%ix%ix%i\n",
+           logical_level0_px.w, logical_level0_px.h,
+           logical_level0_px.d, logical_level0_px.a);
 
    enum isl_tiling tiling;
    if (!isl_surf_choose_tiling(dev, info, &tiling))
@@ -1216,6 +1224,8 @@ isl_surf_init_s(const struct isl_device *dev,
                                   &phys_level0_sa);
    assert(phys_level0_sa.w % fmtl->bw == 0);
    assert(phys_level0_sa.h % fmtl->bh == 0);
+   fprintf(stderr, "phys_level0_sa=%ix%ix%i\n",
+           phys_level0_sa.w, phys_level0_sa.h, phys_level0_sa.d);
 
    enum isl_array_pitch_span array_pitch_span =
       isl_choose_array_pitch_span(dev, info, dim_layout, &phys_level0_sa);
@@ -1224,6 +1234,8 @@ isl_surf_init_s(const struct isl_device *dev,
    isl_calc_phys_slice0_extent_sa(dev, info, dim_layout, msaa_layout,
                                   &image_align_sa, &phys_level0_sa,
                                   &phys_slice0_sa);
+   fprintf(stderr, "phys_slice0_sa=%ix%i\n",
+           phys_slice0_sa.w, phys_slice0_sa.h);
    assert(phys_slice0_sa.w % fmtl->bw == 0);
    assert(phys_slice0_sa.h % fmtl->bh == 0);
 
@@ -1231,6 +1243,7 @@ isl_surf_init_s(const struct isl_device *dev,
       isl_calc_array_pitch_el_rows(dev, info, &tile_info, dim_layout,
                                    array_pitch_span, &image_align_sa,
                                    &phys_level0_sa, &phys_slice0_sa);
+   fprintf(stderr, "array_pitch_el_rows=%u\n", array_pitch_el_rows);
 
    uint32_t total_h_el = phys_level0_sa.array_len * array_pitch_el_rows;
 
