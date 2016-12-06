@@ -376,7 +376,11 @@ anv_surface_get_subresource_layout(struct anv_image *image,
 
    layout->offset = surface->offset;
    layout->rowPitch = surface->isl.row_pitch;
-   layout->depthPitch = isl_surf_get_array_pitch(&surface->isl);
+   if (image->extent.depth > 1)
+      layout->depthPitch = isl_surf_get_depth_pitch(&surface->isl,
+                                                    subresource->mipLevel);
+   else
+      layout->depthPitch = 0;
    layout->arrayPitch = isl_surf_get_array_pitch(&surface->isl);
    layout->size = surface->isl.size;
 }
