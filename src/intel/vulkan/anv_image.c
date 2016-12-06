@@ -363,7 +363,8 @@ VkResult anv_BindImageMemory(
 }
 
 static void
-anv_surface_get_subresource_layout(struct anv_image *image,
+anv_surface_get_subresource_layout(struct anv_device *device,
+                                   struct anv_image *image,
                                    struct anv_surface *surface,
                                    const VkImageSubresource *subresource,
                                    VkSubresourceLayout *layout)
@@ -376,32 +377,34 @@ anv_surface_get_subresource_layout(struct anv_image *image,
 
    layout->offset = surface->offset;
    layout->rowPitch = surface->isl.row_pitch;
-   layout->depthPitch = isl_surf_get_array_pitch(&surface->isl);
+   layout->depthPitch = isl_surf_get_depth_pitch(&device->isl_dev,
+                                                 &surface->isl);
    layout->arrayPitch = isl_surf_get_array_pitch(&surface->isl);
    layout->size = surface->isl.size;
 }
 
 void anv_GetImageSubresourceLayout(
-    VkDevice                                    device,
+    VkDevice                                    _device,
     VkImage                                     _image,
     const VkImageSubresource*                   pSubresource,
     VkSubresourceLayout*                        pLayout)
 {
+   ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_image, image, _image);
 
    assert(__builtin_popcount(pSubresource->aspectMask) == 1);
 
    switch (pSubresource->aspectMask) {
    case VK_IMAGE_ASPECT_COLOR_BIT:
-      anv_surface_get_subresource_layout(image, &image->color_surface,
+      anv_surface_get_subresource_layout(device, image, &image->color_surface,
                                          pSubresource, pLayout);
       break;
    case VK_IMAGE_ASPECT_DEPTH_BIT:
-      anv_surface_get_subresource_layout(image, &image->depth_surface,
+      anv_surface_get_subresource_layout(device, image, &image->depth_surface,
                                          pSubresource, pLayout);
       break;
    case VK_IMAGE_ASPECT_STENCIL_BIT:
-      anv_surface_get_subresource_layout(image, &image->stencil_surface,
+      anv_surface_get_subresource_layout(device, image, &image->stencil_surface,
                                          pSubresource, pLayout);
       break;
    default:
