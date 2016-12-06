@@ -1874,3 +1874,26 @@ isl_surf_get_depth_format(const struct isl_device *dev,
       return 5; /* D16_UNORM */
    }
 }
+
+uint32_t
+isl_surf_get_depth_pitch(const struct isl_surf *surf,
+                         uint32_t level)
+{
+   assert(surf->dim == ISL_SURF_DIM_3D);
+
+   switch (surf->dim_layout) {
+   case ISL_DIM_LAYOUT_GEN4_2D:
+      return isl_surf_get_array_pitch(surf);
+   case ISL_DIM_LAYOUT_GEN4_3D:
+      /* Depth pitch doesn't make sense for gen4 3D textures at LOD1 and
+       * above. */
+      assert(level == 0);
+      return surf->row_pitch *
+         isl_align(isl_align_div_npot(surf->phys_level0_sa.h,
+                                      isl_format_get_layout(surf->format)->bh),
+                   surf->image_alignment_el.h);
+   case ISL_DIM_LAYOUT_GEN9_1D:
+   default:
+      unreachable("invalid layout for a 3D texture");
+   }
+}
