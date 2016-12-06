@@ -1392,6 +1392,14 @@ isl_surf_get_array_pitch(const struct isl_surf *surf)
 }
 
 /**
+ * Pitch between depth slices, in bytes (for 2D images, this should be
+ * equivalent to isl_surf_get_array_pitch()).
+ */
+uint32_t
+isl_surf_get_depth_pitch(const struct isl_device *device,
+                         const struct isl_surf *surf);
+
+/**
  * Calculate the offset, in units of surface samples, to a subimage in the
  * surface.
  *

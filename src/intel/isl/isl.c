@@ -1874,3 +1874,28 @@ isl_surf_get_depth_format(const struct isl_device *dev,
       return 5; /* D16_UNORM */
    }
 }
+
+uint32_t
+isl_surf_get_depth_pitch(const struct isl_device *device,
+                         const struct isl_surf *surf)
+{
+   switch (surf->dim_layout) {
+   case ISL_DIM_LAYOUT_GEN9_1D:
+   case ISL_DIM_LAYOUT_GEN4_2D:
+      return isl_surf_get_array_pitch(surf);
+   case ISL_DIM_LAYOUT_GEN4_3D: {
+      if (surf->tiling == ISL_TILING_LINEAR)
+         return surf->row_pitch * surf->phys_level0_sa.h;
+
+      struct isl_tile_info tile_info;
+      isl_surf_get_tile_info(device, surf, &tile_info);
+
+      return isl_align(surf->row_pitch * surf->phys_level0_sa.h,
+                       tile_info.phys_extent_B.width *
+                       tile_info.phys_extent_B.height);
+      }
+   default:
+      unreachable("bad isl_dim_layout");
+      break;
+   }
+}
