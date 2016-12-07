@@ -297,6 +297,7 @@ dri2_wl_release_buffers(struct dri2_egl_surface *dri2_surf)
       dri2_surf->color_buffers[i].linear_copy = NULL;
       dri2_surf->color_buffers[i].data = NULL;
       dri2_surf->color_buffers[i].locked = 0;
+      dri2_surf->color_buffers[i].age = 0;
    }
 
    if (dri2_dpy->dri2) {
@@ -469,6 +470,7 @@ update_buffers(struct dri2_egl_surface *dri2_surf)
          dri2_surf->color_buffers[i].wl_buffer = NULL;
          dri2_surf->color_buffers[i].dri_image = NULL;
          dri2_surf->color_buffers[i].linear_copy = NULL;
+         dri2_surf->color_buffers[i].age = 0;
       }
    }
 
