@@ -31,6 +31,8 @@
 extern "C" {
 #endif
 
+void anv_nir_analyze_ubo_ranges(nir_shader *nir,
+                                struct anv_ubo_range out_ranges[3]);
 void anv_nir_lower_input_attachments(nir_shader *shader);
 
 void anv_nir_lower_push_constants(nir_shader *shader);

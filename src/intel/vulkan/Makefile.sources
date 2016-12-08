@@ -32,6 +32,7 @@ VULKAN_FILES := \
 	anv_image.c \
 	anv_intel.c \
 	anv_nir.h \
+	anv_nir_analyze_ubo_ranges.c \
 	anv_nir_apply_dynamic_offsets.c \
 	anv_nir_apply_pipeline_layout.c \
 	anv_nir_lower_input_attachments.c \

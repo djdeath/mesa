@@ -382,6 +382,8 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
       }
    }
 
+   anv_nir_analyze_ubo_ranges(nir, pipeline->layout->stage[stage].ubo_ranges);
+
    /* Set up dynamic offsets */
    anv_nir_apply_dynamic_offsets(pipeline, nir, prog_data);
 

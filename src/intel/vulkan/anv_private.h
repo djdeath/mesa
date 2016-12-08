@@ -924,6 +924,12 @@ struct anv_pipeline_binding {
    uint8_t input_attachment_index;
 };
 
+struct anv_ubo_range {
+   uint8_t block;
+   uint8_t start;
+   uint8_t length;
+};
+
 struct anv_pipeline_layout {
    struct {
       struct anv_descriptor_set_layout *layout;
@@ -934,6 +940,7 @@ struct anv_pipeline_layout {
 
    struct {
       bool has_dynamic_offsets;
+      struct anv_ubo_range ubo_ranges[3];
    } stage[MESA_SHADER_STAGES];
 
    unsigned char sha1[20];
