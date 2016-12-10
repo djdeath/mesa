@@ -26,7 +26,7 @@
 
 struct ubo_range_entry
 {
-   struct anv_ubo_range range;
+   struct anv_push_ubo_range range;
    int benefit;
 };
 
@@ -50,21 +50,19 @@ cmp_ubo_range_entry(const void *va, const void *vb)
    return score(b) - score(a);
 }
 
-#define MAX_UBO (256 /* maxDescriptorSetUniformBuffers */ * \
-                 8 /* maxBoundDescriptorSets */)
+#define MAX_SET     (8)   /* maxBoundDescriptorSets */
+#define MAX_UBO_SET (256) /* maxDescriptorSetUniformBuffers */
+
+#define MAX_UBO (MAX_SET * MAX_UBO_SET)
 
 struct ubo_analysis_state
 {
-   int16_t set_binding_remapping[8][256];
-   int16_t binding_count;
-
-   uint64_t offsets[BRW_MAX_UBO];
-   uint8_t uses[BRW_MAX_UBO][64];
+   uint64_t offsets[MAX_UBO];
+   uint8_t uses[MAX_UBO][64];
 };
 
 static int16_t
-nir_vulkan_resource_index_to_block(struct ubo_analysis_state *state,
-                                   const nir_src *src)
+nir_vulkan_resource_index_to_block(const nir_src *src)
 {
    if (src->ssa->parent_instr->type != nir_instr_type_intrinsic)
       return -1;
@@ -82,10 +80,7 @@ nir_vulkan_resource_index_to_block(struct ubo_analysis_state *state,
 
    uint32_t binding = binding_const->u32[0];
 
-   if (state->set_binding_remapping[set][binding] == -1)
-      state->set_binding_remapping[set][binding] = state->binding_count++;
-
-   return state->set_binding_remapping[set][binding];
+   return set * MAX_UBO_SET + binding;
 }
 
 static bool
@@ -99,20 +94,18 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
       if (intrin->intrinsic != nir_intrinsic_load_ubo)
          continue;
 
-      int block = nir_vulkan_resource_index_to_block(state, &intrin->src[0]);
+      int block_id = nir_vulkan_resource_index_to_block(&intrin->src[0]);
       nir_const_value *offset_const = nir_src_as_const_value(intrin->src[1]);
 
-      if (block != -1 && offset_const) {
+      if (block_id != -1 && offset_const) {
          const int offset = offset_const->u32[0] / (8 * 4);
-
-         /* fprintf(stderr, "offset=%i\n", offset_const->u32[0]); */
 
          /* Won't fit in our bitfield */
          if (offset >= 64)
             continue;
 
-         state->offsets[block] |= (1ull << offset);
-         state->uses[block][offset]++;
+         state->offsets[block_id] |= (1ull << offset);
+         state->uses[block_id][offset]++;
       }
    }
 
@@ -134,17 +127,11 @@ print_ubo_entry(FILE *file,
 
 void
 anv_nir_analyze_ubo_ranges(nir_shader *nir,
-                           struct anv_ubo_range out_ranges[3])
+                           struct anv_push_ubo_range out_ranges[3])
 {
    void *mem_ctx = ralloc_context(NULL);
-
    struct ubo_analysis_state *state = rzalloc(mem_ctx,
                                               struct ubo_analysis_state);
-   for (int i = 0; i < ARRAY_SIZE(state->set_binding_remapping); i++) {
-      for (int j = 0; j < ARRAY_SIZE(state->set_binding_remapping[0]); j++) {
-         state->set_binding_remapping[i][j] = -1;
-      }
-   }
 
    /* Walk the IR, recording how many times each UBO block/offset is used. */
    nir_foreach_function(function, nir) {
@@ -220,11 +207,60 @@ anv_nir_analyze_ubo_ranges(nir_shader *nir,
    for (int i = 0; i < nr_entries; i++) {
       out_ranges[i] = entries[i].range;
    }
-   for (int i = nr_entries; i < 4; i++) {
+   for (int i = nr_entries; i < 3; i++) {
       out_ranges[i].block = 0;
       out_ranges[i].start = 0;
       out_ranges[i].length = 0;
    }
 
    ralloc_free(ranges.mem_ctx);
+}
+
+/**/
+
+static void
+push_ubo_ranges(nir_block *block,
+                struct anv_push_ubo_range *ubo_ranges,
+                uint32_t n_ranges)
+{
+   nir_foreach_instr(instr, block) {
+      if (instr->type != nir_instr_type_intrinsic)
+         continue;
+
+      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+      if (intrin->intrinsic != nir_intrinsic_load_ubo)
+         continue;
+
+      int block_id = nir_vulkan_resource_index_to_block(&intrin->src[0]);
+      nir_const_value *offset_const = nir_src_as_const_value(intrin->src[1]);
+      if (block_id == -1 && offset_const == NULL)
+         continue;
+
+      const int offset = offset_const->u32[0] / (8 * 4);
+      for (uint32_t r = 0; r < n_ranges; r++) {
+         if (block_id == ubo_ranges[r].block &&
+             offset >= ubo_ranges[r].start &&
+             offset < (ubo_ranges[r].start + ubo_ranges[r].length)) {
+            if (getenv("ANV_PRINT_UBO"))
+               fprintf(stderr, "replacing %i -> %u!\n",
+                       offset, ubo_ranges[r].push_start);
+            break;
+         }
+      }
+   }
+}
+
+void
+anv_nir_push_ubo_ranges(nir_shader *nir,
+                        struct anv_push_ubo_range *ubo_ranges,
+                        uint32_t n_ranges)
+{
+   nir_foreach_function(function, nir) {
+      if (!function->impl)
+         continue;
+
+      nir_foreach_block(block, function->impl) {
+         push_ubo_ranges(block, ubo_ranges, n_ranges);
+      }
+   }
 }
