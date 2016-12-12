@@ -340,12 +340,14 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
    /* Figure out the number of parameters */
    prog_data->nr_params = 0;
 
+   const struct anv_pipeline_layout *layout = pipeline->layout;
+   uint32_t num_push_constants =
+      align_u32(layout->stage[stage].push_stop, sizeof(float) * 8) / sizeof(float);
+
    if (nir->num_uniforms > 0) {
-      /* If the shader uses any push constants at all, we'll just give
-       * them the maximum possible number
-       */
       assert(nir->num_uniforms <= MAX_PUSH_CONSTANTS_SIZE);
-      prog_data->nr_params += MAX_PUSH_CONSTANTS_SIZE / sizeof(float);
+      /* For now just limit the push constants to the top bound. */
+      prog_data->nr_params += num_push_constants;
    }
 
    if (pipeline->layout && pipeline->layout->stage[stage].has_dynamic_offsets)
@@ -376,7 +378,7 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
       struct anv_push_constants *null_data = NULL;
       if (nir->num_uniforms > 0) {
          /* Fill out the push constants section of the param array */
-         for (unsigned i = 0; i < MAX_PUSH_CONSTANTS_SIZE / sizeof(float); i++)
+         for (unsigned i = 0; i < num_push_constants; i++)
             prog_data->param[i] = (const union gl_constant_value *)
                &null_data->client_data[i * sizeof(float)];
       }
