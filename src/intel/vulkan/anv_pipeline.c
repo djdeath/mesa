@@ -341,11 +341,12 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
    prog_data->nr_params = 0;
 
    if (nir->num_uniforms > 0) {
-      /* If the shader uses any push constants at all, we'll just give
-       * them the maximum possible number
-       */
+      struct anv_pipeline_layout *layout = pipeline->layout;
       assert(nir->num_uniforms <= MAX_PUSH_CONSTANTS_SIZE);
-      prog_data->nr_params += MAX_PUSH_CONSTANTS_SIZE / sizeof(float);
+      /* For now just limit the push constants to the top bound. */
+      prog_data->nr_params +=
+         align_u32(layout->stage[stage].push_stop, sizeof(float)) /
+         sizeof(float);
    }
 
    if (pipeline->layout && pipeline->layout->stage[stage].has_dynamic_offsets)
