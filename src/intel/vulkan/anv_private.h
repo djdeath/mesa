@@ -942,6 +942,10 @@ struct anv_pipeline_layout {
 
    struct {
       bool has_dynamic_offsets;
+      struct {
+         uint32_t push_start;
+         uint32_t push_stop;
+      };
       struct anv_push_ubo_range ubo_ranges[3];
    } stage[MESA_SHADER_STAGES];
 
