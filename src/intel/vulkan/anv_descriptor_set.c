@@ -259,6 +259,18 @@ VkResult anv_CreatePipelineLayout(
       }
    }
 
+   for (uint32_t push = 0; push < pCreateInfo->pushConstantRangeCount; push++) {
+      anv_foreach_stage(s, pCreateInfo->pPushConstantRanges[push].stageFlags) {
+         layout->stage[s].push_start =
+            MIN2(layout->stage[s].push_start,
+                 pCreateInfo->pPushConstantRanges[push].offset);
+         layout->stage[s].push_stop =
+            MAX2(layout->stage[s].push_stop,
+                 pCreateInfo->pPushConstantRanges[push].offset +
+                 pCreateInfo->pPushConstantRanges[push].size);
+      }
+   }
+
    struct mesa_sha1 *ctx = _mesa_sha1_init();
    for (unsigned s = 0; s < layout->num_sets; s++) {
       sha1_update_descriptor_set_layout(ctx, layout->set[s].layout);

@@ -934,6 +934,10 @@ struct anv_pipeline_layout {
 
    struct {
       bool has_dynamic_offsets;
+      struct {
+         uint32_t push_start;
+         uint32_t push_stop;
+      };
    } stage[MESA_SHADER_STAGES];
 
    unsigned char sha1[20];
