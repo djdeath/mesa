@@ -335,10 +335,16 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
    if (nir == NULL)
       return NULL;
 
+   anv_nir_analyze_ubo_ranges(nir, pipeline->layout->stage[stage].ubo_ranges);
+
+   anv_nir_push_ubo_ranges(nir, pipeline->layout->stage[stage].ubo_ranges, 3);
+
    anv_nir_lower_push_constants(nir);
 
    /* Figure out the number of parameters */
    prog_data->nr_params = 0;
+
+   fprintf(stderr, "uniforms=%u\n", nir->num_uniforms);
 
    if (nir->num_uniforms > 0) {
       struct anv_pipeline_layout *layout = pipeline->layout;
@@ -382,10 +388,6 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
                &null_data->client_data[i * sizeof(float)];
       }
    }
-
-   anv_nir_analyze_ubo_ranges(nir, pipeline->layout->stage[stage].ubo_ranges);
-
-   anv_nir_push_ubo_ranges(nir, pipeline->layout->stage[stage].ubo_ranges, 3);
 
    /* Set up dynamic offsets */
    anv_nir_apply_dynamic_offsets(pipeline, nir, prog_data);
