@@ -435,9 +435,39 @@ vtn_type_block_size(struct vtn_type *type)
 }
 
 static void
+vtn_access_chain_get_offset_size(struct vtn_access_chain *chain,
+                                 unsigned *access_offset,
+                                 unsigned *access_size)
+{
+   /* Only valid for push constants accesses now. */
+   assert(chain->var->mode == vtn_variable_mode_push_constant);
+
+   struct vtn_type *type = chain->var->type;
+
+   *access_offset = 0;
+
+   for (unsigned i = 0; i < chain->length; i++) {
+      if (chain->link[i].mode != vtn_access_mode_literal)
+         break;
+
+      if (glsl_type_is_struct(type->type)) {
+         *access_offset += type->offsets[chain->link[i].id];
+         type = type->members[chain->link[i].id];
+      } else {
+         *access_offset += type->stride * chain->link[i].id;
+         type = type->array_element;
+      }
+   }
+
+   *access_size = vtn_type_block_size(type);
+}
+
+static void
 _vtn_load_store_tail(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                      nir_ssa_def *index, nir_ssa_def *offset,
-                     struct vtn_ssa_value **inout, const struct glsl_type *type)
+                     struct vtn_ssa_value **inout,
+                     const struct glsl_type *type,
+                     unsigned access_offset, unsigned access_size)
 {
    nir_intrinsic_instr *instr = nir_intrinsic_instr_create(b->nb.shader, op);
    instr->num_components = glsl_get_vector_elements(type);
@@ -448,12 +478,11 @@ _vtn_load_store_tail(struct vtn_builder *b, nir_intrinsic_op op, bool load,
       instr->src[src++] = nir_src_for_ssa((*inout)->def);
    }
 
-   /* We set the base and size for push constant load to the entire push
-    * constant block for now.
-    */
    if (op == nir_intrinsic_load_push_constant) {
-      nir_intrinsic_set_base(instr, 0);
-      nir_intrinsic_set_range(instr, 128);
+      assert(access_offset % 4 == 0);
+
+      nir_intrinsic_set_base(instr, access_offset);
+      nir_intrinsic_set_range(instr, access_size);
    }
 
    if (index)
@@ -477,6 +506,7 @@ _vtn_load_store_tail(struct vtn_builder *b, nir_intrinsic_op op, bool load,
 static void
 _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                       nir_ssa_def *index, nir_ssa_def *offset,
+                      unsigned access_offset, unsigned access_size,
                       struct vtn_access_chain *chain, unsigned chain_idx,
                       struct vtn_type *type, struct vtn_ssa_value **inout)
 {
@@ -522,7 +552,8 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                            nir_imm_int(&b->nb, i * type->stride));
                _vtn_load_store_tail(b, op, load, index, elem_offset,
                                     &(*inout)->elems[i],
-                                    glsl_vector_type(base_type, vec_width));
+                                    glsl_vector_type(base_type, vec_width),
+                                    access_offset, access_size);
             }
 
             if (load && type->row_major)
@@ -543,7 +574,8 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                if (load)
                   *inout = vtn_create_ssa_value(b, glsl_scalar_type(base_type));
                _vtn_load_store_tail(b, op, load, index, offset, inout,
-                                    glsl_scalar_type(base_type));
+                                    glsl_scalar_type(base_type),
+                                    access_offset, access_size);
             } else {
                /* Grabbing a column; picking one element off each row */
                unsigned num_comps = glsl_get_vector_elements(type->type);
@@ -563,7 +595,8 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                   }
                   comp = &temp_val;
                   _vtn_load_store_tail(b, op, load, index, elem_offset,
-                                       &comp, glsl_scalar_type(base_type));
+                                       &comp, glsl_scalar_type(base_type),
+                                       access_offset, access_size);
                   comps[i] = comp->def;
                }
 
@@ -581,20 +614,24 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
             offset = nir_iadd(&b->nb, offset, col_offset);
 
             _vtn_block_load_store(b, op, load, index, offset,
+                                  access_offset, access_size,
                                   chain, chain_idx + 1,
                                   type->array_element, inout);
          }
       } else if (chain == NULL) {
          /* Single whole vector */
          assert(glsl_type_is_vector_or_scalar(type->type));
-         _vtn_load_store_tail(b, op, load, index, offset, inout, type->type);
+         _vtn_load_store_tail(b, op, load, index, offset, inout,
+                              type->type, access_offset, access_size);
       } else {
          /* Single component of a vector. Fall through to array case. */
          nir_ssa_def *elem_offset =
             vtn_access_link_as_ssa(b, chain->link[chain_idx], type->stride);
          offset = nir_iadd(&b->nb, offset, elem_offset);
 
-         _vtn_block_load_store(b, op, load, index, offset, NULL, 0,
+         _vtn_block_load_store(b, op, load, index, offset,
+                               access_offset, access_size,
+                               NULL, 0,
                                type->array_element, inout);
       }
       return;
@@ -604,7 +641,9 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
       for (unsigned i = 0; i < elems; i++) {
          nir_ssa_def *elem_off =
             nir_iadd(&b->nb, offset, nir_imm_int(&b->nb, i * type->stride));
-         _vtn_block_load_store(b, op, load, index, elem_off, NULL, 0,
+         _vtn_block_load_store(b, op, load, index, elem_off,
+                               access_offset, access_size,
+                               NULL, 0,
                                type->array_element, &(*inout)->elems[i]);
       }
       return;
@@ -615,7 +654,9 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
       for (unsigned i = 0; i < elems; i++) {
          nir_ssa_def *elem_off =
             nir_iadd(&b->nb, offset, nir_imm_int(&b->nb, type->offsets[i]));
-         _vtn_block_load_store(b, op, load, index, elem_off, NULL, 0,
+         _vtn_block_load_store(b, op, load, index, elem_off,
+                               access_offset, access_size,
+                               NULL, 0,
                                type->members[i], &(*inout)->elems[i]);
       }
       return;
@@ -629,7 +670,13 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
 static struct vtn_ssa_value *
 vtn_block_load(struct vtn_builder *b, struct vtn_access_chain *src)
 {
+   nir_ssa_def *offset, *index = NULL;
+   struct vtn_type *type;
+   unsigned chain_idx;
+   offset = vtn_access_chain_to_offset(b, src, &index, &type, &chain_idx, true);
+
    nir_intrinsic_op op;
+   unsigned access_offset = 0, access_size = 0;
    switch (src->var->mode) {
    case vtn_variable_mode_ubo:
       op = nir_intrinsic_load_ubo;
@@ -639,18 +686,18 @@ vtn_block_load(struct vtn_builder *b, struct vtn_access_chain *src)
       break;
    case vtn_variable_mode_push_constant:
       op = nir_intrinsic_load_push_constant;
+      vtn_access_chain_get_offset_size(src, &access_offset, &access_size);
+      /* We need to subtract the offset from where the intrinsic will load the
+       * data. */
+      offset = nir_isub(&b->nb, offset, nir_imm_int(&b->nb, access_offset));
       break;
    default:
       assert(!"Invalid block variable mode");
    }
 
-   nir_ssa_def *offset, *index = NULL;
-   struct vtn_type *type;
-   unsigned chain_idx;
-   offset = vtn_access_chain_to_offset(b, src, &index, &type, &chain_idx, true);
-
    struct vtn_ssa_value *value = NULL;
    _vtn_block_load_store(b, op, true, index, offset,
+                         access_offset, access_size,
                          src, chain_idx, type, &value);
    return value;
 }
@@ -665,7 +712,7 @@ vtn_block_store(struct vtn_builder *b, struct vtn_ssa_value *src,
    offset = vtn_access_chain_to_offset(b, dst, &index, &type, &chain_idx, true);
 
    _vtn_block_load_store(b, nir_intrinsic_store_ssbo, false, index, offset,
-                         dst, chain_idx, type, &src);
+                         0, 0, dst, chain_idx, type, &src);
 }
 
 static bool
