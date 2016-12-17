@@ -1918,6 +1918,8 @@ fs_visitor::assign_constant_locations()
    if (dispatch_width != min_dispatch_width)
       return;
 
+   fprintf(stderr, "brw_fs uniforms=%u\n", uniforms);
+
    bool is_live[uniforms];
    memset(is_live, 0, sizeof(is_live));
    bool is_live_64bit[uniforms];
@@ -1953,6 +1955,8 @@ fs_visitor::assign_constant_locations()
          if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT && i == 0) {
             assert(inst->src[2].ud % 4 == 0);
             unsigned last = constant_nr + (inst->src[2].ud / 4) - 1;
+            fprintf(stderr, "mov indirect sources=%u i=%i constant_nr=%u last=%u ud=%u\n",
+                    inst->sources, i, constant_nr, last, inst->src[2].ud);
             assert(last < uniforms);
 
             for (unsigned j = constant_nr; j < last; j++) {
@@ -1964,6 +1968,9 @@ fs_visitor::assign_constant_locations()
             }
             is_live[last] = true;
          } else {
+            fprintf(stderr, "mov constant_nr=%i uniforms=%u\n",
+                    constant_nr, uniforms);
+
             if (constant_nr >= 0 && constant_nr < (int) uniforms) {
                int regs_read = inst->components_read(i) *
                   type_sz(inst->src[i].type) / 4;
@@ -1976,6 +1983,11 @@ fs_visitor::assign_constant_locations()
             }
          }
       }
+   }
+
+   for (unsigned i = 0; i < uniforms; i++) {
+      fprintf(stderr, "\tuniform %u  live=%u contiguous=%u\n",
+              i, is_live[i], contiguous[i]);
    }
 
    if (thread_local_id_index >= 0 && !is_live[thread_local_id_index])
@@ -2053,6 +2065,8 @@ fs_visitor::assign_constant_locations()
           sizeof(gl_constant_value*) * stage_prog_data->nr_params);
    stage_prog_data->nr_params = num_push_constants;
    stage_prog_data->nr_pull_params = num_pull_constants;
+   fprintf(stderr, "brw_fs: prog_data=%p nr_params=%u nr_pull_params=%u\n",
+           stage_prog_data, stage_prog_data->nr_params, stage_prog_data->nr_pull_params);
 
    /* Up until now, the param[] array has been indexed by reg + offset
     * of UNIFORM registers.  Move pull constants into pull_param[] and

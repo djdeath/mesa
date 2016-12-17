@@ -3961,6 +3961,8 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
       fs_reg src(UNIFORM, instr->const_index[0] / 4, dest.type);
 
       nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
+      fprintf(stderr, "\tfs_backend: load_uniform: const_offset=%p\n",
+              const_offset);
       if (const_offset) {
          /* Offsets are in bytes but they should always be multiples of 4 */
          assert(const_offset->u32[0] % 4 == 0);

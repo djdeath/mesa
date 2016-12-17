@@ -629,6 +629,9 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
    if (data == NULL || prog_data == NULL || prog_data->nr_params == 0)
       return (struct anv_state) { .offset = 0 };
 
+   fprintf(stderr, "cmd_buffer_push_constants prog_data=%p nr_params=%u\n",
+           prog_data, prog_data->nr_params);
+
    struct anv_state state =
       anv_cmd_buffer_alloc_dynamic_state(cmd_buffer,
                                          prog_data->nr_params * sizeof(float),

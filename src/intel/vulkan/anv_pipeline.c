@@ -396,6 +396,9 @@ anv_pipeline_compile(struct anv_pipeline *pipeline,
     */
    nir->num_uniforms = prog_data->nr_params * 4;
 
+   fprintf(stderr, "prog_data=%p num_push_constants=%u nr_params=%u\n",
+           prog_data, num_push_constants, prog_data->nr_params);
+
    return nir;
 }
 

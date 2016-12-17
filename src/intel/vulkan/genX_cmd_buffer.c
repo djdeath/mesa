@@ -1334,6 +1334,8 @@ cmd_buffer_flush_push_constants(struct anv_cmd_buffer *cmd_buffer)
 
       struct anv_state state = anv_cmd_buffer_push_constants(cmd_buffer, stage);
 
+      fprintf(stderr, "push_constant alloc_size=%u\n", state.alloc_size);
+
       if (state.offset == 0) {
          anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CONSTANT_VS), c)
             c._3DCommandSubOpcode = push_constant_opcodes[stage];

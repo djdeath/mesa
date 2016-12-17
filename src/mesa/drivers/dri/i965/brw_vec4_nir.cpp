@@ -705,6 +705,8 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       assert(shift + instr->num_components <= 4);
 
       nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
+      fprintf(stderr, "\tvec4_backend: load_uniform: const_offset=%p\n",
+              const_offset);
       if (const_offset) {
          /* Offsets are in bytes but they should always be multiples of 4 */
          assert(const_offset->u32[0] % 4 == 0);

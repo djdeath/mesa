@@ -481,6 +481,9 @@ _vtn_load_store_tail(struct vtn_builder *b, nir_intrinsic_op op, bool load,
    if (op == nir_intrinsic_load_push_constant) {
       assert(access_offset % 4 == 0);
 
+      fprintf(stderr, "=>>> access offset=%u size=%u\n",
+              access_offset, access_size);
+
       nir_intrinsic_set_base(instr, access_offset);
       nir_intrinsic_set_range(instr, access_size);
    }
@@ -1251,6 +1254,7 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
          var->mode = vtn_variable_mode_push_constant;
          assert(b->shader->num_uniforms == 0);
          b->shader->num_uniforms = vtn_type_block_size(var->type);
+         fprintf(stderr, "vtn_variable num_uniforms=%u\n", b->shader->num_uniforms);
          break;
       case SpvStorageClassInput:
          var->mode = vtn_variable_mode_input;
