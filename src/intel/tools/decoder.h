@@ -45,7 +45,7 @@ struct gen_spec *gen_spec_load_from_path(const struct gen_device_info *devinfo,
 uint32_t gen_spec_get_gen(struct gen_spec *spec);
 struct gen_group *gen_spec_find_instruction(struct gen_spec *spec, const uint32_t *p);
 struct gen_group *gen_spec_find_register(struct gen_spec *spec, uint32_t offset);
-int gen_group_get_length(struct gen_group *group, const uint32_t *p);
+uint32_t gen_group_read_length(struct gen_group *group, const uint32_t *p);
 const char *gen_group_get_name(struct gen_group *group);
 uint32_t gen_group_get_opcode(struct gen_group *group);
 struct gen_enum *gen_spec_find_enum(struct gen_spec *spec, const char *name);

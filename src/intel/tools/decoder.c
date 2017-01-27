@@ -626,8 +626,8 @@ gen_spec_find_instruction(struct gen_spec *spec, const uint32_t *p)
    return NULL;
 }
 
-int
-gen_group_get_length(struct gen_group *group, const uint32_t *p)
+uint32_t
+gen_group_read_length(struct gen_group *group, const uint32_t *p)
 {
    uint32_t h = p[0];
    uint32_t type = field(h, 29, 31);

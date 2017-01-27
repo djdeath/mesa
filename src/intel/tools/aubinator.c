@@ -760,7 +760,7 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
          length = (p[0] & 0xff) + 2;
          continue;
       }
-      length = gen_group_get_length(inst, p);
+      length = gen_group_read_length(inst, p);
 
       const char *color, *reset_color = NORMAL;
       uint64_t offset;
