@@ -69,6 +69,8 @@ struct gen_group {
    uint32_t opcode_mask;
    uint32_t opcode;
 
+   uint32_t length;
+
    /* Register specific */
    uint32_t register_offset;
 };

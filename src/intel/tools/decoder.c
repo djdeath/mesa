@@ -174,6 +174,7 @@ static struct gen_group *
 create_group(struct parser_context *ctx, const char *name, const char **atts)
 {
    struct gen_group *group;
+   char *p;
 
    group = xzalloc(sizeof(*group));
    if (name)
@@ -181,6 +182,12 @@ create_group(struct parser_context *ctx, const char *name, const char **atts)
 
    group->group_offset = 0;
    group->group_count = 0;
+   group->length = 0;
+
+   for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "length") == 0)
+         group->length = strtoul(atts[i + 1], &p, 0);
+   }
 
    return group;
 }
