@@ -382,17 +382,6 @@ handle_3dstate_vertex_buffers(struct gen_spec *spec, uint32_t *p)
    uint32_t *end, *s, *dw, *dwend;
    uint64_t offset;
    int n, i, count, stride;
-   struct gen_group *ves;
-
-   ves = gen_spec_find_struct(spec, "VERTEX_ELEMENT_STATE");
-   count = (p[0] & 0xff) / ves->length;
-   for (i = 0; i < count; i++) {
-      struct gen_field_iterator iter;
-
-      gen_field_iterator_init(&iter, ves, &p[1 + i],
-                              option_color == COLOR_ALWAYS);
-      while (gen_field_iterator_next(&iter));
-   }
 
    end = (p[0] & 0xff) + p + 2;
    for (s = &p[1], n = 0; s < end; s += 4, n++) {
@@ -430,6 +419,27 @@ handle_3dstate_vertex_buffers(struct gen_spec *spec, uint32_t *p)
       }
       if (count > 0 && count % (8 * 4) != 0)
          printf("\n");
+   }
+}
+
+static void
+handle_3dstate_vertex_elements(struct gen_spec *spec, uint32_t *p)
+{
+   int i, count;
+   struct gen_group *ves;
+
+   ves = gen_spec_find_struct(spec, "VERTEX_ELEMENT_STATE");
+   count = (p[0] & 0xff) + 1;
+   fprintf(stdout, "count=%u %p\n", count, &p[1]);
+   for (i = 1; i < count; i += ves->length) {
+      struct gen_field_iterator iter;
+
+      gen_field_iterator_init(&iter, ves, &p[i],
+                              option_color == COLOR_ALWAYS);
+      while (gen_field_iterator_next(&iter)) {
+         int idx;
+         print_iterator_values(&iter, &idx);
+      }
    }
 }
 
@@ -688,6 +698,7 @@ handle_load_register_imm(struct gen_spec *spec, uint32_t *p)
 
 #define _3DSTATE_INDEX_BUFFER               0x780a0000
 #define _3DSTATE_VERTEX_BUFFERS             0x78080000
+#define _3DSTATE_VERTEX_ELEMENTS            0x78090000
 
 #define _3DSTATE_VS                         0x78100000
 #define _3DSTATE_GS                         0x78110000
@@ -727,6 +738,7 @@ struct custom_handler {
    { STATE_BASE_ADDRESS, handle_state_base_address },
    { MEDIA_INTERFACE_DESCRIPTOR_LOAD, handle_media_interface_descriptor_load },
    { _3DSTATE_VERTEX_BUFFERS, handle_3dstate_vertex_buffers },
+   { _3DSTATE_VERTEX_ELEMENTS, handle_3dstate_vertex_elements },
    { _3DSTATE_INDEX_BUFFER, handle_3dstate_index_buffer },
    { _3DSTATE_VS, handle_3dstate_vs },
    { _3DSTATE_GS, handle_3dstate_vs },
