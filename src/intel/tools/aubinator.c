@@ -382,9 +382,20 @@ handle_3dstate_vertex_buffers(struct gen_spec *spec, uint32_t *p)
    uint32_t *end, *s, *dw, *dwend;
    uint64_t offset;
    int n, i, count, stride;
+   struct gen_group *vbs;
+
+   vbs = gen_spec_find_struct(spec, "VERTEX_BUFFER_STATE");
 
    end = (p[0] & 0xff) + p + 2;
    for (s = &p[1], n = 0; s < end; s += 4, n++) {
+      struct gen_field_iterator iter;
+      gen_field_iterator_init(&iter, vbs, s,
+                              option_color == COLOR_ALWAYS);
+      while (gen_field_iterator_next(&iter)) {
+         int idx;
+         print_iterator_values(&iter, &idx);
+      }
+
       if (gen_spec_get_gen(spec) >= gen_make_gen(8, 0)) {
          offset = *(uint64_t *) &s[1];
          dwend = gtt + offset + s[3];
