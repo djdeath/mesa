@@ -259,7 +259,7 @@ genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,
     *    3DSTATE_SAMPLER_STATE_POINTER_VS command.  Only one PIPE_CONTROL
     *    needs to be sent before any combination of VS associated 3DSTATE."
     */
-   anv_batch_emit(batch, GEN7_PIPE_CONTROL, pc) {
+   anv_batch_pipe_control(batch, pc) {
       pc.DepthStallEnable  = true;
       pc.PostSyncOperation = WriteImmediateData;
       pc.Address           = (struct anv_address) { &device->workaround_bo, 0 };

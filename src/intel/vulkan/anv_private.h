@@ -1934,17 +1934,25 @@ ANV_DEFINE_NONDISP_HANDLE_CASTS(anv_shader_module, VkShaderModule)
 #  include "anv_genX.h"
 #else
 #  define genX(x) gen7_##x
+#  define GENX(x) GEN7_##x
 #  include "anv_genX.h"
 #  undef genX
+#  undef GENX
 #  define genX(x) gen75_##x
+#  define GENX(x) GEN75_##x
 #  include "anv_genX.h"
 #  undef genX
+#  undef GENX
 #  define genX(x) gen8_##x
+#  define GENX(x) GEN8_##x
 #  include "anv_genX.h"
 #  undef genX
+#  undef GENX
 #  define genX(x) gen9_##x
+#  define GENX(x) GEN9_##x
 #  include "anv_genX.h"
 #  undef genX
+#  undef GENX
 #endif
 
 #ifdef __cplusplus

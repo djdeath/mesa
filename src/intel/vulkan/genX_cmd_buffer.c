@@ -31,6 +31,14 @@
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
+void
+genX(emit_pipe_control)(struct anv_batch *batch,
+                        const struct GENX(PIPE_CONTROL) *pc)
+{
+   void *batch_pc = anv_batch_emit_dwords(batch, GENX(PIPE_CONTROL_length));
+   GENX(PIPE_CONTROL_pack)(NULL, batch_pc, pc);
+}
+
 static void
 emit_lrm(struct anv_batch *batch,
          uint32_t reg, struct anv_bo *bo, uint32_t offset)
@@ -62,7 +70,7 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
     * this, we get GPU hangs when using multi-level command buffers which
     * clear depth, reset state base address, and then go render stuff.
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pc) {
       pc.DCFlushEnable = true;
       pc.RenderTargetCacheFlushEnable = true;
       pc.CommandStreamerStallEnable = true;
@@ -145,7 +153,7 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
     * units cache the binding table in the texture cache.  However, we have
     * yet to be able to actually confirm this.
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pc) {
       pc.TextureCacheInvalidationEnable = true;
       pc.ConstantCacheInvalidationEnable = true;
       pc.StateCacheInvalidationEnable = true;
@@ -704,7 +712,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
     * while the pipeline is completely drained and the caches are flushed,
     * which involves a first PIPE_CONTROL flush which stalls the pipeline...
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pc) {
       pc.DCFlushEnable = true;
       pc.PostSyncOperation = NoWrite;
       pc.CommandStreamerStallEnable = true;
@@ -724,7 +732,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
     * already guarantee that there is no concurrent GPGPU kernel execution
     * (see SKL HSD 2132585).
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pc) {
       pc.TextureCacheInvalidationEnable = true;
       pc.ConstantCacheInvalidationEnable = true;
       pc.InstructionCacheInvalidateEnable = true;
@@ -735,7 +743,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
    /* Now send a third stalling flush to make sure that invalidation is
     * complete when the L3 configuration registers are modified.
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pc) {
       pc.DCFlushEnable = true;
       pc.PostSyncOperation = NoWrite;
       pc.CommandStreamerStallEnable = true;
@@ -858,7 +866,7 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
    }
 
    if (bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT)) {
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pipe) {
          pipe.DepthCacheFlushEnable = bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT;
          pipe.DCFlushEnable = bits & ANV_PIPE_DATA_CACHE_FLUSH_BIT;
          pipe.RenderTargetCacheFlushEnable =
@@ -893,7 +901,7 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
    }
 
    if (bits & ANV_PIPE_INVALIDATE_BITS) {
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pipe) {
          pipe.StateCacheInvalidationEnable =
             bits & ANV_PIPE_STATE_CACHE_INVALIDATE_BIT;
          pipe.ConstantCacheInvalidationEnable =
@@ -1530,7 +1538,7 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
        *    PIPE_CONTROL needs to be sent before any combination of VS
        *    associated 3DSTATE."
        */
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pc) {
          pc.DepthStallEnable  = true;
          pc.PostSyncOperation = WriteImmediateData;
          pc.Address           =
@@ -2072,7 +2080,7 @@ flush_pipeline_before_pipeline_select(struct anv_cmd_buffer *cmd_buffer,
        *   command to invalidate read only caches prior to programming
        *   MI_PIPELINE_SELECT command to change the Pipeline Select Mode.
        */
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pc) {
          pc.RenderTargetCacheFlushEnable  = true;
          pc.DepthCacheFlushEnable         = true;
          pc.DCFlushEnable                 = true;
@@ -2080,7 +2088,7 @@ flush_pipeline_before_pipeline_select(struct anv_cmd_buffer *cmd_buffer,
          pc.CommandStreamerStallEnable    = true;
       }
 
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pc) {
          pc.TextureCacheInvalidationEnable   = true;
          pc.ConstantCacheInvalidationEnable  = true;
          pc.StateCacheInvalidationEnable     = true;
@@ -2142,13 +2150,13 @@ genX(cmd_buffer_emit_gen7_depth_flush)(struct anv_cmd_buffer *cmd_buffer)
     *    guarantee that the pipeline from WM onwards is already flushed (e.g.,
     *    via a preceding MI_FLUSH)."
     */
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pipe) {
       pipe.DepthStallEnable = true;
    }
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pipe) {
       pipe.DepthCacheFlushEnable = true;
    }
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pipe) {
       pipe.DepthStallEnable = true;
    }
 }
@@ -2460,7 +2468,7 @@ static void
 emit_ps_depth_count(struct anv_cmd_buffer *cmd_buffer,
                     struct anv_bo *bo, uint32_t offset)
 {
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pc) {
       pc.DestinationAddressType  = DAT_PPGTT;
       pc.PostSyncOperation       = WritePSDepthCount;
       pc.DepthStallEnable        = true;
@@ -2475,7 +2483,7 @@ static void
 emit_query_availability(struct anv_cmd_buffer *cmd_buffer,
                         struct anv_bo *bo, uint32_t offset)
 {
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+   anv_batch_pipe_control(&cmd_buffer->batch, pc) {
       pc.DestinationAddressType  = DAT_PPGTT;
       pc.PostSyncOperation       = WriteImmediateData;
       pc.Address                 = (struct anv_address) { bo, offset };
@@ -2500,7 +2508,7 @@ void genX(CmdBeginQuery)(
     */
    if (cmd_buffer->state.need_query_wa) {
       cmd_buffer->state.need_query_wa = false;
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pc) {
          pc.DepthCacheFlushEnable   = true;
          pc.DepthStallEnable        = true;
       }
@@ -2569,7 +2577,7 @@ void genX(CmdWriteTimestamp)(
 
    default:
       /* Everything else is bottom-of-pipe */
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pc) {
          pc.DestinationAddressType  = DAT_PPGTT;
          pc.PostSyncOperation       = WriteTimestamp;
          pc.Address = (struct anv_address) { &pool->bo, offset };
@@ -2664,7 +2672,7 @@ void genX(CmdCopyQueryPoolResults)(
    uint32_t slot_offset, dst_offset;
 
    if (flags & VK_QUERY_RESULT_WAIT_BIT) {
-      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      anv_batch_pipe_control(&cmd_buffer->batch, pc) {
          pc.CommandStreamerStallEnable = true;
          pc.StallAtPixelScoreboard     = true;
       }

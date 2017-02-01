@@ -36,6 +36,17 @@
 #error This file is included by means other than anv_private.h
 #endif
 
+struct GENX(PIPE_CONTROL);
+
+#define anv_batch_pipe_control(batch, name)                             \
+   for ( struct GENX(PIPE_CONTROL) name =                               \
+            { GENX(PIPE_CONTROL_header) },                              \
+            *__continue = &name;                                        \
+         __continue != NULL;                                            \
+         ({ genX(emit_pipe_control(batch, &name));                      \
+            __continue = NULL;                                          \
+         }))
+
 VkResult genX(init_device_state)(struct anv_device *device);
 
 void genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer);
@@ -60,6 +71,10 @@ genX(emit_urb_setup)(struct anv_device *device, struct anv_batch *batch,
                      const struct gen_l3_config *l3_config,
                      VkShaderStageFlags active_stages,
                      const unsigned entry_size[4]);
+
+void
+genX(emit_pipe_control)(struct anv_batch *batch,
+                        const struct GENX(PIPE_CONTROL) *pc);
 
 void genX(cmd_buffer_gpu_memcpy)(struct anv_cmd_buffer *cmd_buffer,
                                  struct anv_bo *dst, uint32_t dst_offset,
