@@ -963,7 +963,6 @@ builtin_builder::builtin_builder()
 
 builtin_builder::~builtin_builder()
 {
-   ralloc_free(mem_ctx);
 }
 
 ir_function_signature *
