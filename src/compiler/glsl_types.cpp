@@ -64,7 +64,6 @@ glsl_type::glsl_type(GLenum gl_type,
 
    mtx_lock(&glsl_type::mutex);
 
-   init_ralloc_type_ctx();
    assert(name != NULL);
    this->name = ralloc_strdup(this->mem_ctx, name);
 
@@ -87,7 +86,6 @@ glsl_type::glsl_type(GLenum gl_type, glsl_base_type base_type,
 {
    mtx_lock(&glsl_type::mutex);
 
-   init_ralloc_type_ctx();
    assert(name != NULL);
    this->name = ralloc_strdup(this->mem_ctx, name);
 
@@ -116,7 +114,6 @@ glsl_type::glsl_type(const glsl_struct_field *fields, unsigned num_fields,
 
    mtx_lock(&glsl_type::mutex);
 
-   init_ralloc_type_ctx();
    assert(name != NULL);
    this->name = ralloc_strdup(this->mem_ctx, name);
    this->fields.structure = ralloc_array(this->mem_ctx,
@@ -146,7 +143,6 @@ glsl_type::glsl_type(const glsl_struct_field *fields, unsigned num_fields,
 
    mtx_lock(&glsl_type::mutex);
 
-   init_ralloc_type_ctx();
    assert(name != NULL);
    this->name = ralloc_strdup(this->mem_ctx, name);
    this->fields.structure = rzalloc_array(this->mem_ctx,
@@ -172,8 +168,6 @@ glsl_type::glsl_type(const glsl_type *return_type,
    unsigned int i;
 
    mtx_lock(&glsl_type::mutex);
-
-   init_ralloc_type_ctx();
 
    this->fields.parameters = rzalloc_array(this->mem_ctx,
                                            glsl_function_param, num_params + 1);
@@ -203,7 +197,6 @@ glsl_type::glsl_type(const char *subroutine_name) :
 {
    mtx_lock(&glsl_type::mutex);
 
-   init_ralloc_type_ctx();
    assert(subroutine_name != NULL);
    this->name = ralloc_strdup(this->mem_ctx, subroutine_name);
    mtx_unlock(&glsl_type::mutex);

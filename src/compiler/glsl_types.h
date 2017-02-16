@@ -150,8 +150,9 @@ struct glsl_type {
    {
       mtx_lock(&glsl_type::mutex);
 
-      /* mem_ctx should have been created by the static members */
-      assert(glsl_type::mem_ctx != NULL);
+      /* Make sure mem_ctx is initialized. */
+      if (mem_ctx == NULL)
+         init_ralloc_type_ctx();
 
       void *type;
 
@@ -807,7 +808,7 @@ private:
     */
    static void *mem_ctx;
 
-   void init_ralloc_type_ctx(void);
+   static void init_ralloc_type_ctx(void);
 
    /** Constructor for vector and matrix types */
    glsl_type(GLenum gl_type,
