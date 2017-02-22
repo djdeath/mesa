@@ -84,8 +84,7 @@ brw_lower_packing_builtins(struct brw_context *brw,
 }
 
 static bool
-brw_common_optimization(exec_list *ir, bool linked,
-                        bool uniform_locations_assigned,
+brw_common_optimization(exec_list *ir,
                         const struct gl_shader_compiler_options *options,
                         bool native_integers)
 {
@@ -108,11 +107,10 @@ brw_common_optimization(exec_list *ir, bool linked,
 
    OPT(lower_instructions, ir, SUB_TO_ADD_NEG);
 
-   if (linked) {
-      OPT(do_function_inlining, ir);
-      OPT(do_dead_functions, ir);
-      OPT(do_structure_splitting, ir);
-   }
+   OPT(do_function_inlining, ir);
+   OPT(do_dead_functions, ir);
+   OPT(do_structure_splitting, ir);
+
    propagate_invariance(ir);
    OPT(do_if_simplification, ir);
    OPT(opt_flatten_nested_if_blocks, ir);
@@ -120,24 +118,14 @@ brw_common_optimization(exec_list *ir, bool linked,
    OPT(do_copy_propagation, ir);
    OPT(do_copy_propagation_elements, ir);
 
-   if (options->OptimizeForAOS && !linked)
-      OPT(opt_flip_matrices, ir);
-
-   if (linked && options->OptimizeForAOS) {
+   if (options->OptimizeForAOS)
       OPT(do_vectorize, ir);
-   }
 
-   if (linked)
-      OPT(do_dead_code, ir, uniform_locations_assigned);
-   else
-      OPT(do_dead_code_unlinked, ir);
+   OPT(do_dead_code, ir, true);
    OPT(do_dead_code_local, ir);
    OPT(do_tree_grafting, ir);
    OPT(do_constant_propagation, ir);
-   if (linked)
-      OPT(do_constant_variable, ir);
-   else
-      OPT(do_constant_variable_unlinked, ir);
+   OPT(do_constant_variable, ir);
    OPT(do_constant_folding, ir);
    OPT(do_minmax_prune, ir);
    OPT(do_rebalance_tree, ir);
@@ -149,7 +137,7 @@ brw_common_optimization(exec_list *ir, bool linked,
    OPT(do_swizzle_swizzle, ir);
    OPT(do_noop_swizzle, ir);
 
-   OPT(optimize_split_arrays, ir, linked);
+   OPT(optimize_split_arrays, ir, true);
    OPT(optimize_redundant_jumps, ir);
 
    if (options->MaxUnrollIterations) {
@@ -227,8 +215,8 @@ process_glsl_ir(struct brw_context *brw,
          brw_do_vector_splitting(shader->ir);
       }
 
-      progress = brw_common_optimization(shader->ir, true, true,
-                                         options, ctx->Const.NativeIntegers) || progress;
+      progress = brw_common_optimization(shader->ir, options,
+                                         ctx->Const.NativeIntegers) || progress;
    } while (progress);
 
    validate_ir_tree(shader->ir);
