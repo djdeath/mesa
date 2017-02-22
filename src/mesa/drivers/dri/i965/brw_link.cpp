@@ -26,6 +26,7 @@
 #include "brw_program.h"
 #include "compiler/glsl/ir.h"
 #include "compiler/glsl/ir_optimization.h"
+#include "compiler/glsl/loop_analysis.h"
 #include "compiler/glsl/program.h"
 #include "program/program.h"
 #include "main/shaderapi.h"
@@ -80,6 +81,89 @@ brw_lower_packing_builtins(struct brw_context *brw,
       return;
 
    lower_packing_builtins(ir, LOWER_PACK_HALF_2x16 | LOWER_UNPACK_HALF_2x16);
+}
+
+static bool
+brw_common_optimization(exec_list *ir, bool linked,
+                        bool uniform_locations_assigned,
+                        const struct gl_shader_compiler_options *options,
+                        bool native_integers)
+{
+   const bool debug = false;
+   GLboolean progress = GL_FALSE;
+
+#define OPT(PASS, ...) do {                                             \
+      if (debug) {                                                      \
+         fprintf(stderr, "START GLSL optimization %s\n", #PASS);        \
+         const bool opt_progress = PASS(__VA_ARGS__);                   \
+         progress = opt_progress || progress;                           \
+         if (opt_progress)                                              \
+            _mesa_print_ir(stderr, ir, NULL);                           \
+         fprintf(stderr, "GLSL optimization %s: %s progress\n",         \
+                 #PASS, opt_progress ? "made" : "no");                  \
+      } else {                                                          \
+         progress = PASS(__VA_ARGS__) || progress;                      \
+      }                                                                 \
+   } while (false)
+
+   OPT(lower_instructions, ir, SUB_TO_ADD_NEG);
+
+   if (linked) {
+      OPT(do_function_inlining, ir);
+      OPT(do_dead_functions, ir);
+      OPT(do_structure_splitting, ir);
+   }
+   propagate_invariance(ir);
+   OPT(do_if_simplification, ir);
+   OPT(opt_flatten_nested_if_blocks, ir);
+   OPT(opt_conditional_discard, ir);
+   OPT(do_copy_propagation, ir);
+   OPT(do_copy_propagation_elements, ir);
+
+   if (options->OptimizeForAOS && !linked)
+      OPT(opt_flip_matrices, ir);
+
+   if (linked && options->OptimizeForAOS) {
+      OPT(do_vectorize, ir);
+   }
+
+   if (linked)
+      OPT(do_dead_code, ir, uniform_locations_assigned);
+   else
+      OPT(do_dead_code_unlinked, ir);
+   OPT(do_dead_code_local, ir);
+   OPT(do_tree_grafting, ir);
+   OPT(do_constant_propagation, ir);
+   if (linked)
+      OPT(do_constant_variable, ir);
+   else
+      OPT(do_constant_variable_unlinked, ir);
+   OPT(do_constant_folding, ir);
+   OPT(do_minmax_prune, ir);
+   OPT(do_rebalance_tree, ir);
+   OPT(do_algebraic, ir, native_integers, options);
+   OPT(do_lower_jumps, ir, true, true, options->EmitNoMainReturn,
+       options->EmitNoCont, options->EmitNoLoops);
+   OPT(do_vec_index_to_swizzle, ir);
+   OPT(lower_vector_insert, ir, false);
+   OPT(do_swizzle_swizzle, ir);
+   OPT(do_noop_swizzle, ir);
+
+   OPT(optimize_split_arrays, ir, linked);
+   OPT(optimize_redundant_jumps, ir);
+
+   if (options->MaxUnrollIterations) {
+      loop_state *ls = analyze_loop_variables(ir);
+      if (ls->loop_found) {
+         OPT(set_loop_controls, ir, ls);
+         OPT(unroll_loops, ir, ls, options);
+      }
+      delete ls;
+   }
+
+#undef OPT
+
+   return progress;
 }
 
 static void
@@ -143,8 +227,8 @@ process_glsl_ir(struct brw_context *brw,
          brw_do_vector_splitting(shader->ir);
       }
 
-      progress = do_common_optimization(shader->ir, true, true,
-                                        options, ctx->Const.NativeIntegers) || progress;
+      progress = brw_common_optimization(shader->ir, true, true,
+                                         options, ctx->Const.NativeIntegers) || progress;
    } while (progress);
 
    validate_ir_tree(shader->ir);
