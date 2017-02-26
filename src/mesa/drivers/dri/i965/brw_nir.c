@@ -531,8 +531,23 @@ nir_shader *
 brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir)
 {
    const struct gen_device_info *devinfo = compiler->devinfo;
+   bool debug_enabled =
+      (INTEL_DEBUG & intel_debug_flag_for_shader_stage(nir->stage));
+
    bool progress; /* Written by OPT and OPT_V */
    (void)progress;
+
+   if (unlikely(debug_enabled)) {
+      /* Re-index SSA defs so we print more sensible numbers. */
+      nir_foreach_function(function, nir) {
+         if (function->impl)
+            nir_index_ssa_defs(function->impl);
+      }
+
+      fprintf(stderr, "NIR (SSA form) for %s shader:\n",
+              _mesa_shader_stage_to_string(nir->stage));
+      nir_print_shader(nir, stderr);
+   }
 
    const bool is_scalar = compiler->scalar_stage[nir->stage];
 
