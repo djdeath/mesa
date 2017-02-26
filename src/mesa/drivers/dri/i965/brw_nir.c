@@ -471,6 +471,8 @@ nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT_V(nir_lower_vars_to_ssa);
       OPT(nir_opt_copy_prop_vars);
 
+      OPT(nir_opt_swizzle_swizzle);
+
       if (is_scalar) {
          OPT(nir_lower_alu_to_scalar);
       }
