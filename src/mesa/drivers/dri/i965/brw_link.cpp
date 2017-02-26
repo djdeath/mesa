@@ -163,9 +163,17 @@ process_glsl_ir(struct brw_context *brw,
    const struct brw_compiler *compiler = brw->screen->compiler;
    const struct gl_shader_compiler_options *options =
       &ctx->Const.ShaderCompilerOptions[shader->Stage];
+   bool debug_enabled =
+      (INTEL_DEBUG & intel_debug_flag_for_shader_stage(shader->Stage));
 
    /* Temporary memory context for any new IR. */
    void *mem_ctx = ralloc_context(NULL);
+
+   if (unlikely(debug_enabled)) {
+      fprintf(stderr, "GLSLIR preoptimization for %s shader:\n",
+              _mesa_shader_stage_to_string(shader->Stage));
+      _mesa_print_ir(stderr, shader->ir, NULL);
+   }
 
    ralloc_adopt(mem_ctx, shader->ir);
 
