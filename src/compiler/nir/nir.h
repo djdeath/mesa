@@ -2614,6 +2614,8 @@ bool nir_opt_peephole_select(nir_shader *shader, unsigned limit);
 
 bool nir_opt_remove_phis(nir_shader *shader);
 
+bool nir_opt_swizzle_swizzle(nir_shader *shader);
+
 bool nir_opt_trivial_continues(nir_shader *shader);
 
 bool nir_opt_undef(nir_shader *shader);
