@@ -2602,6 +2602,8 @@ bool nir_opt_dce(nir_shader *shader);
 
 bool nir_opt_dead_cf(nir_shader *shader);
 
+bool nir_opt_flatten_nested_ifs(nir_shader *shader);
+
 bool nir_opt_gcm(nir_shader *shader, bool value_number);
 
 bool nir_opt_if(nir_shader *shader);
