@@ -23,6 +23,8 @@
 
 import xml.etree.ElementTree as ET
 import argparse
+import parsley
+import re
 import sys
 
 def print_err(*args):
@@ -71,99 +73,6 @@ def h_outdent(n):
     _h_indent = _h_indent - n
 
 
-def emit_fadd(tmp_id, args):
-    c("double tmp" + str(tmp_id) +" = " + args[1] + " + " + args[0] + ";")
-    return tmp_id + 1
-
-# Be careful to check for divide by zero...
-def emit_fdiv(tmp_id, args):
-    c("double tmp" + str(tmp_id) +" = " + args[1] + ";")
-    c("double tmp" + str(tmp_id + 1) +" = " + args[0] + ";")
-    c("double tmp" + str(tmp_id + 2) +" = tmp" + str(tmp_id + 1)  + " ? tmp" + str(tmp_id) + " / tmp" + str(tmp_id + 1) + " : 0;")
-    return tmp_id + 3
-
-def emit_fmax(tmp_id, args):
-    c("double tmp" + str(tmp_id) +" = " + args[1] + ";")
-    c("double tmp" + str(tmp_id + 1) +" = " + args[0] + ";")
-    c("double tmp" + str(tmp_id + 2) +" = MAX(tmp" + str(tmp_id) + ", tmp" + str(tmp_id + 1) + ");")
-    return tmp_id + 3
-
-def emit_fmul(tmp_id, args):
-    c("double tmp" + str(tmp_id) +" = " + args[1] + " * " + args[0] + ";")
-    return tmp_id + 1
-
-def emit_fsub(tmp_id, args):
-    c("double tmp" + str(tmp_id) +" = " + args[1] + " - " + args[0] + ";")
-    return tmp_id + 1
-
-def emit_read(tmp_id, args):
-    type = args[1].lower()
-    c("uint64_t tmp" + str(tmp_id) + " = accumulator[query->" + type + "_offset + " + args[0] + "];")
-    return tmp_id + 1
-
-def emit_uadd(tmp_id, args):
-    c("uint64_t tmp" + str(tmp_id) +" = " + args[1] + " + " + args[0] + ";")
-    return tmp_id + 1
-
-# Be careful to check for divide by zero...
-def emit_udiv(tmp_id, args):
-    c("uint64_t tmp" + str(tmp_id) +" = " + args[1] + ";")
-    c("uint64_t tmp" + str(tmp_id + 1) +" = " + args[0] + ";")
-    c("uint64_t tmp" + str(tmp_id + 2) +" = tmp" + str(tmp_id + 1)  + " ? tmp" + str(tmp_id) + " / tmp" + str(tmp_id + 1) + " : 0;")
-    return tmp_id + 3
-
-def emit_umul(tmp_id, args):
-    c("uint64_t tmp" + str(tmp_id) +" = " + args[1] + " * " + args[0] + ";")
-    return tmp_id + 1
-
-def emit_usub(tmp_id, args):
-    c("uint64_t tmp" + str(tmp_id) +" = " + args[1] + " - " + args[0] + ";")
-    return tmp_id + 1
-
-def emit_umin(tmp_id, args):
-    c("uint64_t tmp" + str(tmp_id) +" = MIN(" + args[1] + ", " + args[0] + ");")
-    return tmp_id + 1
-
-ops = {}
-#             (n operands, emitter)
-ops["FADD"] = (2, emit_fadd)
-ops["FDIV"] = (2, emit_fdiv)
-ops["FMAX"] = (2, emit_fmax)
-ops["FMUL"] = (2, emit_fmul)
-ops["FSUB"] = (2, emit_fsub)
-ops["READ"] = (2, emit_read)
-ops["UADD"] = (2, emit_uadd)
-ops["UDIV"] = (2, emit_udiv)
-ops["UMUL"] = (2, emit_umul)
-ops["USUB"] = (2, emit_usub)
-ops["UMIN"] = (2, emit_umin)
-
-def brkt(subexp):
-    if " " in subexp:
-        return "(" + subexp + ")"
-    else:
-        return subexp
-
-def splice_bitwise_and(args):
-    return brkt(args[1]) + " & " + brkt(args[0])
-
-def splice_logical_and(args):
-    return brkt(args[1]) + " && " + brkt(args[0])
-
-def splice_ult(args):
-    return brkt(args[1]) + " < " + brkt(args[0])
-
-def splice_ugte(args):
-    return brkt(args[1]) + " >= " + brkt(args[0])
-
-exp_ops = {}
-#                 (n operands, splicer)
-exp_ops["AND"]  = (2, splice_bitwise_and)
-exp_ops["UGTE"] = (2, splice_ugte)
-exp_ops["ULT"]  = (2, splice_ult)
-exp_ops["&&"]   = (2, splice_logical_and)
-
-
 hw_vars = {}
 hw_vars["$EuCoresTotalCount"] = "brw->perfquery.sys_vars.n_eus"
 hw_vars["$EuSlicesTotalCount"] = "brw->perfquery.sys_vars.n_eu_slices"
@@ -175,79 +84,131 @@ hw_vars["$GpuTimestampFrequency"] = "brw->perfquery.sys_vars.timestamp_frequency
 hw_vars["$GpuMinFrequency"] = "brw->perfquery.sys_vars.gt_min_freq"
 hw_vars["$GpuMaxFrequency"] = "brw->perfquery.sys_vars.gt_max_freq"
 
-counter_vars = {}
+class EmitInstrContext(object):
+    def __init__(self):
+        self.idx = 0
+        self.code = []
 
-def output_rpn_equation_code(set, counter, equation, counter_vars):
-    c("/* RPN equation: " + equation + " */")
-    tokens = equation.split()
-    stack = []
-    tmp_id = 0
-    tmp = None
+    def emit_expression(self, expr):
+        i = self.idx
+        self.idx += 1
+        v = "tmp%i" % i
+        self.code.append("double %s = %s;" % (v, expr))
+        return v
 
-    for token in tokens:
-        stack.append(token)
-        while stack and stack[-1] in ops:
-            op = stack.pop()
-            argc, callback = ops[op]
-            args = []
-            for i in range(0, argc):
-                operand = stack.pop()
-                if operand[0] == "$":
-                    if operand in hw_vars:
-                        operand = hw_vars[operand]
-                    elif operand in counter_vars:
-                        reference = counter_vars[operand]
-                        operand = read_funcs[operand[1:]] + "(brw, query, accumulator)"
-                    else:
-                        raise Exception("Failed to resolve variable " + operand + " in equation " + equation + " for " + set.get('name') + " :: " + counter.get('name'));
-                args.append(operand)
+class EmitExprContext(object):
+    def __init__(self):
+        pass
 
-            tmp_id = callback(tmp_id, args)
+    def emit_expression(self, expr):
+        return expr
 
-            tmp = "tmp" + str(tmp_id - 1)
-            stack.append(tmp)
+class BinExpr(object):
+    def __init__(self, op, left, right):
+        self.op = op
+        self.left = left
+        self.right = right
 
-    if len(stack) != 1:
-        raise Exception("Spurious empty rpn code for " + set.get('name') + " :: " +
-                counter.get('name') + ".\nThis is probably due to some unhandled RPN function, in the equation \"" +
-                equation + "\"")
+    def get_variables(self):
+        return self.left.get_variables() + self.right.get_variables()
 
-    value = stack.pop()
+    def emit(self, ctx):
+        l = self.left.emit(ctx)
+        r = self.right.emit(ctx)
+        if len(self.op) > 2:
+            return ctx.emit_expression("%s(%s, %s)" % (self.op, l, r))
+        elif self.op == '/':
+            return ctx.emit_expression("%s ? %s %s %s : 0" % (r, l, self.op, r))
+        else:
+            return ctx.emit_expression("%s %s %s" % (l, self.op, r))
+        return v
 
-    if value in hw_vars:
-        value = hw_vars[value];
+class NumberConst(object):
+    def __init__(self, value):
+        self.value = value
 
-    c("\nreturn " + value + ";")
+    def get_variables(self):
+        return []
 
-def splice_rpn_expression(set, counter, expression):
-    tokens = expression.split()
-    stack = []
+    def emit(self, ctx):
+        return ctx.emit_expression(self.value)
 
-    for token in tokens:
-        stack.append(token)
-        while stack and stack[-1] in exp_ops:
-            op = stack.pop()
-            argc, callback = exp_ops[op]
-            args = []
-            for i in range(0, argc):
-                operand = stack.pop()
-                if operand[0] == "$":
-                    if operand in hw_vars:
-                        operand = hw_vars[operand]
-                    else:
-                        raise Exception("Failed to resolve variable " + operand + " in expression " + expression + " for " + set.get('name') + " :: " + counter.get('name'));
-                args.append(operand)
+class NameRef(object):
+    def __init__(self, name):
+        self.name = name
 
-            subexp = callback(args)
+    def get_variables(self):
+        return [self.name]
 
-            stack.append(subexp)
+    def emit(self, ctx):
+        if self.name in hw_vars:
+            return ctx.emit_expression(hw_vars[self.name])
+        else:
+            return ctx.emit_expression("%s(brw, query, accumulator)" % read_funcs[self.name[1:]])
 
-    if len(stack) != 1:
-        raise Exception("Spurious empty rpn expression for " + set.get('name') + " :: " +
-                counter.get('name') + ".\nThis is probably due to some unhandled RPN operation, in the expression \"" +
-                expression + "\"")
+class ReadExpr(object):
+    def __init__(self, name, offset):
+        self.name = name
+        self.offset = offset
 
-    return stack.pop()
+    def get_variables(self):
+        return []
+
+    def emit(self, ctx):
+        lctx = EmitExprContext() # Avoid generating a new variable for the offset
+        return ctx.emit_expression("accumulator[query->%s_offset + %s]" % (self.name.lower(),
+                                                                           self.offset.emit(lctx)))
+
+grammar = parsley.makeGrammar("""
+
+expr        = andExpr:l ( ws '||' expr:r           -> BinExpr('||', l, r)
+                        | ws                       -> l )
+andExpr     = bitExpr:l ( ws '&&' andExpr:r        -> BinExpr('&&', l, r)
+                        | ws                       -> l )
+bitExpr     = eqExpr:l  ( ws '&' bitExpr:r         -> BinExpr('&', l, r)
+                        | ws                       -> l )
+eqExpr      = relExpr:l ( ws '==' eqExpr:r         -> BinExpr('==', l, r)
+                        | ws '!=' eqExpr:r         -> BinExpr('!=', l, r)
+                        | ws                       -> l )
+relExpr     = addExpr:l ( ws '>'  relExpr:r        -> BinExpr('>', l, r)
+                        | ws '>=' relExpr:r        -> BinExpr('>=', l, r)
+                        | ws '<' relExpr:r         -> BinExpr('<', l, r)
+                        | ws '<=' relExpr:r        -> BinExpr('<=', l, r)
+                        | ws                       -> l )
+addExpr     = mulExpr:l ( ws '+' addExpr:r         -> BinExpr('+', l, r)
+                        | ws '-' addExpr:r         -> BinExpr('-', l, r)
+                        | ws                       -> l )
+mulExpr     = primExpr:l ( ws '*' mulExpr:r        -> BinExpr('*', l, r)
+                        | ws '/' mulExpr:r        -> BinExpr('/', l, r)
+                        | ws                       -> l )
+primExpr    = ws '(' expr:e ws ')'                 -> e
+            | readExpr
+            | funcExpr
+            | ident:n                              -> NameRef(n)
+            | number
+
+readExpr    = ws 'read' ws '(' name:n ws ','
+                               number:o  ')'       -> ReadExpr(n, o)
+
+funcExpr    = ws ( 'max'
+                 | 'min' ):o ws '(' expr:l ws ','
+                                    expr:r ws ')'  -> BinExpr(o.upper(), l, r)
+
+number      = ws ( < '0x' hexa_char+ >:n           -> NumberConst(n)
+                 | < '0b' bin_char+ >:n            -> NumberConst(n)
+                 | < number_char+ >:n              -> NumberConst(n) )
+number_char = :c ?(re.match('[0-9]', c))           -> c
+hexa_char   = :c ?(re.match('[A-F0-9]', c))        -> c
+bin_char    = :c ?(re.match('[01]', c))            -> c
+
+ident       = ws < '$' name_char+ >:s              -> s
+name        = ws < name_char+ >:s                  -> s
+name_char   = :c ?(re.match('[_a-zA-Z0-9]', c))    -> c
+
+ws          = (:c ?(re.match('[\\n\\t ]', c)))*
+
+""", globals())
+
 
 def output_counter_read(set, counter, counter_vars):
     c("\n")
@@ -267,7 +228,15 @@ def output_counter_read(set, counter, counter_vars):
     c("{")
     c_indent(3)
 
-    output_rpn_equation_code(set, counter, counter.get('equation'), counter_vars)
+    equation = counter.get('equation')
+    expr = grammar(equation).expr()
+    emit_context = EmitInstrContext()
+    retvar = expr.emit(emit_context)
+    c("/* Equation: %s */" % equation)
+    for l in emit_context.code:
+        c(l)
+    c(" ")
+    c("return %s;" % retvar)
 
     c_outdent(3)
     c("}")
@@ -287,8 +256,9 @@ def output_counter_max(set, counter, counter_vars):
         pass
 
     # We can only report constant maximum values via INTEL_performance_query
-    for token in max_eq.split():
-        if token[0] == '$' and token not in hw_vars:
+    expr = grammar(max_eq).expr()
+    for v in expr.get_variables():
+        if v not in hw_vars:
             return "0; /* unsupported (varies over time) */"
 
     c("\n")
@@ -304,7 +274,13 @@ def output_counter_max(set, counter, counter_vars):
     c("{")
     c_indent(3)
 
-    output_rpn_equation_code(set, counter, max_eq, counter_vars)
+    emit_context = EmitInstrContext()
+    retvar = expr.emit(emit_context)
+    c("/* Equation: %s */" % max_eq)
+    for l in emit_context.code:
+        c(l)
+    c(" ")
+    c("return %s;" % retvar)
 
     c_outdent(3)
     c("}")
@@ -341,7 +317,9 @@ def output_counter_report(set, counter, current_offset):
 
     availability = counter.get('availability')
     if availability:
-        expression = splice_rpn_expression(set, counter, availability)
+        e = grammar(availability).expr()
+        expression = e.emit(EmitExprContext())
+
         lines = expression.split(' && ')
         n_lines = len(lines)
         if n_lines == 1:
