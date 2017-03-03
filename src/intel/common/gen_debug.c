@@ -86,6 +86,20 @@ static const struct debug_control debug_control[] = {
    { NULL,    0 }
 };
 
+uint64_t INTEL_COMPILER_DEBUG = 0;
+
+static const struct debug_control debug_compiler_control[] = {
+   { "disable-lower-instructions", DEBUG_COMPILER_DISABLE_LOWER_INSTRUCTIONS },
+   { "disable-copy-prop", DEBUG_COMPILER_DISABLE_COPY_PROP },
+   { "disable-dead-code", DEBUG_COMPILER_DISABLE_DEAD_CODE },
+   { "disable-vector-splitting", DEBUG_COMPILER_DISABLE_VECTOR_SPLITTING},
+   { "disable-constant-folding", DEBUG_COMPILER_DISABLE_CONSTANT_FOLDING },
+   { "count-opt-progress", DEBUG_COMPILER_COUNT_OPT_PROGRESS },
+   { "only-inlining", DEBUG_COMPILER_ONLY_INLINING },
+   { "commutative-constant-folding", DEBUG_COMPILER_COMMUTATIVE_CONSTANT_FOLDING },
+   { NULL, 0 }
+};
+
 uint64_t
 intel_debug_flag_for_shader_stage(gl_shader_stage stage)
 {
@@ -106,4 +120,7 @@ brw_process_intel_debug_variable(void)
 {
    uint64_t intel_debug = parse_debug_string(getenv("INTEL_DEBUG"), debug_control);
    (void) p_atomic_cmpxchg(&INTEL_DEBUG, 0, intel_debug);
+   uint64_t intel_compiler_debug =
+      parse_debug_string(getenv("INTEL_COMPILER_DEBUG"), debug_compiler_control);
+   (void) p_atomic_cmpxchg(&INTEL_COMPILER_DEBUG, 0, intel_compiler_debug);
 }

@@ -90,6 +90,7 @@ brw_common_optimization(exec_list *ir,
 {
    const bool debug = false;
    GLboolean progress = GL_FALSE;
+   uint32_t opt_count = 0;
 
 #define OPT(PASS, ...) do {                                             \
       if (debug) {                                                      \
@@ -101,32 +102,48 @@ brw_common_optimization(exec_list *ir,
          fprintf(stderr, "GLSL optimization %s: %s progress\n",         \
                  #PASS, opt_progress ? "made" : "no");                  \
       } else {                                                          \
-         progress = PASS(__VA_ARGS__) || progress;                      \
+         const bool opt_progress = PASS(__VA_ARGS__);                   \
+         if (opt_progress) opt_count++;                                 \
+         progress = opt_progress || progress;                           \
       }                                                                 \
    } while (false)
 
-   OPT(lower_instructions, ir, SUB_TO_ADD_NEG);
+   if (!(INTEL_COMPILER_DEBUG & DEBUG_COMPILER_DISABLE_LOWER_INSTRUCTIONS)) {
+      OPT(lower_instructions, ir, SUB_TO_ADD_NEG);
+   }
 
    OPT(do_function_inlining, ir);
    OPT(do_dead_functions, ir);
    OPT(do_structure_splitting, ir);
 
+   if (options->OptimizeForAOS)
+      OPT(do_vectorize, ir);
+
+   if (INTEL_COMPILER_DEBUG & DEBUG_COMPILER_ONLY_INLINING)
+      return progress;
+
    propagate_invariance(ir);
    OPT(do_if_simplification, ir);
    OPT(opt_flatten_nested_if_blocks, ir);
    OPT(opt_conditional_discard, ir);
-   OPT(do_copy_propagation, ir);
-   OPT(do_copy_propagation_elements, ir);
+   if (!(INTEL_COMPILER_DEBUG & DEBUG_COMPILER_DISABLE_COPY_PROP)) {
+      OPT(do_copy_propagation, ir);
+      OPT(do_copy_propagation_elements, ir);
+   }
 
    if (options->OptimizeForAOS)
       OPT(do_vectorize, ir);
 
-   OPT(do_dead_code, ir, true);
-   OPT(do_dead_code_local, ir);
+   if (!(INTEL_COMPILER_DEBUG & DEBUG_COMPILER_DISABLE_DEAD_CODE)) {
+      OPT(do_dead_code, ir, true);
+      OPT(do_dead_code_local, ir);
+   }
    OPT(do_tree_grafting, ir);
-   OPT(do_constant_propagation, ir);
-   OPT(do_constant_variable, ir);
-   OPT(do_constant_folding, ir);
+   if (!(INTEL_COMPILER_DEBUG & DEBUG_COMPILER_DISABLE_CONSTANT_FOLDING)) {
+      OPT(do_constant_propagation, ir);
+      OPT(do_constant_variable, ir);
+      OPT(do_constant_folding, ir);
+   }
    OPT(do_minmax_prune, ir);
    OPT(do_rebalance_tree, ir);
    OPT(do_algebraic, ir, native_integers, options);
@@ -150,6 +167,9 @@ brw_common_optimization(exec_list *ir,
    }
 
 #undef OPT
+
+   if (INTEL_COMPILER_DEBUG & DEBUG_COMPILER_COUNT_OPT_PROGRESS)
+      fprintf(stderr, "opt_count = %u\n", opt_count);
 
    return progress;
 }
@@ -216,11 +236,13 @@ process_glsl_ir(struct brw_context *brw,
    do {
       progress = false;
 
-      if (compiler->scalar_stage[shader->Stage]) {
-         if (shader->Stage == MESA_SHADER_VERTEX ||
-             shader->Stage == MESA_SHADER_FRAGMENT)
-            brw_do_channel_expressions(shader->ir);
-         brw_do_vector_splitting(shader->ir);
+      if (!(INTEL_COMPILER_DEBUG & DEBUG_COMPILER_DISABLE_VECTOR_SPLITTING)) {
+         if (compiler->scalar_stage[shader->Stage]) {
+            if (shader->Stage == MESA_SHADER_VERTEX ||
+                shader->Stage == MESA_SHADER_FRAGMENT)
+               brw_do_channel_expressions(shader->ir);
+            brw_do_vector_splitting(shader->ir);
+         }
       }
 
       progress = brw_common_optimization(shader->ir, options,
