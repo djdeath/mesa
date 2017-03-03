@@ -79,6 +79,18 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_DO32                (1ull << 37)
 #define DEBUG_NO_RBC              (1ull << 38)
 
+
+extern uint64_t INTEL_COMPILER_DEBUG;
+
+#define DEBUG_COMPILER_DISABLE_LOWER_INSTRUCTIONS (1ull << 0)
+#define DEBUG_COMPILER_DISABLE_COPY_PROP (1ull << 1)
+#define DEBUG_COMPILER_DISABLE_DEAD_CODE (1ull << 2)
+#define DEBUG_COMPILER_DISABLE_VECTOR_SPLITTING (1ull << 3)
+#define DEBUG_COMPILER_DISABLE_CONSTANT_FOLDING (1ull << 4)
+#define DEBUG_COMPILER_COUNT_OPT_PROGRESS (1ull << 5)
+#define DEBUG_COMPILER_ONLY_INLINING (1ull << 6)
+#define DEBUG_COMPILER_COMMUTATIVE_CONSTANT_FOLDING (1ull << 7)
+
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"
 #include <cutils/log.h>
@@ -91,8 +103,8 @@ extern uint64_t INTEL_DEBUG;
 #endif /* HAVE_ANDROID_PLATFORM */
 
 #define DBG(...) do {						\
-	if (unlikely(INTEL_DEBUG & FILE_DEBUG_FLAG))		\
-		dbg_printf(__VA_ARGS__);			\
+        if (unlikely(INTEL_DEBUG & FILE_DEBUG_FLAG))		\
+                dbg_printf(__VA_ARGS__);			\
 } while(0)
 
 #define perf_debug(...) do {					\
