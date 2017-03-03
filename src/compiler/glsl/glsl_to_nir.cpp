@@ -383,6 +383,10 @@ nir_visitor::visit(ir_variable *ir)
       var->data.mode = nir_var_shader_storage;
       break;
 
+   case ir_var_shader_shared:
+      var->data.mode = nir_var_shared;
+      break;
+
    case ir_var_system_value:
       var->data.mode = nir_var_system_value;
       break;
