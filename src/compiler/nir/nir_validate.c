@@ -986,8 +986,11 @@ postvalidate_ssa_def(nir_ssa_def *def, void *void_state)
    if (def_state->uses->entries != 0) {
       printf("extra entries in SSA def uses:\n");
       struct set_entry *entry;
-      set_foreach(def_state->uses, entry)
-         printf("%p\n", entry->key);
+      set_foreach(def_state->uses, entry) {
+         const nir_src *src = entry->key;
+         printf("%p %s/ssa_%u\n", entry->key,
+                src->ssa->name, src->ssa->index);
+      }
 
       abort();
    }
