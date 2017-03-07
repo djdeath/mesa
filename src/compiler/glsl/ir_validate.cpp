@@ -856,6 +856,7 @@ ir_validate::visit(ir_variable *ir)
    if (ir->name && ir->is_name_ralloced())
       assert(ralloc_parent(ir->name) == ir);
 
+   fprintf(stderr, "adding var %s %p\n", ir->name, ir);
    _mesa_set_add(ir_set, ir);
 
    /* If a variable is an array, verify that the maximum array index is in
@@ -1043,6 +1044,9 @@ validate_ir_tree(exec_list *instructions)
     * and it's half composed of assert()s anyway which wouldn't do
     * anything.
     */
+   foreach_in_list(ir_instruction, ir, instructions) {
+      fprint_ir(stderr, ir);
+   }
 #ifdef DEBUG
    ir_validate v;
 
