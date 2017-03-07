@@ -517,6 +517,8 @@ bool linear_vasprintf_rewrite_tail(void *parent, char **str, size_t *start,
                                    const char *fmt, va_list args);
 bool linear_strcat(void *parent, char **dest, const char *str);
 
+void ralloc_mark(void *ptr);
+
 #ifdef __cplusplus
 } /* end of extern "C" */
 #endif

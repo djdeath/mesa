@@ -999,6 +999,7 @@ builtin_builder::initialize()
       return;
 
    mem_ctx = ralloc_context(NULL);
+   ralloc_mark(mem_ctx);
    create_shader();
    create_intrinsics();
    create_builtins();
@@ -1007,6 +1008,7 @@ builtin_builder::initialize()
 void
 builtin_builder::release()
 {
+   fprintf(stderr, "builtin_builder::release()\n");
    ralloc_free(mem_ctx);
    mem_ctx = NULL;
 

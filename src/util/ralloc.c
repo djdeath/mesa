@@ -67,6 +67,9 @@ struct ralloc_header
    struct ralloc_header *prev;
    struct ralloc_header *next;
 
+   bool marked;
+   bool freed;
+
    void (*destructor)(void *);
 };
 
@@ -86,6 +89,12 @@ get_header(const void *ptr)
    return info;
 }
 
+void
+ralloc_mark(void *ptr)
+{
+   get_header(ptr)->marked = true;
+}
+
 #define PTR_FROM_HEADER(info) (((char *) info) + sizeof(ralloc_header))
 
 static void
@@ -94,10 +103,16 @@ add_child(ralloc_header *parent, ralloc_header *info)
    if (parent != NULL) {
       info->parent = parent;
       info->next = parent->child;
+      if (parent->marked) {
+         if (info->marked)
+            fprintf(stderr, "!!!!!! %p\n", PTR_FROM_HEADER(info));
+         info->marked = parent->marked;
+         fprintf(stderr, "marked=%p\n", PTR_FROM_HEADER(info));
+      }
       parent->child = info;
 
       if (info->next != NULL)
-	 info->next->prev = info;
+         info->next->prev = info;
    }
 }
 
@@ -127,6 +142,8 @@ ralloc_size(const void *ctx, size_t size)
    info->prev = NULL;
    info->next = NULL;
    info->destructor = NULL;
+   info->marked = false;
+   info->freed = false;
 
    parent = ctx != NULL ? get_header(ctx) : NULL;
 
@@ -253,6 +270,13 @@ unlink_block(ralloc_header *info)
 static void
 unsafe_free(ralloc_header *info)
 {
+   if (info->freed && info->marked)
+      fprintf(stderr, "FUUUUUU=%p parent_marked=%i\n", PTR_FROM_HEADER(info), info->parent->marked);
+   else if (info->marked)
+      fprintf(stderr, "CAREFUL=%p parent_marked=%i\n", PTR_FROM_HEADER(info), info->parent->marked);
+   else if (info->freed)
+      fprintf(stderr, "WTF=%p parent_marked=%i\n", PTR_FROM_HEADER(info), info->parent->marked);
+
    /* Recursively free any children...don't waste time unlinking them. */
    ralloc_header *temp;
    while (info->child != NULL) {
@@ -260,6 +284,8 @@ unsafe_free(ralloc_header *info)
       info->child = temp->next;
       unsafe_free(temp);
    }
+
+   info->freed = true;
 
    /* Free the block itself.  Call the destructor first, if any. */
    if (info->destructor != NULL)
