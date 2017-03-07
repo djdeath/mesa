@@ -79,14 +79,12 @@ ir_if_simplification_visitor::visit_leave(ir_if *ir)
       return visit_continue;
    }
 
-   void *ctx = ralloc_parent(ir->condition);
-
    /* FINISHME: Ideally there would be a way to note that the condition results
     * FINISHME: in a constant before processing both of the other subtrees.
     * FINISHME: This can probably be done with some flags, but it would take
     * FINISHME: some work to get right.
     */
-   ir_constant *condition_constant = ir->condition->constant_expression_value(ctx);
+   ir_constant *condition_constant = ir->condition->constant_expression_value();
    if (condition_constant) {
       /* Move the contents of the one branch of the conditional
        * that matters out.
@@ -118,7 +116,8 @@ ir_if_simplification_visitor::visit_leave(ir_if *ir)
     * folded into the generation of "cond" anyway.
     */
    if (ir->then_instructions.is_empty()) {
-      ir->condition = new(ctx) ir_expression(ir_unop_logic_not, ir->condition);
+      ir->condition = new(ralloc_parent(ir->condition))
+	 ir_expression(ir_unop_logic_not, ir->condition);
       ir->else_instructions.move_nodes_to(&ir->then_instructions);
       this->made_progress = true;
    }
