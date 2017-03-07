@@ -1848,7 +1848,7 @@ ast_expression::do_hir(exec_list *instructions,
          error_emitted = true;
       }
 
-      ir_constant *cond_val = op[0]->constant_expression_value();
+      ir_constant *cond_val = op[0]->constant_expression_value(ctx);
 
       if (then_instructions.is_empty()
           && else_instructions.is_empty()
@@ -2264,7 +2264,7 @@ process_array_size(exec_node *node,
       return 0;
    }
 
-   ir_constant *const size = ir->constant_expression_value();
+   ir_constant *const size = ir->constant_expression_value(state);
    if (size == NULL ||
        (state->is_version(120, 300) &&
         array_size->has_sequence_subexpression())) {
@@ -4238,7 +4238,7 @@ process_initializer(ir_variable *var, ast_declaration *decl,
           * GLSL ES 3.00.4 spec.  This is a new limitation for these GLSL
           * versions.
           */
-         ir_constant *constant_value = rhs->constant_expression_value();
+         ir_constant *constant_value = rhs->constant_expression_value(state);
          if (!constant_value ||
              (state->is_version(430, 300) &&
               decl->initializer->has_sequence_subexpression())) {
@@ -4298,7 +4298,7 @@ process_initializer(ir_variable *var, ast_declaration *decl,
       } else
          initializer_type = rhs->type;
 
-      var->constant_initializer = rhs->constant_expression_value();
+      var->constant_initializer = rhs->constant_expression_value(state);
       var->data.has_initializer = true;
 
       /* If the declared variable is an unsized array, it must inherrit
@@ -6369,7 +6369,7 @@ ast_case_label::hir(exec_list *instructions,
        * comparison of cached test expression value to case label.
        */
       ir_rvalue *const label_rval = this->test_value->hir(instructions, state);
-      ir_constant *label_const = label_rval->constant_expression_value();
+      ir_constant *label_const = label_rval->constant_expression_value(ctx);
 
       if (!label_const) {
          YYLTYPE loc = this->test_value->get_location();

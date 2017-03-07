@@ -100,13 +100,15 @@ public:
 
    virtual ir_visitor_status visit_enter(ir_dereference_array *ir)
    {
+      void *mem_ctx = ralloc_parent(ir);
+
       /* Force unroll in case of dynamic indexing with sampler arrays
        * when EmitNoIndirectSampler is set.
        */
       if (options->EmitNoIndirectSampler) {
          if ((ir->array->type->is_array() &&
               ir->array->type->contains_sampler()) &&
-             !ir->array_index->constant_expression_value()) {
+             !ir->array_index->constant_expression_value(mem_ctx)) {
             unsupported_variable_indexing = true;
             return visit_continue;
          }

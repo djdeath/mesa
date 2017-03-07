@@ -63,11 +63,12 @@ ir_vec_index_to_swizzle_visitor::handle_rvalue(ir_rvalue **rv)
    if (expr == NULL || expr->operation != ir_binop_vector_extract)
       return;
 
-   ir_constant *const idx = expr->operands[1]->constant_expression_value();
+   void *ctx = ralloc_parent(expr);
+
+   ir_constant *const idx = expr->operands[1]->constant_expression_value(ctx);
    if (idx == NULL)
       return;
 
-   void *ctx = ralloc_parent(expr);
    this->progress = true;
 
    /* Page 40 of the GLSL 1.20 spec says:
