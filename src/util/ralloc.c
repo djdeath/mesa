@@ -73,16 +73,22 @@ struct ralloc_header
    void (*destructor)(void *);
 };
 
+#ifdef MY_DEBUG
+#define my_fprintf(stderr, args...) fprintf(stderr, args)
+#else
+#define my_fprintf(stderr, args...) do { } while(0)
+#endif
+
 typedef struct ralloc_header ralloc_header;
 
 static void unlink_block(ralloc_header *info);
-static void unsafe_free(ralloc_header *info);
+static void unsafe_free(ralloc_header *info, ralloc_header *parent);
 
 static ralloc_header *
 get_header(const void *ptr)
 {
    ralloc_header *info = (ralloc_header *) (((char *) ptr) -
-					    sizeof(ralloc_header));
+                                            sizeof(ralloc_header));
 #ifdef DEBUG
    assert(info->canary == CANARY);
 #endif
@@ -95,19 +101,32 @@ ralloc_mark(void *ptr)
    get_header(ptr)->marked = true;
 }
 
+bool
+ralloc_is_marked(void *ptr)
+{
+   return get_header(ptr)->marked;
+}
+
 #define PTR_FROM_HEADER(info) (((char *) info) + sizeof(ralloc_header))
 
 static void
 add_child(ralloc_header *parent, ralloc_header *info)
 {
+   /* if (parent && parent->child) */
+   /*    assert(parent->child->prev == NULL); */
+
    if (parent != NULL) {
       info->parent = parent;
       info->next = parent->child;
       if (parent->marked) {
          if (info->marked)
-            fprintf(stderr, "!!!!!! %p\n", PTR_FROM_HEADER(info));
+            my_fprintf(stderr, "!!!!!! %p\n", info);
          info->marked = parent->marked;
-         fprintf(stderr, "marked=%p\n", PTR_FROM_HEADER(info));
+         my_fprintf(stderr, "marked=%p parent=%p\n",
+                 info, parent);
+      } else if (info->marked) {
+         my_fprintf(stderr, "WAT marked=%p parent=%p\n",
+                 info, parent);
       }
       parent->child = info;
 
@@ -182,18 +201,23 @@ resize(void *ptr, size_t size)
    /* Update parent and sibling's links to the reallocated node. */
    if (info != old && info->parent != NULL) {
       if (info->parent->child == old)
-	 info->parent->child = info;
+         info->parent->child = info;
 
       if (info->prev != NULL)
-	 info->prev->next = info;
+         info->prev->next = info;
 
       if (info->next != NULL)
-	 info->next->prev = info;
+         info->next->prev = info;
    }
 
    /* Update child->parent links for all children */
-   for (child = info->child; child != NULL; child = child->next)
+   for (child = info->child; child != NULL; child = child->next) {
+      if (info->marked)
+         my_fprintf(stderr, "resize %p parent=%p->%p\n", child, child->parent, info);
       child->parent = info;
+   }
+   if (info->marked)
+      my_fprintf(stderr, "resize %p -> %p\n", info, old);
 
    return PTR_FROM_HEADER(info);
 }
@@ -245,7 +269,7 @@ ralloc_free(void *ptr)
 
    info = get_header(ptr);
    unlink_block(info);
-   unsafe_free(info);
+   unsafe_free(info, NULL);
 }
 
 static void
@@ -253,14 +277,16 @@ unlink_block(ralloc_header *info)
 {
    /* Unlink from parent & siblings */
    if (info->parent != NULL) {
-      if (info->parent->child == info)
-	 info->parent->child = info->next;
+      if (info->parent->child == info) {
+         assert(info->prev == NULL);
+         info->parent->child = info->next;
+      }
 
       if (info->prev != NULL)
-	 info->prev->next = info->next;
+         info->prev->next = info->next;
 
       if (info->next != NULL)
-	 info->next->prev = info->prev;
+         info->next->prev = info->prev;
    }
    info->parent = NULL;
    info->prev = NULL;
@@ -268,21 +294,27 @@ unlink_block(ralloc_header *info)
 }
 
 static void
-unsafe_free(ralloc_header *info)
+unsafe_free(ralloc_header *info, ralloc_header *parent)
 {
    if (info->freed && info->marked)
-      fprintf(stderr, "FUUUUUU=%p parent_marked=%i\n", PTR_FROM_HEADER(info), info->parent->marked);
+      my_fprintf(stderr, "FUUUUUU=%p parent_marked=%i(%p/%p)\n",
+              info,
+              info->parent ? info->parent->marked : -1, info->parent, parent);
    else if (info->marked)
-      fprintf(stderr, "CAREFUL=%p parent_marked=%i\n", PTR_FROM_HEADER(info), info->parent->marked);
+      my_fprintf(stderr, "CAREFUL=%p parent_marked=%i(%p/%p)\n",
+              info,
+              info->parent ? info->parent->marked : -1, info->parent, parent);
    else if (info->freed)
-      fprintf(stderr, "WTF=%p parent_marked=%i\n", PTR_FROM_HEADER(info), info->parent->marked);
+      my_fprintf(stderr, "WTF=%p parent_marked=%i(%p/%p)\n",
+              info,
+              info->parent ? info->parent->marked : -1, info->parent, parent);
 
    /* Recursively free any children...don't waste time unlinking them. */
    ralloc_header *temp;
    while (info->child != NULL) {
       temp = info->child;
       info->child = temp->next;
-      unsafe_free(temp);
+      unsafe_free(temp, info);
    }
 
    info->freed = true;
@@ -304,6 +336,11 @@ ralloc_steal(const void *new_ctx, void *ptr)
 
    info = get_header(ptr);
    parent = get_header(new_ctx);
+
+   assert(!info->marked || (info->marked && parent->marked));
+   if (info->marked)
+      my_fprintf(stderr, "transfer %p %p -> %p\n",
+              info, info->parent, parent);
 
    unlink_block(info);
 
@@ -327,11 +364,15 @@ ralloc_adopt(const void *new_ctx, void *old_ctx)
 
    /* Set all the children's parent to new_ctx; get a pointer to the last child. */
    for (child = old_info->child; child->next != NULL; child = child->next) {
+      if (new_info->marked || child->marked)
+         my_fprintf(stderr, "update %p parent=%p->%p\n", child, child->parent, new_info);
       child->parent = new_info;
    }
 
    /* Connect the two lists together; parent them to new_ctx; make old_ctx empty. */
    child->next = new_info->child;
+   if (new_info->marked || child->marked)
+      my_fprintf(stderr, "update %p parent=%p->%p\n", child, child->parent, new_info);
    child->parent = new_info;
    new_info->child = old_info->child;
    old_info->child = NULL;
@@ -511,7 +552,7 @@ ralloc_asprintf_rewrite_tail(char **str, size_t *start, const char *fmt, ...)
 
 bool
 ralloc_vasprintf_rewrite_tail(char **str, size_t *start, const char *fmt,
-			      va_list args)
+                              va_list args)
 {
    size_t new_length;
    char *ptr;

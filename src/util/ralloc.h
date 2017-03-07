@@ -216,7 +216,7 @@ void *rzalloc_array_size(const void *ctx, size_t size, unsigned count) MALLOCLIK
  * \return True unless allocation failed.
  */
 void *reralloc_array_size(const void *ctx, void *ptr, size_t size,
-			  unsigned count);
+                          unsigned count);
 /// @}
 
 /**
@@ -333,8 +333,8 @@ char *ralloc_vasprintf(const void *ctx, const char *fmt, va_list args) MALLOCLIK
  * \return True unless allocation failed.
  */
 bool ralloc_asprintf_rewrite_tail(char **str, size_t *start,
-				  const char *fmt, ...)
-				  PRINTFLIKE(3, 4);
+                                  const char *fmt, ...)
+                                  PRINTFLIKE(3, 4);
 
 /**
  * Rewrite the tail of an existing string, starting at a given index.
@@ -358,7 +358,7 @@ bool ralloc_asprintf_rewrite_tail(char **str, size_t *start,
  * \return True unless allocation failed.
  */
 bool ralloc_vasprintf_rewrite_tail(char **str, size_t *start, const char *fmt,
-				   va_list args);
+                                   va_list args);
 
 /**
  * Append formatted text to the supplied string.
@@ -377,7 +377,7 @@ bool ralloc_vasprintf_rewrite_tail(char **str, size_t *start, const char *fmt,
  * \return True unless allocation failed.
  */
 bool ralloc_asprintf_append (char **str, const char *fmt, ...)
-			     PRINTFLIKE(2, 3);
+                             PRINTFLIKE(2, 3);
 
 /**
  * Append formatted text to the supplied string, given a va_list.
@@ -518,6 +518,8 @@ bool linear_vasprintf_rewrite_tail(void *parent, char **str, size_t *start,
 bool linear_strcat(void *parent, char **dest, const char *str);
 
 void ralloc_mark(void *ptr);
+
+bool ralloc_is_marked(void *ptr);
 
 #ifdef __cplusplus
 } /* end of extern "C" */
