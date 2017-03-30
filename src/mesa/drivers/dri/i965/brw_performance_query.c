@@ -712,11 +712,22 @@ discard_all_queries(struct brw_context *brw)
    }
 }
 
-static bool
-read_oa_samples(struct brw_context *brw)
+enum OaReadStatus {
+   OA_READ_STATUS_ERROR,
+   OA_READ_STATUS_UNFINISHED,
+   OA_READ_STATUS_FINISHED,
+};
+
+static enum OaReadStatus
+read_oa_samples_until(struct brw_context *brw,
+                      uint32_t start_timestamp,
+                      uint32_t end_timestamp)
 {
+   uint32_t last_timestamp = start_timestamp;
+
    while (1) {
       struct brw_oa_sample_buf *buf = get_free_sample_buf(brw);
+      uint32_t offset;
       int len;
 
       while ((len = read(brw->perfquery.oa_stream_fd, buf->buf,
@@ -728,28 +739,94 @@ read_oa_samples(struct brw_context *brw)
 
          if (len < 0) {
             if (errno == EAGAIN)
-               return true;
+               return last_timestamp >= end_timestamp ?
+                      OA_READ_STATUS_FINISHED :
+                      OA_READ_STATUS_UNFINISHED;
             else {
                DBG("Error reading i915 perf samples: %m\n");
-               return false;
             }
-         } else {
+         } else
             DBG("Spurious EOF reading i915 perf samples\n");
-            return false;
-         }
+
+         return OA_READ_STATUS_ERROR;
       }
 
       buf->len = len;
       exec_list_push_tail(&brw->perfquery.sample_buffers, &buf->link);
+
+      /* Go through the reports and update the last timestamp. */
+      offset = 0;
+      while (offset < buf->len) {
+         const struct drm_i915_perf_record_header *header =
+            (const struct drm_i915_perf_record_header *) &buf->buf[offset];
+         uint32_t *report = (uint32_t *) (header + 1);
+
+         if (header->type == DRM_I915_PERF_RECORD_SAMPLE)
+            last_timestamp = report[1];
+
+         offset += header->size;
+      }
    }
 
    unreachable("not reached");
+   return OA_READ_STATUS_ERROR;
+}
+
+/**
+ * Try to read all the reports until either the delimiting timestamp
+ * or an error arises.
+ */
+static bool
+read_oa_samples_for_query(struct brw_context *brw,
+                          struct brw_perf_query_object *obj)
+{
+   uint32_t *query_buffer;
+   uint32_t *start;
+   uint32_t *last;
+   uint32_t *end;
+
+   /* We need the MI_REPORT_PERF_COUNT to land before we can start
+    * accumulate. */
+   assert(!brw_batch_references(&brw->batch, obj->oa.bo) &&
+          !brw_bo_busy(obj->oa.bo));
+
+   /* Map the BO once here and let accumulate_oa_reports() unmap
+    * it. */
+   if (obj->oa.bo->virtual == NULL)
+      brw_bo_map(brw, obj->oa.bo, false);
+
+   query_buffer = obj->oa.bo->virtual;
+
+   start = last = query_buffer;
+   end = query_buffer + (MI_RPC_BO_END_OFFSET_BYTES / sizeof(uint32_t));
+
+   if (start[0] != obj->oa.begin_report_id) {
+      DBG("Spurious start report id=%"PRIu32"\n", start[0]);
+      return true;
+   }
+   if (end[0] != (obj->oa.begin_report_id + 1)) {
+      DBG("Spurious end report id=%"PRIu32"\n", end[0]);
+      return true;
+   }
+
+   /* Read the reports until the end timestamp. */
+   switch (read_oa_samples_until(brw, start[1], end[1])) {
+   case OA_READ_STATUS_ERROR:
+      /* Fallthrough and let accumulate_oa_reports() deal with the
+       * error. */
+   case OA_READ_STATUS_FINISHED:
+      return true;
+   case OA_READ_STATUS_UNFINISHED:
+      return false;
+   }
+
+   unreachable("invalid read status");
    return false;
 }
 
 /**
- * Accumulate raw OA counter values based on deltas between pairs
- * of OA reports.
+ * Accumulate raw OA counter values based on deltas between pairs of
+ * OA reports.
  *
  * Accumulation starts from the first report captured via
  * MI_REPORT_PERF_COUNT (MI_RPC) by brw_begin_perf_query() until the
@@ -779,12 +856,8 @@ accumulate_oa_reports(struct brw_context *brw,
    uint32_t ctx_id;
 
    assert(o->Ready);
+   assert(obj->oa.bo->virtual != NULL);
 
-   /* Collect the latest periodic OA reports from i915 perf */
-   if (!read_oa_samples(brw))
-      goto error;
-
-   brw_bo_map(brw, obj->oa.bo, false);
    query_buffer = obj->oa.bo->virtual;
 
    start = last = query_buffer;
@@ -1237,6 +1310,16 @@ brw_wait_perf_query(struct gl_context *ctx, struct gl_perf_query_object *o)
       intel_batchbuffer_flush(brw);
 
    brw_bo_wait_rendering(brw, bo);
+
+   /* Due to a race condition between the OA unit signaling report
+    * availability and the report actually being written into memory,
+    * we need to wait for all the reports to come in before we can
+    * read them.
+    */
+   if (obj->query->kind == OA_COUNTERS) {
+      while (!read_oa_samples_for_query(brw, obj))
+         ;
+   }
 }
 
 static bool
@@ -1254,8 +1337,8 @@ brw_is_perf_query_ready(struct gl_context *ctx,
       return (obj->oa.results_accumulated ||
               (obj->oa.bo &&
                !brw_batch_references(&brw->batch, obj->oa.bo) &&
-               !brw_bo_busy(obj->oa.bo)));
-
+               !brw_bo_busy(obj->oa.bo) &&
+               read_oa_samples_for_query(brw, obj)));
    case PIPELINE_STATS:
       return (obj->pipeline_stats.bo &&
               !brw_batch_references(&brw->batch, obj->pipeline_stats.bo) &&
