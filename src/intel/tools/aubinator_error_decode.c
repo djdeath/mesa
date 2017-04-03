@@ -249,6 +249,7 @@ static int zlib_inflate(uint32_t **ptr, int len)
 {
    struct z_stream_s zstream;
    void *out;
+   const uint32_t out_size = 128*4096;  /* approximate obj size */
 
    memset(&zstream, 0, sizeof(zstream));
 
@@ -258,9 +259,9 @@ static int zlib_inflate(uint32_t **ptr, int len)
    if (inflateInit(&zstream) != Z_OK)
       return 0;
 
-   out = malloc(128*4096); /* approximate obj size */
+   out = malloc(out_size);
    zstream.next_out = out;
-   zstream.avail_out = 40*len;
+   zstream.avail_out = out_size;
 
    do {
       switch (inflate(&zstream, Z_SYNC_FLUSH)) {
