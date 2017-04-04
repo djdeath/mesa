@@ -44,6 +44,7 @@
 #define CSI "\e["
 #define BLUE_HEADER  CSI "0;44m"
 #define GREEN_HEADER CSI "1;42m"
+#define RED_HEADER   CSI "0;31m"
 #define NORMAL       CSI "0m"
 
 /* options */
@@ -227,7 +228,8 @@ static void decode(struct gen_spec *spec,
 
       inst = gen_spec_find_instruction(spec, p);
       if (inst == NULL) {
-         printf("unknown instruction %08x\n", p[0]);
+         printf("%s0x%08"PRIx64": unknown instruction %08x%s\n",
+                RED_HEADER, offset, p[0], reset_color);
          length = (p[0] & 0xff) + 2;
          continue;
       }
