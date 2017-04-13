@@ -754,7 +754,8 @@ read_oa_samples_until(struct brw_context *brw,
 
          if (len < 0) {
             if (errno == EAGAIN)
-               return last_timestamp >= end_timestamp ?
+               return ((last_timestamp - start_timestamp) >=
+                       (end_timestamp - start_timestamp)) ?
                       OA_READ_STATUS_FINISHED :
                       OA_READ_STATUS_UNFINISHED;
             else {
