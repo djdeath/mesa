@@ -589,6 +589,21 @@ timebase_scale(struct brw_context *brw, uint32_t u32_time_delta)
    return tmp ? tmp / brw->perfquery.sys_vars.timestamp_frequency : 0;
 }
 
+static bool
+report_ctx_is_valid(const struct gen_device_info *info, uint32_t *report)
+{
+   if (info->is_haswell) {
+      return false; /* TODO */
+   } else if (info->gen == 8) {
+      return report[0] & (1ul << 25);
+   } else if (info->gen == 9) {
+      return report[0] & (1ul << 16);
+   }
+
+   /* Need to update this function for newer Gens. */
+   unreachable("extracting context id for unknown generation");
+}
+
 static void
 accumulate_uint32(const uint32_t *report0,
                   const uint32_t *report1,
@@ -852,8 +867,9 @@ accumulate_oa_reports(struct brw_context *brw,
    uint32_t *last;
    uint32_t *end;
    struct exec_node *first_samples_node;
-   bool in_ctx = true;
    uint32_t ctx_id;
+   uint32_t current_ctx_id;
+   uint32_t n_invalid_ctx = 0;
 
    assert(o->Ready);
    assert(obj->oa.bo->virtual != NULL);
@@ -872,7 +888,7 @@ accumulate_oa_reports(struct brw_context *brw,
       goto error;
    }
 
-   ctx_id = start[2];
+   current_ctx_id = ctx_id = start[2];
 
    /* See if we have any periodic reports to accumulate too... */
 
@@ -927,20 +943,39 @@ accumulate_oa_reports(struct brw_context *brw,
              * of OA counters while any other context is acctive.
              */
             if (brw->gen >= 8) {
-               if (in_ctx && report[2] != ctx_id) {
-                  DBG("i915 perf: Switch AWAY (observed by ID change)\n");
-                  in_ctx = false;
-               } else if (in_ctx == false && report[2] == ctx_id) {
-                  DBG("i915 perf: Switch TO\n");
-                  in_ctx = true;
+               uint32_t reason = (report[0] >> OAREPORT_REASON_SHIFT) &
+                                 OAREPORT_REASON_MASK;
+               static const struct {
+                  uint32_t value;
+                  const char *string;
+               } reasons[] = {
+                  { OAREPORT_REASON_CTX_SWITCH, "ctx-switch" },
+                  { OAREPORT_REASON_TIMER, "timer" },
+                  { OAREPORT_REASON_TRIGGER1, "trigger1" },
+                  { OAREPORT_REASON_TRIGGER2, "trigger2" },
+                  { OAREPORT_REASON_GO_TRANSITION, "go-transition" },
+               };
+               const char *report_reason = NULL;
+
+               for (int i = 0;
+                    i < ARRAY_SIZE(reasons) || report_reason == NULL;
+                    i++) {
+                  if (reasons[i].value & reason)
+                     report_reason = reasons[i].string;
+               }
+
+               if (current_ctx_id != ctx_id)
                   add = false;
-               } else if (in_ctx) {
-                  assert(report[2] == ctx_id);
-                  DBG("i915 perf: Continuation IN\n");
-               } else {
-                  assert(report[2] != ctx_id);
-                  DBG("i915 perf: Continuation OUT\n");
+               else if (n_invalid_ctx > 1)
                   add = false;
+
+               DBG("i915 perf: %s\n", report_reason ? report_reason : "unknown");
+
+               if (report_ctx_is_valid(&brw->screen->devinfo, report)) {
+                  current_ctx_id = report[2];
+                  n_invalid_ctx = 0;
+               }  else {
+                  n_invalid_ctx++;
                }
             }
 
