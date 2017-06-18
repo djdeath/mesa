@@ -51,7 +51,20 @@ const char *gen_group_get_name(struct gen_group *group);
 uint32_t gen_group_get_opcode(struct gen_group *group);
 struct gen_enum *gen_spec_find_enum(struct gen_spec *spec, const char *name);
 
+struct gen_decoder_context {
+   /* State for identifying debug messages in the stream of commands. */
+   struct {
+      bool is_debug;
+      bool ready;
+
+      char message[1024];
+      int message_length;
+      const uint32_t *last_pointer;
+   } debug;
+};
+
 struct gen_field_iterator {
+   struct gen_decoder_context *ctx;
    struct gen_group *group;
    char name[128];
    char value[128];
@@ -136,7 +149,10 @@ struct gen_field {
    struct gen_enum inline_enum;
 };
 
+void gen_decoder_context_init(struct gen_decoder_context *ctx);
+
 void gen_field_iterator_init(struct gen_field_iterator *iter,
+                             struct gen_decoder_context *ctx,
                              struct gen_group *group,
                              const uint32_t *p,
                              bool print_colors);
@@ -144,6 +160,7 @@ void gen_field_iterator_init(struct gen_field_iterator *iter,
 bool gen_field_iterator_next(struct gen_field_iterator *iter);
 
 void gen_print_group(FILE *out,
+                     struct gen_decoder_context *ctx,
                      struct gen_group *group,
                      uint64_t offset, const uint32_t *p,
                      bool color);

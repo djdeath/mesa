@@ -67,7 +67,8 @@ print_register(struct gen_spec *spec, const char *name, uint32_t reg)
    struct gen_group *reg_spec = gen_spec_find_register_by_name(spec, name);
 
    if (reg_spec)
-      gen_print_group(stdout, reg_spec, 0, &reg, option_color == COLOR_ALWAYS);
+      gen_print_group(stdout, NULL, reg_spec, 0, &reg,
+                      option_color == COLOR_ALWAYS);
 }
 
 struct ring_register_mapping {
@@ -233,6 +234,9 @@ static void decode(struct gen_spec *spec,
    int length;
    struct gen_group *inst;
    uint64_t current_instruction_base_address = 0;
+   struct gen_decoder_context decoder_ctx;
+
+   gen_decoder_context_init(&decoder_ctx);
 
    for (p = data; p < end; p += length) {
       const char *color = option_full_decode ? BLUE_HEADER : NORMAL,
@@ -255,7 +259,7 @@ static void decode(struct gen_spec *spec,
       printf("%s0x%08"PRIx64":  0x%08x:  %-80s%s\n",
              color, offset, p[0], gen_group_get_name(inst), reset_color);
 
-      gen_print_group(stdout, inst, offset, p,
+      gen_print_group(stdout, &decoder_ctx, inst, offset, p,
                       option_color == COLOR_ALWAYS);
 
       if (strcmp(inst->name, "MI_BATCH_BUFFER_END") == 0)
@@ -263,7 +267,7 @@ static void decode(struct gen_spec *spec,
 
       if (strcmp(inst->name, "STATE_BASE_ADDRESS") == 0) {
          struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
+         gen_field_iterator_init(&iter, &decoder_ctx, inst, p, false);
 
          while (gen_field_iterator_next(&iter)) {
             if (strcmp(iter.name, "Instruction Base Address") == 0) {
@@ -274,7 +278,7 @@ static void decode(struct gen_spec *spec,
                  strcmp(inst->name, "3DSTATE_PS") == 0 ||
                  strcmp(inst->name, "3DSTATE_WM") == 0) {
          struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
+         gen_field_iterator_init(&iter, &decoder_ctx, inst, p, false);
          uint64_t ksp[3] = {0, 0, 0};
          bool enabled[3] = {false, false, false};
 
@@ -346,7 +350,7 @@ static void decode(struct gen_spec *spec,
                  strcmp(inst->name, "3DSTATE_GS") == 0 ||
                  strcmp(inst->name, "3DSTATE_VS") == 0) {
          struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
+         gen_field_iterator_init(&iter, &decoder_ctx, inst, p, false);
          uint64_t ksp = 0;
          bool is_simd8 = false; /* vertex shaders on Gen8+ only */
          bool is_enabled = true;

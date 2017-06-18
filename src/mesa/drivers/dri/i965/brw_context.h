@@ -143,6 +143,8 @@ struct brw_wm_prog_data;
 struct brw_cs_prog_key;
 struct brw_cs_prog_data;
 
+struct gen_decoder_context;
+
 enum brw_pipeline {
    BRW_RENDER_PIPELINE,
    BRW_COMPUTE_PIPELINE,
@@ -472,6 +474,9 @@ struct intel_batchbuffer {
 
    /** Map from batch offset to brw_state_batch data (with DEBUG_BATCH) */
    struct hash_table *state_batch_sizes;
+
+   /** Decoder context tracking */
+   struct gen_decoder_context *decoder_context;
 };
 
 #define BRW_MAX_XFB_STREAMS 4

@@ -66,6 +66,7 @@ uint16_t pci_id = 0;
 char *input_file = NULL, *xml_path = NULL;
 struct gen_spec *spec;
 struct gen_disasm *disasm;
+static struct gen_decoder_context decoder_context;
 
 uint64_t gtt_size, gtt_end;
 void *gtt;
@@ -100,7 +101,8 @@ decode_group(struct gen_group *strct, const uint32_t *p, int starting_dword)
 {
    uint64_t offset = option_print_offsets ? (void *) p - gtt : 0;
 
-   gen_print_group(outfile, strct, offset, p, option_color == COLOR_ALWAYS);
+   gen_print_group(outfile, &decoder_context, strct, offset,
+                   p, option_color == COLOR_ALWAYS);
 }
 
 static void
@@ -685,6 +687,8 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
    uint32_t *p, *end = cmds + size / 4;
    int length, i;
    struct gen_group *inst;
+
+   gen_decoder_context_init(&decoder_context);
 
    for (p = cmds; p < end; p += length) {
       inst = gen_spec_find_instruction(spec, p);

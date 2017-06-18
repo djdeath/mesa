@@ -84,6 +84,8 @@ intel_batchbuffer_init(struct intel_batchbuffer *batch,
    if (INTEL_DEBUG & DEBUG_BATCH) {
       batch->state_batch_sizes =
          _mesa_hash_table_create(NULL, uint_key_hash, uint_key_compare);
+      batch->decoder_context = malloc(sizeof(*batch->decoder_context));
+      gen_decoder_context_init(batch->decoder_context);
    }
 }
 
@@ -116,6 +118,8 @@ intel_batchbuffer_reset(struct intel_batchbuffer *batch,
 
    if (batch->state_batch_sizes)
       _mesa_hash_table_clear(batch->state_batch_sizes, NULL);
+   if (batch->decoder_context)
+      gen_decoder_context_init(batch->decoder_context);
 }
 
 static void
@@ -168,6 +172,8 @@ intel_batchbuffer_free(struct intel_batchbuffer *batch)
    brw_bo_unreference(batch->bo);
    if (batch->state_batch_sizes)
       _mesa_hash_table_destroy(batch->state_batch_sizes, NULL);
+   if (batch->decoder_context)
+      free(batch->decoder_context);
 }
 
 void
@@ -208,8 +214,8 @@ decode_struct(struct brw_context *brw, struct gen_spec *spec,
       return;
 
    fprintf(stderr, "%s\n", struct_name);
-   gen_print_group(stderr, group, gtt_offset + offset,
-                   &data[offset / 4], color);
+   gen_print_group(stderr, brw->batch.decoder_context, group,
+                   gtt_offset + offset, &data[offset / 4], color);
 }
 
 static void
@@ -225,7 +231,8 @@ decode_structs(struct brw_context *brw, struct gen_spec *spec,
    int entries = brw_state_batch_size(brw, offset) / struct_size;
    for (int i = 0; i < entries; i++) {
       fprintf(stderr, "%s %d\n", struct_name, i);
-      gen_print_group(stderr, group, gtt_offset + offset,
+      gen_print_group(stderr, brw->batch.decoder_context, group,
+                      gtt_offset + offset,
                       &data[(offset + i * struct_size) / 4], color);
    }
 }
@@ -270,7 +277,7 @@ do_batch_dump(struct brw_context *brw)
       fprintf(stderr, "%s0x%08"PRIx64":  0x%08x:  %-80s%s\n", header_color,
               offset, p[0], gen_group_get_name(inst), reset_color);
 
-      gen_print_group(stderr, inst, offset, p, color);
+      gen_print_group(stderr, batch->decoder_context, inst, offset, p, color);
 
       switch (gen_group_get_opcode(inst) >> 16) {
       case _3DSTATE_PIPELINED_POINTERS:
@@ -311,7 +318,8 @@ do_batch_dump(struct brw_context *brw)
          uint32_t *bt_pointers = &data[bt_offset / 4];
          for (int i = 0; i < bt_entries; i++) {
             fprintf(stderr, "SURFACE_STATE - BTI = %d\n", i);
-            gen_print_group(stderr, group, gtt_offset + bt_pointers[i],
+            gen_print_group(stderr, batch->decoder_context, group,
+                            gtt_offset + bt_pointers[i],
                             &data[bt_pointers[i] / 4], color);
          }
          break;

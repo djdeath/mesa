@@ -29,6 +29,7 @@
 #include <expat.h>
 #include <inttypes.h>
 #include <zlib.h>
+#include <ctype.h>
 
 #include <util/macros.h>
 #include <util/ralloc.h>
@@ -767,16 +768,76 @@ gen_group_get_length(struct gen_group *group, const uint32_t *p)
 }
 
 void
+gen_decoder_context_init(struct gen_decoder_context *ctx)
+{
+   memset(ctx, 0, sizeof(*ctx));
+}
+
+static void
+reset_debug_status(struct gen_decoder_context *ctx)
+{
+   ctx->debug.is_debug = false;
+   ctx->debug.ready = false;
+   ctx->debug.message_length = 0;
+   ctx->debug.last_pointer = NULL;
+}
+
+static void
+update_debug_status(struct gen_field_iterator *iter)
+{
+   struct gen_decoder_context *ctx = iter->ctx;
+
+   if (ctx == NULL)
+      return;
+
+   /* Drop any non compliant instruction. */
+   if (strcmp(iter->group->name, "MI_NOOP") != 0 ||
+       (1UL << 22) & iter->p[0]) {
+      reset_debug_status(iter->ctx);
+      return;
+   }
+
+   if (ctx->debug.last_pointer != iter->p - 1)
+      reset_debug_status(iter->ctx);
+
+   ctx->debug.last_pointer = iter->p;
+   ctx->debug.is_debug = true;
+
+   for (int i = 0; i < 3; i++) {
+      ctx->debug.message[ctx->debug.message_length++] =
+         (iter->p[0] >> ((2 - i) * 7)) & 0x7f;
+
+      if ((ctx->debug.message_length == 1 && ctx->debug.message[0] == 0) ||
+          (!isprint(ctx->debug.message[ctx->debug.message_length - 1]) &&
+           ctx->debug.message[ctx->debug.message_length - 1] != 0)) {
+
+         reset_debug_status(iter->ctx);
+         return;
+      }
+
+      if (ctx->debug.message[ctx->debug.message_length - 1] == 0 &&
+          ctx->debug.message_length > 1) {
+         ctx->debug.ready = true;
+         return;
+      }
+   }
+}
+
+void
 gen_field_iterator_init(struct gen_field_iterator *iter,
+                        struct gen_decoder_context *ctx,
                         struct gen_group *group,
                         const uint32_t *p,
                         bool print_colors)
 {
    memset(iter, 0, sizeof(*iter));
 
+   iter->ctx = ctx;
    iter->group = group;
    iter->p = p;
    iter->print_colors = print_colors;
+
+   update_debug_status(iter);
 }
 
 static const char *
@@ -967,24 +1028,37 @@ is_header_field(struct gen_group *group, struct gen_field *field)
 }
 
 void
-gen_print_group(FILE *outfile, struct gen_group *group,
+gen_print_group(FILE *outfile,
+                struct gen_decoder_context *ctx,
+                struct gen_group *group,
                 uint64_t offset, const uint32_t *p, bool color)
 {
    struct gen_field_iterator iter;
    int last_dword = 0;
 
-   gen_field_iterator_init(&iter, group, p, color);
+   gen_field_iterator_init(&iter, ctx, group, p, color);
    while (gen_field_iterator_next(&iter)) {
-      if (last_dword != iter.dword) {
-         print_dword_header(outfile, &iter, offset);
-         last_dword = iter.dword;
-      }
-      if (!is_header_field(group, iter.field)) {
-         fprintf(outfile, "    %s: %s\n", iter.name, iter.value);
-         if (iter.struct_desc) {
-            uint64_t struct_offset = offset + 4 * iter.dword;
-            gen_print_group(outfile, iter.struct_desc, struct_offset,
-                            &p[iter.dword], color);
+      if (ctx && ctx->debug.is_debug) {
+         if (ctx->debug.ready) {
+            fprintf(outfile, "%sDEBUG: (%i) : %s%s\n",
+                    color ? "\e[0;35m" : "",
+                    ctx->debug.message_length, ctx->debug.message,
+                    "\e[0m");
+            reset_debug_status(ctx);
+            break;
+         }
+      } else {
+         if (last_dword != iter.dword) {
+            print_dword_header(outfile, &iter, offset);
+            last_dword = iter.dword;
+         }
+         if (!is_header_field(group, iter.field)) {
+            fprintf(outfile, "    %s: %s\n", iter.name, iter.value);
+            if (iter.struct_desc) {
+               uint64_t struct_offset = offset + 4 * iter.dword;
+               gen_print_group(outfile, ctx, iter.struct_desc, struct_offset,
+                               &p[iter.dword], color);
+            }
          }
       }
    }
