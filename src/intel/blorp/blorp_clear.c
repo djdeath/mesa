@@ -330,6 +330,8 @@ blorp_fast_clear(struct blorp_batch *batch,
                                start_layer, format, true);
    params.num_samples = params.dst.surf.samples;
 
+   batch->blorp->emit_debug(batch, "Blorp fastclear l=%i sl=%i nl=%i %ux%u->%ux%u",
+                            level, start_layer, num_layers, x0, y0, x1, y1);
    batch->blorp->exec(batch, &params);
 }
 
@@ -454,6 +456,10 @@ blorp_clear(struct blorp_batch *batch,
        * 512 but a maximum 3D texture size is much larger.
        */
       params.num_layers = MIN2(params.dst.view.array_len, num_layers);
+      batch->blorp->emit_debug(batch, "Blorp clear l=%i sl=%i nl=%i %ux%u->%ux%u",
+                               level, start_layer, params.num_layers,
+                               params.x0, params.y0,
+                               params.x1, params.y1);
       batch->blorp->exec(batch, &params);
 
       start_layer += params.num_layers;
@@ -537,6 +543,12 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
             params.num_layers = params.depth.view.array_len;
       }
 
+      batch->blorp->emit_debug(batch,
+                               "Blorp clear depth=%i level=%i sl=%i nl=%i "
+                               "%ux%u->%ux%u",
+                               clear_depth, level,
+                               start_layer, params.num_layers,
+                               x0, y0, x1, y1);
       batch->blorp->exec(batch, &params);
 
       start_layer += params.num_layers;
@@ -622,6 +634,10 @@ blorp_gen8_hiz_clear_attachments(struct blorp_batch *batch,
    params.depth.enabled = clear_depth;
    params.stencil.enabled = clear_stencil;
    params.stencil_ref = stencil_value;
+   batch->blorp->emit_debug(batch,
+                            "Blorp hiz clear attachment depth=%i stencil=%i "
+                            "%ux%u->%ux%u",
+                            clear_depth, clear_stencil, x0, y0, x1, y1);
    batch->blorp->exec(batch, &params);
 }
 
@@ -695,6 +711,12 @@ blorp_clear_attachments(struct blorp_batch *batch,
 
    params.vs_inputs.base_layer = start_layer;
 
+   batch->blorp->emit_debug(batch,
+                            "Blorp clear attachment color=%i depth=%i "
+                            "sl=%i nl=%i %ux%u->%ux%u",
+                            clear_color, clear_depth,
+                            start_layer, params.num_layers,
+                            x0, y0, x1, y1);
    batch->blorp->exec(batch, &params);
 }
 
@@ -762,5 +784,7 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    if (!blorp_params_get_clear_kernel(batch->blorp, &params, true))
       return;
 
+   batch->blorp->emit_debug(batch, "Blorp CCS clear %ux%u->%ux%u",
+                            params.x0, params.y0, params.x1, params.y1);
    batch->blorp->exec(batch, &params);
 }

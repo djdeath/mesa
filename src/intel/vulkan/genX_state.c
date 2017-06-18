@@ -97,6 +97,8 @@ genX(init_device_state)(struct anv_device *device)
 
    assert(batch.next <= batch.end);
 
+   device->cmd_buffer_emit_debug = genX(cmd_buffer_emit_debug);
+
    return anv_device_submit_simple_batch(device, &batch);
 }
 

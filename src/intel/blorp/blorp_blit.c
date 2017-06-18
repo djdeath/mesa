@@ -1855,6 +1855,10 @@ try_blorp_blit(struct blorp_batch *batch,
       result |= BLIT_HEIGHT_SHRINK;
 
    if (result == 0) {
+      batch->blorp->emit_debug(batch,
+                               "Blorp blit %ux%u->%ux%u",
+                               params->x0, params->y0,
+                               params->x1, params->y1);
       batch->blorp->exec(batch, params);
    }
 

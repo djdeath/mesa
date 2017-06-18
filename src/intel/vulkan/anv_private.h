@@ -58,6 +58,7 @@ typedef uint32_t xcb_window_t;
 
 struct anv_buffer;
 struct anv_buffer_view;
+struct anv_cmd_buffer;
 struct anv_image_view;
 
 struct gen_l3_config;
@@ -782,6 +783,10 @@ struct anv_device {
     pthread_mutex_t                             mutex;
     pthread_cond_t                              queue_submit;
     bool                                        lost;
+
+    void                                      (*cmd_buffer_emit_debug) (struct anv_cmd_buffer *cmd_buffer,
+                                                                        const uint8_t *data,
+                                                                        uint32_t length);
 };
 
 static void inline
@@ -1719,6 +1724,12 @@ anv_cmd_buffer_alloc_blorp_binding_table(struct anv_cmd_buffer *cmd_buffer,
                                          struct anv_state *bt_state);
 
 void anv_cmd_buffer_dump(struct anv_cmd_buffer *cmd_buffer);
+
+void anv_cmd_buffer_emit_debug(struct anv_cmd_buffer *cmd_buffer,
+                               const char *format, ...);
+void anv_cmd_buffer_emit_vdebug(struct anv_cmd_buffer *cmd_buffer,
+                                const char *format, va_list args);
+
 
 enum anv_fence_state {
    /** Indicates that this is a new (or newly reset fence) */

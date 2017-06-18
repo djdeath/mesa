@@ -57,6 +57,7 @@ static const struct debug_control debug_control[] = {
    { "vert",        DEBUG_VERTS },
    { "dri",         DEBUG_DRI },
    { "sf",          DEBUG_SF },
+   { "batch-messages", DEBUG_BATCH_MESSAGES },
    { "wm",          DEBUG_WM },
    { "urb",         DEBUG_URB },
    { "vs",          DEBUG_VS },

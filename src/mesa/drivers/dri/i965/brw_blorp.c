@@ -38,6 +38,29 @@
 
 #define FILE_DEBUG_FLAG DEBUG_BLORP
 
+static void
+brw_blorp_emit_debug(struct blorp_batch *batch,
+                     const char *format,
+                     ...)
+{
+   struct brw_context *brw = batch->blorp->driver_ctx;
+
+   if ((INTEL_DEBUG & DEBUG_BATCH_MESSAGES) == 0 &&
+       brw->vtbl.emit_debug != NULL)
+      return;
+
+   va_list args;
+
+   va_start(args, format);
+
+   char buffer[1024];
+   int length = vsnprintf(buffer, sizeof(buffer), format, args);
+
+   brw->vtbl.emit_debug(brw, (uint8_t *)buffer, length);
+
+   va_end(args);
+}
+
 static bool
 brw_blorp_lookup_shader(struct blorp_context *blorp,
                         const void *key, uint32_t key_size,
@@ -119,6 +142,7 @@ brw_blorp_init(struct brw_context *brw)
       unreachable("Invalid gen");
    }
 
+   brw->blorp.emit_debug = brw_blorp_emit_debug;
    brw->blorp.lookup_shader = brw_blorp_lookup_shader;
    brw->blorp.upload_shader = brw_blorp_upload_shader;
 }

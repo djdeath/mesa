@@ -4201,6 +4201,32 @@ static const struct brw_tracked_state genX(vf_topology) = {
 
 /* ---------------------------------------------------------------------- */
 
+#if GEN_GEN >= 6 /* MI_NOOP only available from gen6 */
+static void
+genX(emit_debug)(struct brw_context *brw, const uint8_t *data, uint32_t length)
+{
+   uint32_t i;
+
+   for (i = 0; i < length / 3; i++) {
+      brw_batch_emit(brw, GENX(MI_NOOP), noop) {
+         noop.IdentificationNumber =
+            (data[i * 3] & 0x7f) << 14 |
+            (data[i * 3 + 1] & 0x7f) << 7 |
+            (data[i * 3 + 2] & 0x7f);
+      }
+   }
+
+   brw_batch_emit(brw, GENX(MI_NOOP), noop) {
+      noop.IdentificationNumber =
+         (i * 3 < length ? ((data[i * 3] & 0x7f) << 14) : 0) |
+         ((i * 3 + 1) < length ? ((data[i * 3 + 1] & 0x7f) << 7) : 0) |
+         ((i * 3 + 2) < length ? (data[i * 3 + 2] & 0x7f) : 0);
+   }
+}
+#endif
+
+/* ---------------------------------------------------------------------- */
+
 void
 genX(init_atoms)(struct brw_context *brw)
 {
@@ -4536,5 +4562,9 @@ genX(init_atoms)(struct brw_context *brw)
    STATIC_ASSERT(ARRAY_SIZE(compute_atoms) <= ARRAY_SIZE(brw->compute_atoms));
    brw_copy_pipeline_atoms(brw, BRW_COMPUTE_PIPELINE,
                            compute_atoms, ARRAY_SIZE(compute_atoms));
+#endif
+
+#if GEN_GEN >= 6
+   brw->vtbl.emit_debug = genX(emit_debug);
 #endif
 }

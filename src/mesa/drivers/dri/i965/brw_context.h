@@ -646,6 +646,8 @@ struct brw_context
                                      uint32_t width, uint32_t height,
                                      uint32_t tile_x, uint32_t tile_y);
 
+      void (*emit_debug)(struct brw_context *brw,
+                         const uint8_t *data, uint32_t length);
    } vtbl;
 
    struct brw_bufmgr *bufmgr;

@@ -1446,3 +1446,24 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
 
    return result;
 }
+
+void
+anv_cmd_buffer_emit_vdebug(struct anv_cmd_buffer *cmd_buffer,
+                          const char *format, va_list args)
+{
+   char buffer[1024];
+   int length = vsnprintf(buffer, sizeof(buffer), format, args);
+   cmd_buffer->device->cmd_buffer_emit_debug(cmd_buffer,
+                                             (uint8_t *)buffer, length);
+}
+
+void
+anv_cmd_buffer_emit_debug(struct anv_cmd_buffer *cmd_buffer,
+                          const char *format, ...)
+{
+   va_list ap;
+
+   va_start(ap, format);
+   anv_cmd_buffer_emit_vdebug(cmd_buffer, format, ap);
+   va_end(ap);
+}

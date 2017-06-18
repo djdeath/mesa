@@ -51,6 +51,8 @@ struct blorp_context {
       uint32_t vb;
    } mocs;
 
+   void (*emit_debug)(struct blorp_batch *batch,
+                      const char *format, ...);
    bool (*lookup_shader)(struct blorp_context *blorp,
                          const void *key, uint32_t key_size,
                          uint32_t *kernel_out, void *prog_data_out);

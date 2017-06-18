@@ -23,6 +23,20 @@
 
 #include "anv_private.h"
 
+static void
+emit_debug(struct blorp_batch *batch, const char *format, ...)
+{
+   if ((INTEL_DEBUG & DEBUG_BATCH_MESSAGES) == 0)
+      return;
+
+   struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+   va_list ap;
+
+   va_start(ap, format);
+   anv_cmd_buffer_emit_vdebug(cmd_buffer, format, ap);
+   va_end(ap);
+}
+
 static bool
 lookup_blorp_shader(struct blorp_context *blorp,
                     const void *key, uint32_t key_size,
@@ -95,6 +109,7 @@ anv_device_init_blorp(struct anv_device *device)
    device->blorp.mocs.tex = device->default_mocs;
    device->blorp.mocs.rb = device->default_mocs;
    device->blorp.mocs.vb = device->default_mocs;
+   device->blorp.emit_debug = emit_debug;
    device->blorp.lookup_shader = lookup_blorp_shader;
    device->blorp.upload_shader = upload_blorp_shader;
    switch (device->info.gen) {
