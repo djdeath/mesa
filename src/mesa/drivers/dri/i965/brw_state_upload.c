@@ -48,6 +48,8 @@
 static void
 brw_upload_initial_gpu_state(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /* On platforms with hardware contexts, we can set our initial GPU state
     * right away rather than doing it via state atoms.  This saves a small
     * amount of overhead on every draw call.
@@ -55,13 +57,13 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
    if (!brw->hw_ctx)
       return;
 
-   if (brw->gen == 6)
+   if (devinfo->gen == 6)
       brw_emit_post_sync_nonzero_flush(brw);
 
    brw_upload_invariant_state(brw);
 
    /* Recommended optimization for Victim Cache eviction in pixel backend. */
-   if (brw->gen >= 9) {
+   if (devinfo->gen >= 9) {
       BEGIN_BATCH(3);
       OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
       OUT_BATCH(GEN7_CACHE_MODE_1);
@@ -72,7 +74,7 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
       ADVANCE_BATCH();
    }
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       gen8_emit_3dstate_sample_pattern(brw);
 
       BEGIN_BATCH(5);
@@ -129,6 +131,7 @@ brw_copy_pipeline_atoms(struct brw_context *brw,
 
 void brw_init_state( struct brw_context *brw )
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    /* Force the first brw_select_pipeline to emit pipeline select */
@@ -136,21 +139,21 @@ void brw_init_state( struct brw_context *brw )
 
    brw_init_caches(brw);
 
-   if (brw->gen >= 10)
+   if (devinfo->gen >= 10)
       gen10_init_atoms(brw);
-   else if (brw->gen >= 9)
+   else if (devinfo->gen >= 9)
       gen9_init_atoms(brw);
-   else if (brw->gen >= 8)
+   else if (devinfo->gen >= 8)
       gen8_init_atoms(brw);
-   else if (brw->is_haswell)
+   else if (devinfo->is_haswell)
       gen75_init_atoms(brw);
-   else if (brw->gen >= 7)
+   else if (devinfo->gen >= 7)
       gen7_init_atoms(brw);
-   else if (brw->gen >= 6)
+   else if (devinfo->gen >= 6)
       gen6_init_atoms(brw);
-   else if (brw->gen >= 5)
+   else if (devinfo->gen >= 5)
       gen5_init_atoms(brw);
-   else if (brw->is_g4x)
+   else if (devinfo->is_g4x)
       gen45_init_atoms(brw);
    else
       gen4_init_atoms(brw);
@@ -354,13 +357,14 @@ static inline void
 brw_upload_programs(struct brw_context *brw,
                     enum brw_pipeline pipeline)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
 
    if (pipeline == BRW_RENDER_PIPELINE) {
       brw_upload_vs_prog(brw);
       brw_upload_tess_programs(brw);
 
-      if (brw->gen < 6)
+      if (devinfo->gen < 6)
          brw_upload_ff_gs_prog(brw);
       else
          brw_upload_gs_prog(brw);
@@ -395,7 +399,7 @@ brw_upload_programs(struct brw_context *brw,
 
       brw_upload_wm_prog(brw);
 
-      if (brw->gen < 6) {
+      if (devinfo->gen < 6) {
          brw_upload_clip_prog(brw);
          brw_upload_sf_prog(brw);
       }
@@ -427,6 +431,7 @@ static inline void
 brw_upload_pipeline_state(struct brw_context *brw,
                           enum brw_pipeline pipeline)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    int i;
    static int dirty_count = 0;
@@ -489,7 +494,7 @@ brw_upload_pipeline_state(struct brw_context *brw,
       return;
 
    /* Emit Sandybridge workaround flushes on every primitive, for safety. */
-   if (brw->gen == 6)
+   if (devinfo->gen == 6)
       brw_emit_post_sync_nonzero_flush(brw);
 
    brw_upload_programs(brw, pipeline);

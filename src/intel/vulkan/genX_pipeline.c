@@ -1687,6 +1687,9 @@ genX(graphics_pipeline_create)(
 
 #if 0
    /* From gen7_vs_state.c */
+   const struct anv_physical_device *physical_device =
+      &device->instance->physicalDevice;
+   const struct gen_device_info *devinfo = &physical_device->info;
 
    /**
     * From Graphics BSpec: 3D-Media-GPGPU Engine > 3D Pipeline Stages >
@@ -1700,7 +1703,7 @@ genX(graphics_pipeline_create)(
     * whole fixed function pipeline" means to emit a PIPE_CONTROL with the "CS
     * Stall" bit set.
     */
-   if (!brw->is_haswell && !brw->is_baytrail)
+   if (!devinfo->is_haswell && !devinfo->is_baytrail)
       gen7_emit_vs_workaround_flush(brw);
 #endif
 

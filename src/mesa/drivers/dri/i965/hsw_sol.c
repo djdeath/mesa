@@ -163,13 +163,14 @@ hsw_begin_transform_feedback(struct gl_context *ctx, GLenum mode,
                               struct gl_transform_feedback_object *obj)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
 
    brw_obj->primitive_mode = mode;
 
    /* Reset the SO buffer offsets to 0. */
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       brw_obj->zero_offsets = true;
    } else {
       BEGIN_BATCH(1 + 2 * BRW_MAX_XFB_STREAMS);
@@ -197,10 +198,11 @@ hsw_pause_transform_feedback(struct gl_context *ctx,
                               struct gl_transform_feedback_object *obj)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
 
-   if (brw->is_haswell) {
+   if (devinfo->is_haswell) {
       /* Flush any drawing so that the counters have the right values. */
       brw_emit_mi_flush(brw);
 
@@ -228,10 +230,11 @@ hsw_resume_transform_feedback(struct gl_context *ctx,
                                struct gl_transform_feedback_object *obj)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_transform_feedback_object *brw_obj =
       (struct brw_transform_feedback_object *) obj;
 
-   if (brw->is_haswell) {
+   if (devinfo->is_haswell) {
       /* Reload the SOL buffer offset registers. */
       for (int i = 0; i < BRW_MAX_XFB_STREAMS; i++) {
          BEGIN_BATCH(3);

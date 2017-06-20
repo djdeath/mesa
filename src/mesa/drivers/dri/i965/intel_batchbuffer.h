@@ -78,7 +78,9 @@ static inline uint32_t
 brw_program_reloc(struct brw_context *brw, uint32_t state_offset,
 		  uint32_t prog_offset)
 {
-   if (brw->gen >= 5) {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   if (devinfo->gen >= 5) {
       /* Using state base address. */
       return prog_offset;
    }

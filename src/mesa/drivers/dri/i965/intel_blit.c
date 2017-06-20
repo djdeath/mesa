@@ -101,7 +101,8 @@ set_blitter_tiling(struct brw_context *brw,
                    bool dst_y_tiled, bool src_y_tiled,
                    uint32_t *__map)
 {
-   assert(brw->gen >= 6);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   assert(devinfo->gen >= 6);
 
    /* Idle the blitter before we update how tiling is interpreted. */
    OUT_BATCH(MI_FLUSH_DW);
@@ -442,7 +443,8 @@ alignment_valid(struct brw_context *brw, unsigned offset, uint32_t tiling)
       return (offset & 4095) == 0;
 
    /* On Gen8+, linear buffers must be cacheline-aligned. */
-   if (brw->gen >= 8)
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   if (devinfo->gen >= 8)
       return (offset & 63) == 0;
 
    return true;
@@ -493,6 +495,7 @@ intelEmitCopyBlit(struct brw_context *brw,
 		  GLshort w, GLshort h,
 		  GLenum logic_op)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    GLuint CMD, BR13;
    int dst_y2 = dst_y + h;
    int dst_x2 = dst_x + w;
@@ -501,7 +504,7 @@ intelEmitCopyBlit(struct brw_context *brw,
    uint32_t src_tile_w, src_tile_h;
    uint32_t dst_tile_w, dst_tile_h;
 
-   if ((dst_y_tiled || src_y_tiled) && brw->gen < 6)
+   if ((dst_y_tiled || src_y_tiled) && devinfo->gen < 6)
       return false;
 
    const unsigned bo_sizes = dst_buffer->size + src_buffer->size;
@@ -513,7 +516,7 @@ intelEmitCopyBlit(struct brw_context *brw,
    if (!brw_batch_has_aperture_space(brw, bo_sizes))
       return false;
 
-   unsigned length = brw->gen >= 8 ? 10 : 8;
+   unsigned length = devinfo->gen >= 8 ? 10 : 8;
 
    intel_batchbuffer_require_space(brw, length * 4, BLT_RING);
    DBG("%s src:buf(%p)/%d+%d %d,%d dst:buf(%p)/%d+%d %d,%d sz:%dx%d\n",
@@ -586,7 +589,7 @@ intelEmitCopyBlit(struct brw_context *brw,
    OUT_BATCH(BR13 | (uint16_t)dst_pitch);
    OUT_BATCH(SET_FIELD(dst_y, BLT_Y) | SET_FIELD(dst_x, BLT_X));
    OUT_BATCH(SET_FIELD(dst_y2, BLT_Y) | SET_FIELD(dst_x2, BLT_X));
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       OUT_RELOC64(dst_buffer,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                   dst_offset);
@@ -597,7 +600,7 @@ intelEmitCopyBlit(struct brw_context *brw,
    }
    OUT_BATCH(SET_FIELD(src_y, BLT_Y) | SET_FIELD(src_x, BLT_X));
    OUT_BATCH((uint16_t)src_pitch);
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       OUT_RELOC64(src_buffer,
                   I915_GEM_DOMAIN_RENDER, 0,
                   src_offset);
@@ -627,6 +630,7 @@ intelEmitImmediateColorExpandBlit(struct brw_context *brw,
 				  GLshort w, GLshort h,
 				  GLenum logic_op)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    int dwords = ALIGN(src_size, 8) / 4;
    uint32_t opcode, br13, blit_cmd;
 
@@ -647,7 +651,7 @@ intelEmitImmediateColorExpandBlit(struct brw_context *brw,
        __func__,
        dst_buffer, dst_pitch, dst_offset, x, y, w, h, src_size, dwords);
 
-   unsigned xy_setup_blt_length = brw->gen >= 8 ? 10 : 8;
+   unsigned xy_setup_blt_length = devinfo->gen >= 8 ? 10 : 8;
    intel_batchbuffer_require_space(brw, (xy_setup_blt_length * 4) +
                                         (3 * 4) + dwords * 4, BLT_RING);
 
@@ -671,7 +675,7 @@ intelEmitImmediateColorExpandBlit(struct brw_context *brw,
    OUT_BATCH(br13);
    OUT_BATCH((0 << 16) | 0); /* clip x1, y1 */
    OUT_BATCH((100 << 16) | 100); /* clip x2, y2 */
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       OUT_RELOC64(dst_buffer,
                   I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                   dst_offset);
@@ -683,7 +687,7 @@ intelEmitImmediateColorExpandBlit(struct brw_context *brw,
    OUT_BATCH(0); /* bg */
    OUT_BATCH(fg_color); /* fg */
    OUT_BATCH(0); /* pattern base addr */
-   if (brw->gen >= 8)
+   if (devinfo->gen >= 8)
       OUT_BATCH(0);
 
    OUT_BATCH(blit_cmd | ((3 - 2) + dwords));
@@ -765,6 +769,7 @@ intel_miptree_set_alpha_to_one(struct brw_context *brw,
                               struct intel_mipmap_tree *mt,
                               int x, int y, int width, int height)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t BR13, CMD;
    int pitch, cpp;
 
@@ -788,7 +793,7 @@ intel_miptree_set_alpha_to_one(struct brw_context *brw,
    if (!brw_batch_has_aperture_space(brw, mt->bo->size))
       intel_batchbuffer_flush(brw);
 
-   unsigned length = brw->gen >= 8 ? 7 : 6;
+   unsigned length = devinfo->gen >= 8 ? 7 : 6;
    bool dst_y_tiled = mt->tiling == I915_TILING_Y;
 
    /* We need to split the blit into chunks that each fit within the blitter's
@@ -816,7 +821,7 @@ intel_miptree_set_alpha_to_one(struct brw_context *brw,
                    SET_FIELD(x + chunk_x, BLT_X));
          OUT_BATCH(SET_FIELD(y + chunk_y + chunk_h, BLT_Y) |
                    SET_FIELD(x + chunk_x + chunk_w, BLT_X));
-         if (brw->gen >= 8) {
+         if (devinfo->gen >= 8) {
             OUT_RELOC64(mt->bo,
                         I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER,
                         offset);

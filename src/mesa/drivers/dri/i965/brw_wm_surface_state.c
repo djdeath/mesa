@@ -81,6 +81,7 @@ brw_emit_surface_state(struct brw_context *brw,
                        uint32_t mocs, uint32_t *surf_offset, int surf_index,
                        unsigned read_domains, unsigned write_domains)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t tile_x = mt->level[0].slice[0].x_offset;
    uint32_t tile_y = mt->level[0].slice[0].y_offset;
    uint32_t offset = mt->offset;
@@ -104,7 +105,7 @@ brw_emit_surface_state(struct brw_context *brw,
        * texel of the level instead of relying on the usual base level/layer
        * controls.
        */
-      assert(brw->has_surface_tile_offset);
+      assert(devinfo->has_surface_tile_offset);
       assert(view.levels == 1 && view.array_len == 1);
       assert(tile_x == 0 && tile_y == 0);
 
@@ -200,11 +201,12 @@ brw_update_renderbuffer_surface(struct brw_context *brw,
                                 uint32_t flags, unsigned unit /* unused */,
                                 uint32_t surf_index)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_mipmap_tree *mt = irb->mt;
 
-   if (brw->gen < 9) {
+   if (devinfo->gen < 9) {
       assert(!(flags & INTEL_AUX_BUFFER_DISABLED));
    }
 
@@ -233,7 +235,7 @@ brw_update_renderbuffer_surface(struct brw_context *brw,
 
    uint32_t offset;
    brw_emit_surface_state(brw, mt, flags, mt->target, view,
-                          rb_mocs[brw->gen],
+                          rb_mocs[devinfo->gen],
                           &offset, surf_index,
                           I915_GEM_DOMAIN_RENDER,
                           I915_GEM_DOMAIN_RENDER);
@@ -568,14 +570,15 @@ brw_update_texture_surface(struct gl_context *ctx,
                                                     sampler->sRGBDecode);
 
       /* Implement gen6 and gen7 gather work-around */
+      const struct gen_device_info *devinfo = &brw->screen->devinfo;
       bool need_green_to_blue = false;
       if (for_gather) {
-         if (brw->gen == 7 && (format == ISL_FORMAT_R32G32_FLOAT ||
+         if (devinfo->gen == 7 && (format == ISL_FORMAT_R32G32_FLOAT ||
                                format == ISL_FORMAT_R32G32_SINT ||
                                format == ISL_FORMAT_R32G32_UINT)) {
             format = ISL_FORMAT_R32G32_FLOAT_LD;
-            need_green_to_blue = brw->is_haswell;
-         } else if (brw->gen == 6) {
+            need_green_to_blue = devinfo->is_haswell;
+         } else if (devinfo->gen == 6) {
             /* Sandybridge's gather4 message is broken for integer formats.
              * To work around this, we pretend the surface is UNORM for
              * 8 or 16-bit formats, and emit shader instructions to recover
@@ -606,14 +609,14 @@ brw_update_texture_surface(struct gl_context *ctx,
       }
 
       if (obj->StencilSampling && firstImage->_BaseFormat == GL_DEPTH_STENCIL) {
-         if (brw->gen <= 7) {
+         if (devinfo->gen <= 7) {
             assert(mt->r8stencil_mt && !mt->stencil_mt->r8stencil_needs_update);
             mt = mt->r8stencil_mt;
          } else {
             mt = mt->stencil_mt;
          }
          format = ISL_FORMAT_R8_UINT;
-      } else if (brw->gen <= 7 && mt->format == MESA_FORMAT_S_UINT8) {
+      } else if (devinfo->gen <= 7 && mt->format == MESA_FORMAT_S_UINT8) {
          assert(mt->r8stencil_mt && !mt->r8stencil_needs_update);
          mt = mt->r8stencil_mt;
          format = ISL_FORMAT_R8_UINT;
@@ -645,7 +648,7 @@ brw_update_texture_surface(struct gl_context *ctx,
       const int flags = brw_disable_aux_surface(brw, mt, &view) ?
                            INTEL_AUX_BUFFER_DISABLED : 0;
       brw_emit_surface_state(brw, mt, flags, mt->target, view,
-                             tex_mocs[brw->gen],
+                             tex_mocs[devinfo->gen],
                              surf_offset, surf_index,
                              I915_GEM_DOMAIN_SAMPLER, 0);
    }
@@ -661,6 +664,7 @@ brw_emit_buffer_surface_state(struct brw_context *brw,
                               unsigned pitch,
                               bool rw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t *dw = brw_state_batch(brw,
                                   brw->isl_dev.ss.size,
                                   brw->isl_dev.ss.align,
@@ -671,7 +675,7 @@ brw_emit_buffer_surface_state(struct brw_context *brw,
                          .size = buffer_size,
                          .format = surface_format,
                          .stride = pitch,
-                         .mocs = tex_mocs[brw->gen]);
+                         .mocs = tex_mocs[devinfo->gen]);
 
    if (bo) {
       brw_emit_reloc(&brw->batch, *out_offset + brw->isl_dev.ss.addr_offset,
@@ -949,9 +953,11 @@ brw_emit_null_surface_state(struct brw_context *brw,
       multisampling_state = brw_get_surface_num_multisamples(samples);
    }
 
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    surf[0] = (surface_type << BRW_SURFACE_TYPE_SHIFT |
 	      ISL_FORMAT_B8G8R8A8_UNORM << BRW_SURFACE_FORMAT_SHIFT);
-   if (brw->gen < 6) {
+   if (devinfo->gen < 6) {
       surf[0] |= (1 << BRW_SURFACE_WRITEDISABLE_R_SHIFT |
 		  1 << BRW_SURFACE_WRITEDISABLE_G_SHIFT |
 		  1 << BRW_SURFACE_WRITEDISABLE_B_SHIFT |
@@ -988,6 +994,7 @@ gen4_update_renderbuffer_surface(struct brw_context *brw,
                                  uint32_t flags, unsigned unit,
                                  uint32_t surf_index)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct intel_renderbuffer *irb = intel_renderbuffer(rb);
    struct intel_mipmap_tree *mt = irb->mt;
@@ -1002,7 +1009,7 @@ gen4_update_renderbuffer_surface(struct brw_context *brw,
    assert(!(flags & INTEL_RENDERBUFFER_LAYERED));
    assert(!(flags & INTEL_AUX_BUFFER_DISABLED));
 
-   if (rb->TexImage && !brw->has_surface_tile_offset) {
+   if (rb->TexImage && !devinfo->has_surface_tile_offset) {
       intel_renderbuffer_get_tile_offsets(irb, &tile_x, &tile_y);
 
       if (tile_x != 0 || tile_y != 0) {
@@ -1042,7 +1049,7 @@ gen4_update_renderbuffer_surface(struct brw_context *brw,
 
    surf[4] = brw_get_surface_num_multisamples(mt->num_samples);
 
-   assert(brw->has_surface_tile_offset || (tile_x == 0 && tile_y == 0));
+   assert(devinfo->has_surface_tile_offset || (tile_x == 0 && tile_y == 0));
    /* Note that the low bits of these fields are missing, so
     * there's the possibility of getting in trouble.
     */
@@ -1052,7 +1059,7 @@ gen4_update_renderbuffer_surface(struct brw_context *brw,
 	      (tile_y / 2) << BRW_SURFACE_Y_OFFSET_SHIFT |
 	      (mt->valign == 4 ? BRW_SURFACE_VERTICAL_ALIGN_ENABLE : 0));
 
-   if (brw->gen < 6) {
+   if (devinfo->gen < 6) {
       /* _NEW_COLOR */
       if (!ctx->Color.ColorLogicOpEnabled && !ctx->Color._AdvancedBlendMode &&
           (ctx->Color.BlendEnabled & (1 << unit)))
@@ -1160,6 +1167,7 @@ const struct brw_tracked_state gen6_renderbuffer_surfaces = {
 static void
 update_renderbuffer_read_surfaces(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
 
    /* BRW_NEW_FS_PROG_DATA */
@@ -1223,7 +1231,7 @@ update_renderbuffer_read_surfaces(struct brw_context *brw)
             const int flags = brw->draw_aux_buffer_disabled[i] ?
                                  INTEL_AUX_BUFFER_DISABLED : 0;
             brw_emit_surface_state(brw, irb->mt, flags, target, view,
-                                   tex_mocs[brw->gen],
+                                   tex_mocs[devinfo->gen],
                                    surf_offset, surf_index,
                                    I915_GEM_DOMAIN_SAMPLER, 0);
 
@@ -1289,6 +1297,8 @@ update_stage_texture_surfaces(struct brw_context *brw,
 static void
 brw_update_texture_surfaces(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /* BRW_NEW_VERTEX_PROGRAM */
    struct gl_program *vs = (struct gl_program *) brw->vertex_program;
 
@@ -1312,7 +1322,7 @@ brw_update_texture_surfaces(struct brw_context *brw)
    /* emit alternate set of surface state for gather. this
     * allows the surface format to be overriden for only the
     * gather4 messages. */
-   if (brw->gen < 8) {
+   if (devinfo->gen < 8) {
       if (vs && vs->nir->info.uses_texture_gather)
          update_stage_texture_surfaces(brw, vs, &brw->vs.base, true, 0);
       if (tcs && tcs->nir->info.uses_texture_gather)
@@ -1355,6 +1365,8 @@ const struct brw_tracked_state brw_texture_surfaces = {
 static void
 brw_update_cs_texture_surfaces(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /* BRW_NEW_COMPUTE_PROGRAM */
    struct gl_program *cs = (struct gl_program *) brw->compute_program;
 
@@ -1365,7 +1377,7 @@ brw_update_cs_texture_surfaces(struct brw_context *brw)
     * allows the surface format to be overriden for only the
     * gather4 messages.
     */
-   if (brw->gen < 8) {
+   if (devinfo->gen < 8) {
       if (cs && cs->nir->info.uses_texture_gather)
          update_stage_texture_surfaces(brw, cs, &brw->cs.base, true, 0);
    }
@@ -1760,12 +1772,13 @@ update_image_surface(struct brw_context *brw,
             };
 
             const int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
+            const struct gen_device_info *devinfo = &brw->screen->devinfo;
             assert(!intel_miptree_has_color_unresolved(mt,
                                                        view.base_level, 1,
                                                        view.base_array_layer,
                                                        view.array_len));
             brw_emit_surface_state(brw, mt, INTEL_AUX_BUFFER_DISABLED,
-                                   mt->target, view, tex_mocs[brw->gen],
+                                   mt->target, view, tex_mocs[devinfo->gen],
                                    surf_offset, surf_index,
                                    I915_GEM_DOMAIN_SAMPLER,
                                    access == GL_READ_ONLY ? 0 :

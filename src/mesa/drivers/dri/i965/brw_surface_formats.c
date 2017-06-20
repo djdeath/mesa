@@ -212,8 +212,8 @@ brw_init_surface_formats(struct brw_context *brw)
 
    memset(&ctx->TextureFormatSupported, 0, sizeof(ctx->TextureFormatSupported));
 
-   gen = brw->gen * 10;
-   if (brw->is_g4x || brw->is_haswell)
+   gen = devinfo->gen * 10;
+   if (devinfo->is_g4x || devinfo->is_haswell)
       gen += 5;
 
    for (format = MESA_FORMAT_NONE + 1; format < MESA_FORMAT_COUNT; format++) {
@@ -314,7 +314,7 @@ brw_init_surface_formats(struct brw_context *brw)
    brw->format_supported_as_render_target[MESA_FORMAT_S_UINT8] = true;
    brw->format_supported_as_render_target[MESA_FORMAT_Z_FLOAT32] = true;
    brw->format_supported_as_render_target[MESA_FORMAT_Z32_FLOAT_S8X24_UINT] = true;
-   if (brw->gen >= 8)
+   if (devinfo->gen >= 8)
       brw->format_supported_as_render_target[MESA_FORMAT_Z_UNORM16] = true;
 
    /* We remap depth formats to a supported texturing format in
@@ -340,7 +340,7 @@ brw_init_surface_formats(struct brw_context *brw)
     * With the PMA stall workaround in place, Z16 is faster than Z24, as it
     * should be.
     */
-   if (brw->gen >= 8)
+   if (devinfo->gen >= 8)
       ctx->TextureFormatSupported[MESA_FORMAT_Z_UNORM16] = true;
 
    /* The RGBX formats are not renderable. Normally these get mapped
@@ -356,7 +356,7 @@ brw_init_surface_formats(struct brw_context *brw)
     * doesn't implement this swizzle override. We don't need to do this for
     * BGRX because that actually is supported natively on Gen8+.
     */
-   if (brw->gen >= 9) {
+   if (devinfo->gen >= 9) {
       static const mesa_format rgbx_formats[] = {
          MESA_FORMAT_R8G8B8X8_UNORM,
          MESA_FORMAT_R8G8B8X8_SRGB,
@@ -396,6 +396,7 @@ bool
 brw_render_target_supported(struct brw_context *brw,
 			    struct gl_renderbuffer *rb)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    mesa_format format = rb->Format;
 
    /* Many integer formats are promoted to RGBA (like XRGB8888 is), which means
@@ -413,10 +414,10 @@ brw_render_target_supported(struct brw_context *brw,
    /* Under some conditions, MSAA is not supported for formats whose width is
     * more than 64 bits.
     */
-   if (brw->gen < 8 &&
+   if (devinfo->gen < 8 &&
        rb->NumSamples > 0 && _mesa_get_format_bytes(format) > 8) {
       /* Gen6: MSAA on >64 bit formats is unsupported. */
-      if (brw->gen <= 6)
+      if (devinfo->gen <= 6)
          return false;
 
       /* Gen7: 8x MSAA on >64 bit formats is unsupported. */
@@ -499,13 +500,15 @@ translate_tex_format(struct brw_context *brw,
 uint32_t
 brw_depth_format(struct brw_context *brw, mesa_format format)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    switch (format) {
    case MESA_FORMAT_Z_UNORM16:
       return BRW_DEPTHFORMAT_D16_UNORM;
    case MESA_FORMAT_Z_FLOAT32:
       return BRW_DEPTHFORMAT_D32_FLOAT;
    case MESA_FORMAT_Z24_UNORM_X8_UINT:
-      if (brw->gen >= 6) {
+      if (devinfo->gen >= 6) {
          return BRW_DEPTHFORMAT_D24_UNORM_X8_UINT;
       } else {
          /* Use D24_UNORM_S8, not D24_UNORM_X8.

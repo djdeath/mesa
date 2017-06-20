@@ -151,7 +151,7 @@ brw_upload_wm_unit(struct brw_context *brw)
    /* BRW_NEW_PUSH_CONSTANT_ALLOCATION */
    wm->thread3.const_urb_entry_read_offset = brw->curbe.wm_start * 2;
 
-   if (brw->gen == 5)
+   if (devinfo->gen == 5)
       wm->wm4.sampler_count = 0; /* hardware requirement */
    else {
       wm->wm4.sampler_count = (brw->wm.base.sampler_count + 1) / 4;

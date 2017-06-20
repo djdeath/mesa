@@ -38,6 +38,7 @@
 static void
 brw_upload_clip_unit(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
    struct brw_clip_unit_state *clip;
 
@@ -80,7 +81,7 @@ brw_upload_clip_unit(struct brw_context *brw)
       /* Although up to 16 concurrent Clip threads are allowed on Ironlake,
        * only 2 threads can output VUEs at a time.
        */
-      if (brw->gen == 5)
+      if (devinfo->gen == 5)
          clip->thread4.max_threads = 16 - 1;
       else
          clip->thread4.max_threads = 2 - 1;
@@ -90,7 +91,7 @@ brw_upload_clip_unit(struct brw_context *brw)
    }
 
    /* _NEW_TRANSFORM */
-   if (brw->gen == 5 || brw->is_g4x)
+   if (devinfo->gen == 5 || devinfo->is_g4x)
       clip->clip5.userclip_enable_flags = ctx->Transform.ClipPlanesEnabled;
    else
       /* Up to 6 actual clip flags, plus the 7th for negative RHW workaround. */
@@ -121,7 +122,7 @@ brw_upload_clip_unit(struct brw_context *brw)
       clip->clip5.api_mode = BRW_CLIP_API_OGL;
    clip->clip5.clip_mode = brw->clip.prog_data->clip_mode;
 
-   if (brw->is_g4x)
+   if (devinfo->is_g4x)
       clip->clip5.negative_w_clip_test = 1;
 
    clip->viewport_xmin = -1;

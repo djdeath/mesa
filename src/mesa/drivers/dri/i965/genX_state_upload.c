@@ -465,6 +465,7 @@ upload_format_size(uint32_t upload_format)
 static void
 genX(emit_vertices)(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t *dw;
 
    brw_prepare_vertices(brw);
@@ -597,7 +598,7 @@ genX(emit_vertices)(struct brw_context *brw)
           * vertex element may poke over the end of the buffer by 2 bytes.
           */
          const unsigned padding =
-            (GEN_GEN <= 7 && !brw->is_baytrail && !brw->is_haswell) * 2;
+            (GEN_GEN <= 7 && !devinfo->is_baytrail && !devinfo->is_haswell) * 2;
          const unsigned end = buffer->offset + buffer->size + padding;
          dw = genX(emit_vertex_buffer_state)(brw, dw, i, buffer->bo,
                                              buffer->offset,
@@ -1510,7 +1511,8 @@ genX(upload_sf)(struct brw_context *brw)
 
       /* _NEW_LINE */
 #if GEN_GEN == 8
-      if (brw->is_cherryview)
+      const struct gen_device_info *devinfo = &brw->screen->devinfo;
+      if (devinfo->is_cherryview)
          sf.CHVLineWidth = brw_get_line_width(brw);
       else
          sf.LineWidth = brw_get_line_width(brw);
@@ -2360,7 +2362,7 @@ genX(upload_gs_state)(struct brw_context *brw)
     * whole fixed function pipeline" means to emit a PIPE_CONTROL with the "CS
     * Stall" bit set.
     */
-   if (brw->gt == 2 && brw->gs.enabled != active)
+   if (devinfo->gt == 2 && brw->gs.enabled != active)
       gen7_emit_cs_stall_flush(brw);
 #endif
 
@@ -2779,7 +2781,8 @@ genX(upload_vs_push_constants)(struct brw_context *brw)
    gen6_upload_push_constants(brw, &vp->program, prog_data, stage_state);
 
 #if GEN_GEN >= 7
-   if (GEN_GEN == 7 && !GEN_IS_HASWELL && !brw->is_baytrail)
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   if (GEN_GEN == 7 && !GEN_IS_HASWELL && !devinfo->is_baytrail)
       gen7_emit_vs_workaround_flush(brw);
 
    upload_constant_state(brw, stage_state, true /* active */,

@@ -292,6 +292,7 @@ void
 brw_tcs_populate_key(struct brw_context *brw,
                      struct brw_tcs_prog_key *key)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_program *tcp = (struct brw_program *) brw->tess_ctrl_program;
    struct brw_program *tep = (struct brw_program *) brw->tess_eval_program;
    struct gl_program *tes_prog = &tep->program;
@@ -307,7 +308,7 @@ brw_tcs_populate_key(struct brw_context *brw,
       per_patch_slots |= prog->info.patch_outputs_written;
    }
 
-   if (brw->gen < 8 || !tcp)
+   if (devinfo->gen < 8 || !tcp)
       key->input_vertices = brw->ctx.TessCtrlProgram.patch_vertices;
    key->outputs_written = per_vertex_slots;
    key->patch_outputs_written = per_patch_slots;
@@ -316,7 +317,7 @@ brw_tcs_populate_key(struct brw_context *brw,
     * based on the domain the DS is expecting to tessellate.
     */
    key->tes_primitive_mode = tep->program.info.tess.primitive_mode;
-   key->quads_workaround = brw->gen < 9 &&
+   key->quads_workaround = devinfo->gen < 9 &&
                            tep->program.info.tess.primitive_mode == GL_QUADS &&
                            tep->program.info.tess.spacing == TESS_SPACING_EQUAL;
 
@@ -364,6 +365,7 @@ brw_tcs_precompile(struct gl_context *ctx,
                    struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_tcs_prog_key key;
    uint32_t old_prog_offset = brw->tcs.base.prog_offset;
    struct brw_stage_prog_data *old_prog_data = brw->tcs.base.prog_data;
@@ -379,14 +381,14 @@ brw_tcs_precompile(struct gl_context *ctx,
    brw_setup_tex_for_precompile(brw, &key.tex, prog);
 
    /* Guess that the input and output patches have the same dimensionality. */
-   if (brw->gen < 8)
+   if (devinfo->gen < 8)
       key.input_vertices = prog->info.tess.tcs_vertices_out;
 
    struct brw_program *btep;
    if (tes) {
       btep = brw_program(tes->Program);
       key.tes_primitive_mode = tes->Program->info.tess.primitive_mode;
-      key.quads_workaround = brw->gen < 9 &&
+      key.quads_workaround = devinfo->gen < 9 &&
                              tes->Program->info.tess.primitive_mode == GL_QUADS &&
                              tes->Program->info.tess.spacing == TESS_SPACING_EQUAL;
    } else {

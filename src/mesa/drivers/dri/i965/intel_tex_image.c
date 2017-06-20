@@ -36,7 +36,7 @@
  * Choose the original base level dimension when shifted dimensions agree.
  * Otherwise assume real resize is intended and use the new shifted value.
  */
-static unsigned 
+static unsigned
 get_base_dim(unsigned old_base_dim, unsigned new_level_dim, unsigned level)
 {
    const unsigned old_level_dim = old_base_dim >> level;
@@ -295,7 +295,8 @@ create_mt_for_dri_image(struct brw_context *brw,
     * for EGL images from non-tile aligned sufaces in gen4 hw and earlier which has
     * trouble resolving back to destination image due to alignment issues.
     */
-   if (!brw->has_surface_tile_offset &&
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   if (!devinfo->has_surface_tile_offset &&
        (draw_x != 0 || draw_y != 0)) {
       _mesa_error(&brw->ctx, GL_INVALID_OPERATION, __func__);
       intel_miptree_release(&mt);
@@ -480,6 +481,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
                                   const struct gl_pixelstore_attrib *packing)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct intel_texture_image *image = intel_texture_image(texImage);
    int dst_pitch;
 
@@ -498,7 +500,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
     * with _mesa_image_row_stride. However, before removing the restrictions
     * we need tests.
     */
-   if (!brw->has_llc ||
+   if (!devinfo->has_llc ||
        !(type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_INT_8_8_8_8_REV) ||
        !(texImage->TexObject->Target == GL_TEXTURE_2D ||
          texImage->TexObject->Target == GL_TEXTURE_RECTANGLE) ||
@@ -543,7 +545,7 @@ intel_gettexsubimage_tiled_memcpy(struct gl_context *ctx,
     * parts of the memory aren't swizzled at all. Userspace just can't handle
     * that.
     */
-   if (brw->gen < 5 && brw->has_swizzling)
+   if (devinfo->gen < 5 && brw->has_swizzling)
       return false;
 
    int level = texImage->Level + texImage->TexObject->MinLevel;
@@ -718,7 +720,8 @@ intelCompressedTexSubImage(struct gl_context *ctx, GLuint dims,
    bool is_linear_astc = _mesa_is_astc_format(gl_format) &&
                         !_mesa_is_srgb_format(gl_format);
    struct brw_context *brw = (struct brw_context*) ctx;
-   if (brw->gen == 9 && is_linear_astc)
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   if (devinfo->gen == 9 && is_linear_astc)
       flush_astc_denorms(ctx, dims, texImage,
                          xoffset, yoffset, zoffset,
                          width, height, depth);

@@ -111,7 +111,8 @@ intel_finalize_mipmap_tree(struct brw_context *brw, GLuint unit)
     *
     * FINISHME: Avoid doing this.
     */
-   assert(!tObj->Immutable || brw->gen < 6);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   assert(!tObj->Immutable || devinfo->gen < 6);
 
    firstImage = intel_texture_image(tObj->Image[0][tObj->BaseLevel]);
 

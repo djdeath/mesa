@@ -213,18 +213,19 @@ static void
 brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
 {
    struct brw_context *brw = cache->brw;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_bo *new_bo;
    void *llc_map;
 
    new_bo = brw_bo_alloc(brw->bufmgr, "program cache", new_size, 64);
    if (can_do_exec_capture(brw->screen))
       new_bo->kflags = EXEC_OBJECT_CAPTURE;
-   if (brw->has_llc)
+   if (devinfo->has_llc)
       llc_map = brw_bo_map(brw, new_bo, MAP_READ | MAP_ASYNC);
 
    /* Copy any existing data that needs to be saved. */
    if (cache->next_offset != 0) {
-      if (brw->has_llc) {
+      if (devinfo->has_llc) {
          memcpy(llc_map, cache->map, cache->next_offset);
       } else {
          void *map = brw_bo_map(brw, cache->bo, MAP_READ);
@@ -233,11 +234,11 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
       }
    }
 
-   if (brw->has_llc)
+   if (devinfo->has_llc)
       brw_bo_unmap(cache->bo);
    brw_bo_unreference(cache->bo);
    cache->bo = new_bo;
-   cache->map = brw->has_llc ? llc_map : NULL;
+   cache->map = devinfo->has_llc ? llc_map : NULL;
    cache->bo_used_by_gpu = false;
 
    /* Since we have a new BO in place, we need to signal the units
@@ -256,6 +257,7 @@ brw_lookup_prog(const struct brw_cache *cache,
                 const void *data, unsigned data_size)
 {
    struct brw_context *brw = cache->brw;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    unsigned i;
    const struct brw_cache_item *item;
 
@@ -267,13 +269,13 @@ brw_lookup_prog(const struct brw_cache *cache,
             continue;
 
          void *map;
-         if (!brw->has_llc)
+         if (!devinfo->has_llc)
             map = brw_bo_map(brw, cache->bo, MAP_READ);
          else
             map = cache->map;
 
          ret = memcmp(map + item->offset, data, item->size);
-         if (!brw->has_llc)
+         if (!devinfo->has_llc)
             brw_bo_unmap(cache->bo);
          if (ret)
             continue;
@@ -290,6 +292,7 @@ brw_alloc_item_data(struct brw_cache *cache, uint32_t size)
 {
    uint32_t offset;
    struct brw_context *brw = cache->brw;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    /* Allocate space in the cache BO for our new program. */
    if (cache->next_offset + size > cache->bo->size) {
@@ -304,7 +307,7 @@ brw_alloc_item_data(struct brw_cache *cache, uint32_t size)
    /* If we would block on writing to an in-use program BO, just
     * recreate it.
     */
-   if (!brw->has_llc && cache->bo_used_by_gpu) {
+   if (!devinfo->has_llc && cache->bo_used_by_gpu) {
       perf_debug("Copying busy program cache buffer.\n");
       brw_cache_new_bo(cache, cache->bo->size);
    }
@@ -347,6 +350,7 @@ brw_upload_cache(struct brw_cache *cache,
                  void *out_aux)
 {
    struct brw_context *brw = cache->brw;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_cache_item *item = CALLOC_STRUCT(brw_cache_item);
    const struct brw_cache_item *matching_data =
       brw_lookup_prog(cache, cache_id, data, data_size);
@@ -373,7 +377,7 @@ brw_upload_cache(struct brw_cache *cache,
       item->offset = brw_alloc_item_data(cache, data_size);
 
       /* Copy data to the buffer */
-      if (brw->has_llc) {
+      if (devinfo->has_llc) {
          memcpy(cache->map + item->offset, data, data_size);
       } else {
          brw_bo_subdata(cache->bo, item->offset, data_size, data);
@@ -404,6 +408,7 @@ brw_upload_cache(struct brw_cache *cache,
 void
 brw_init_caches(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_cache *cache = &brw->cache;
 
    cache->brw = brw;
@@ -416,7 +421,7 @@ brw_init_caches(struct brw_context *brw)
    cache->bo = brw_bo_alloc(brw->bufmgr, "program cache",  4096, 64);
    if (can_do_exec_capture(brw->screen))
       cache->bo->kflags = EXEC_OBJECT_CAPTURE;
-   if (brw->has_llc)
+   if (devinfo->has_llc)
       cache->map = brw_bo_map(brw, cache->bo, MAP_READ | MAP_WRITE | MAP_ASYNC);
 }
 
@@ -491,12 +496,13 @@ brw_program_cache_check_size(struct brw_context *brw)
 static void
 brw_destroy_cache(struct brw_context *brw, struct brw_cache *cache)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    DBG("%s\n", __func__);
 
    /* This can be NULL if context creation failed early on */
    if (cache->bo) {
-      if (brw->has_llc)
+      if (devinfo->has_llc)
          brw_bo_unmap(cache->bo);
       brw_bo_unreference(cache->bo);
       cache->bo = NULL;
@@ -545,11 +551,12 @@ cache_name(enum brw_cache_id cache_id)
 void
 brw_print_program_cache(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct brw_cache *cache = &brw->cache;
    struct brw_cache_item *item;
    void *map;
 
-   if (!brw->has_llc)
+   if (!devinfo->has_llc)
       map = brw_bo_map(brw, cache->bo, MAP_READ);
    else
       map = cache->map;
@@ -562,6 +569,6 @@ brw_print_program_cache(struct brw_context *brw)
       }
    }
 
-   if (!brw->has_llc)
+   if (!devinfo->has_llc)
       brw_bo_unmap(cache->bo);
 }

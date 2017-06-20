@@ -1557,6 +1557,7 @@ read_sysfs_drm_device_file_uint64(struct brw_context *brw,
 static bool
 init_oa_sys_vars(struct brw_context *brw, const char *sysfs_dev_dir)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint64_t min_freq_mhz = 0, max_freq_mhz = 0;
 
    if (!read_sysfs_drm_device_file_uint64(brw, sysfs_dev_dir,
@@ -1572,20 +1573,18 @@ init_oa_sys_vars(struct brw_context *brw, const char *sysfs_dev_dir)
    brw->perfquery.sys_vars.gt_min_freq = min_freq_mhz * 1000000;
    brw->perfquery.sys_vars.gt_max_freq = max_freq_mhz * 1000000;
 
-   if (brw->is_haswell) {
-      const struct gen_device_info *info = &brw->screen->devinfo;
-
+   if (devinfo->is_haswell) {
       brw->perfquery.sys_vars.timestamp_frequency = 12500000;
 
-      if (info->gt == 1) {
+      if (devinfo->gt == 1) {
          brw->perfquery.sys_vars.n_eus = 10;
          brw->perfquery.sys_vars.n_eu_slices = 1;
          brw->perfquery.sys_vars.subslice_mask = 0x1;
-      } else if (info->gt == 2) {
+      } else if (devinfo->gt == 2) {
          brw->perfquery.sys_vars.n_eus = 20;
          brw->perfquery.sys_vars.n_eu_slices = 1;
          brw->perfquery.sys_vars.subslice_mask = 0x3;
-      } else if (info->gt == 3) {
+      } else if (devinfo->gt == 3) {
          brw->perfquery.sys_vars.n_eus = 40;
          brw->perfquery.sys_vars.n_eu_slices = 2;
          brw->perfquery.sys_vars.subslice_mask = 0xf;
@@ -1667,6 +1666,7 @@ static unsigned
 brw_init_perf_query_info(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct stat sb;
    char sysfs_dev_dir[128];
 
@@ -1678,7 +1678,7 @@ brw_init_perf_query_info(struct gl_context *ctx)
    /* The existence of this sysctl parameter implies the kernel supports
     * the i915 perf interface.
     */
-   if (brw->is_haswell &&
+   if (devinfo->is_haswell &&
        stat("/proc/sys/dev/i915/perf_stream_paranoid", &sb) == 0 &&
        get_sysfs_dev_dir(brw, sysfs_dev_dir, sizeof(sysfs_dev_dir)) &&
        init_oa_sys_vars(brw, sysfs_dev_dir))

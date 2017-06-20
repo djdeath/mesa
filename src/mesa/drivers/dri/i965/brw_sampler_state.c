@@ -53,6 +53,7 @@ static void
 gen7_emit_sampler_state_pointers_xs(struct brw_context *brw,
                                     struct brw_stage_state *stage_state)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    static const uint16_t packet_headers[] = {
       [MESA_SHADER_VERTEX] = _3DSTATE_SAMPLER_STATE_POINTERS_VS,
       [MESA_SHADER_TESS_CTRL] = _3DSTATE_SAMPLER_STATE_POINTERS_HS,
@@ -62,7 +63,7 @@ gen7_emit_sampler_state_pointers_xs(struct brw_context *brw,
    };
 
    /* Ivybridge requires a workaround flush before VS packets. */
-   if (brw->gen == 7 && !brw->is_haswell && !brw->is_baytrail &&
+   if (devinfo->gen == 7 && !devinfo->is_haswell && !devinfo->is_baytrail &&
        stage_state->stage == MESA_SHADER_VERTEX) {
       gen7_emit_vs_workaround_flush(brw);
    }
@@ -96,13 +97,15 @@ brw_emit_sampler_state(struct brw_context *brw,
                        bool non_normalized_coordinates,
                        uint32_t border_color_offset)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    ss[0] = BRW_SAMPLER_LOD_PRECLAMP_ENABLE |
            SET_FIELD(mip_filter, BRW_SAMPLER_MIP_FILTER) |
            SET_FIELD(mag_filter, BRW_SAMPLER_MAG_FILTER) |
            SET_FIELD(min_filter, BRW_SAMPLER_MIN_FILTER);
 
    ss[2] = border_color_offset;
-   if (brw->gen < 6) {
+   if (devinfo->gen < 6) {
       ss[2] += brw->batch.bo->offset64; /* reloc */
       brw_emit_reloc(&brw->batch, batch_offset_for_sampler_state + 8,
                      brw->batch.bo, border_color_offset,
@@ -112,7 +115,7 @@ brw_emit_sampler_state(struct brw_context *brw,
    ss[3] = SET_FIELD(max_anisotropy, BRW_SAMPLER_MAX_ANISOTROPY) |
            SET_FIELD(address_rounding, BRW_SAMPLER_ADDRESS_ROUNDING);
 
-   if (brw->gen >= 7) {
+   if (devinfo->gen >= 7) {
       ss[0] |= SET_FIELD(lod_bias & 0x1fff, GEN7_SAMPLER_LOD_BIAS);
 
       if (min_filter == BRW_MAPFILTER_ANISOTROPIC)
@@ -144,10 +147,10 @@ brw_emit_sampler_state(struct brw_context *brw,
        * Sandy Bridge, however, this sum does not seem to occur and you have
        * to set it to the actual base level of the texture.
        */
-      if (brw->gen == 6)
+      if (devinfo->gen == 6)
          ss[0] |= SET_FIELD(base_level, BRW_SAMPLER_BASE_MIPLEVEL);
 
-      if (brw->gen == 6 && min_filter != mag_filter)
+      if (devinfo->gen == 6 && min_filter != mag_filter)
          ss[0] |= GEN6_SAMPLER_MIN_MAG_NOT_EQUAL;
 
       ss[1] = SET_FIELD(min_lod, GEN4_SAMPLER_MIN_LOD) |
@@ -156,7 +159,7 @@ brw_emit_sampler_state(struct brw_context *brw,
               SET_FIELD(wrap_t, BRW_SAMPLER_TCY_WRAP_MODE) |
               SET_FIELD(wrap_r, BRW_SAMPLER_TCZ_WRAP_MODE);
 
-      if (brw->gen >= 6 && non_normalized_coordinates)
+      if (devinfo->gen >= 6 && non_normalized_coordinates)
          ss[3] |= GEN6_SAMPLER_NON_NORMALIZED_COORDINATES;
    }
 }
@@ -164,6 +167,8 @@ brw_emit_sampler_state(struct brw_context *brw,
 static uint32_t
 translate_wrap_mode(struct brw_context *brw, GLenum wrap, bool using_nearest)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    switch (wrap) {
    case GL_REPEAT:
       return BRW_TEXCOORDMODE_WRAP;
@@ -175,7 +180,7 @@ translate_wrap_mode(struct brw_context *brw, GLenum wrap, bool using_nearest)
        *
        * Gen8+ supports this natively.
        */
-      if (brw->gen >= 8)
+      if (devinfo->gen >= 8)
          return GEN8_TEXCOORDMODE_HALF_BORDER;
 
       /* On Gen4-7.5, we clamp the coordinates in the fragment shader
@@ -231,6 +236,7 @@ upload_default_color(struct brw_context *brw,
                      bool is_integer_format, bool is_stencil_sampling,
                      uint32_t *sdc_offset)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    union gl_color_union color;
 
    switch (base_format) {
@@ -283,7 +289,7 @@ upload_default_color(struct brw_context *brw,
    if (base_format == GL_RGB)
       color.ui[3] = float_as_int(1.0);
 
-   if (brw->gen >= 8) {
+   if (devinfo->gen >= 8) {
       /* On Broadwell, the border color is represented as four 32-bit floats,
        * integers, or unsigned values, interpreted according to the surface
        * format.  This matches the sampler->BorderColor union exactly; just
@@ -291,7 +297,7 @@ upload_default_color(struct brw_context *brw,
        */
       uint32_t *sdc = brw_state_batch(brw, 4 * 4, 64, sdc_offset);
       memcpy(sdc, color.ui, 4 * 4);
-   } else if (brw->is_haswell && (is_integer_format || is_stencil_sampling)) {
+   } else if (devinfo->is_haswell && (is_integer_format || is_stencil_sampling)) {
       /* Haswell's integer border color support is completely insane:
        * SAMPLER_BORDER_COLOR_STATE is 20 DWords.  The first four are
        * for float colors.  The next 12 DWords are MBZ and only exist to
@@ -353,7 +359,7 @@ upload_default_color(struct brw_context *brw,
          assert(!"Invalid number of bits per channel in integer format.");
          break;
       }
-   } else if (brw->gen == 5 || brw->gen == 6) {
+   } else if (devinfo->gen == 5 || devinfo->gen == 6) {
       struct gen5_sampler_default_color *sdc;
 
       sdc = brw_state_batch(brw, sizeof(*sdc), 32, sdc_offset);
@@ -409,6 +415,7 @@ brw_update_sampler_state(struct brw_context *brw,
                          uint32_t *sampler_state,
                          uint32_t batch_offset_for_sampler_state)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    unsigned min_filter, mag_filter, mip_filter;
 
    /* Select min and mip filters. */
@@ -489,7 +496,7 @@ brw_update_sampler_state(struct brw_context *brw,
        * integer formats.  Fall back to CLAMP for now.
        */
       if ((tex_cube_map_seamless || sampler->CubeMapSeamless) &&
-          !(brw->gen == 7 && !brw->is_haswell && texObj->_IsIntegerFormat)) {
+          !(devinfo->gen == 7 && !devinfo->is_haswell && texObj->_IsIntegerFormat)) {
 	 wrap_s = BRW_TEXCOORDMODE_CUBE;
 	 wrap_t = BRW_TEXCOORDMODE_CUBE;
 	 wrap_r = BRW_TEXCOORDMODE_CUBE;
@@ -514,8 +521,8 @@ brw_update_sampler_state(struct brw_context *brw,
 	 intel_translate_shadow_compare_func(sampler->CompareFunc);
    }
 
-   const int lod_bits = brw->gen >= 7 ? 8 : 6;
-   const float hw_max_lod = brw->gen >= 7 ? 14 : 13;
+   const int lod_bits = devinfo->gen >= 7 ? 8 : 6;
+   const float hw_max_lod = devinfo->gen >= 7 ? 14 : 13;
    const unsigned base_level =
       U_FIXED(CLAMP(texObj->MinLevel + texObj->BaseLevel, 0, hw_max_lod), 1);
    const unsigned min_lod =
@@ -613,7 +620,9 @@ brw_upload_sampler_state_table(struct brw_context *brw,
       batch_offset_for_sampler_state += size_in_bytes;
    }
 
-   if (brw->gen >= 7 && stage_state->stage != MESA_SHADER_COMPUTE) {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   if (devinfo->gen >= 7 && stage_state->stage != MESA_SHADER_COMPUTE) {
       /* Emit a 3DSTATE_SAMPLER_STATE_POINTERS_XS packet. */
       gen7_emit_sampler_state_pointers_xs(brw, stage_state);
    } else {

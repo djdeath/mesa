@@ -166,7 +166,8 @@ gen7_emit_depth_stencil_hiz(struct brw_context *brw,
       ADVANCE_BATCH();
    } else {
       stencil_mt->r8stencil_needs_update = true;
-      const int enabled = brw->is_haswell ? HSW_STENCIL_ENABLED : 0;
+      const struct gen_device_info *devinfo = &brw->screen->devinfo;
+      const int enabled = devinfo->is_haswell ? HSW_STENCIL_ENABLED : 0;
 
       BEGIN_BATCH(3);
       OUT_BATCH(GEN7_3DSTATE_STENCIL_BUFFER << 16 | (3 - 2));

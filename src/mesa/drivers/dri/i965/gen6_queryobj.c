@@ -80,9 +80,11 @@ static void
 write_primitives_generated(struct brw_context *brw,
                            struct brw_bo *query_bo, int stream, int idx)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    brw_emit_mi_flush(brw);
 
-   if (brw->gen >= 7 && stream > 0) {
+   if (devinfo->gen >= 7 && stream > 0) {
       brw_store_register_mem64(brw, query_bo,
                                GEN7_SO_PRIM_STORAGE_NEEDED(stream),
                                idx * sizeof(uint64_t));
@@ -96,9 +98,11 @@ static void
 write_xfb_primitives_written(struct brw_context *brw,
                              struct brw_bo *bo, int stream, int idx)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    brw_emit_mi_flush(brw);
 
-   if (brw->gen >= 7) {
+   if (devinfo->gen >= 7) {
       brw_store_register_mem64(brw, bo, GEN7_SO_NUM_PRIMS_WRITTEN(stream),
                                idx * sizeof(uint64_t));
    } else {
@@ -113,6 +117,7 @@ write_xfb_overflow_streams(struct gl_context *ctx,
                            int idx)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    brw_emit_mi_flush(brw);
 
@@ -120,7 +125,7 @@ write_xfb_overflow_streams(struct gl_context *ctx,
       int w_idx = 4 * i + idx;
       int g_idx = 4 * i + idx + 2;
 
-      if (brw->gen >= 7) {
+      if (devinfo->gen >= 7) {
          brw_store_register_mem64(brw, bo,
                                   GEN7_SO_NUM_PRIMS_WRITTEN(stream + i),
                                   g_idx * sizeof(uint64_t));
@@ -192,11 +197,12 @@ emit_pipeline_stat(struct brw_context *brw, struct brw_bo *bo,
       GS_INVOCATION_COUNT /* This one is special... */
    };
    STATIC_ASSERT(ARRAY_SIZE(target_to_register) == MAX_PIPELINE_STATISTICS);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    uint32_t reg = target_to_register[pipeline_target_to_index(target)];
    /* Gen6 GS code counts full primitives, that is, it won't count individual
     * triangles in a triangle strip. Use CL_INVOCATION_COUNT for that.
     */
-   if (brw->gen == 6 && target == GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB)
+   if (devinfo->gen == 6 && target == GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB)
       reg = CL_INVOCATION_COUNT;
    assert(reg != 0);
 
@@ -217,6 +223,7 @@ gen6_queryobj_get_results(struct gl_context *ctx,
                           struct brw_query_object *query)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    if (query->bo == NULL)
       return;
@@ -289,7 +296,7 @@ gen6_queryobj_get_results(struct gl_context *ctx,
        * and correctly emitted the number of pixel shader invocations, but,
        * whomever forgot to undo the multiply by 4.
        */
-      if (brw->gen == 8 || brw->is_haswell)
+      if (devinfo->gen == 8 || devinfo->is_haswell)
          query->Base.Result /= 4;
       break;
 

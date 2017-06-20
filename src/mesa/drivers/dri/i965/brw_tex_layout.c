@@ -66,7 +66,9 @@ intel_horizontal_texture_alignment_unit(struct brw_context *brw,
     * "Surface Horizontal Alignment" field to HALIGN_4 or HALIGN_8.
     */
 
-   if (brw->gen >= 7 && mt->format == MESA_FORMAT_Z_UNORM16)
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   if (devinfo->gen >= 7 && mt->format == MESA_FORMAT_Z_UNORM16)
       return 8;
 
    return 4;
@@ -97,7 +99,9 @@ intel_vertical_texture_alignment_unit(struct brw_context *brw,
    /* Broadwell only supports VALIGN of 4, 8, and 16.  The BSpec says 4
     * should always be used, except for stencil buffers, which should be 8.
     */
-   if (brw->gen >= 8)
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   if (devinfo->gen >= 8)
       return 4;
 
    if (mt->num_samples > 1)
@@ -105,13 +109,13 @@ intel_vertical_texture_alignment_unit(struct brw_context *brw,
 
    GLenum base_format = _mesa_get_format_base_format(mt->format);
 
-   if (brw->gen >= 6 &&
+   if (devinfo->gen >= 6 &&
        (base_format == GL_DEPTH_COMPONENT ||
 	base_format == GL_DEPTH_STENCIL)) {
       return 4;
    }
 
-   if (brw->gen == 7) {
+   if (devinfo->gen == 7) {
       /* On Gen7, we prefer a vertical alignment of 4 when possible, because
        * that allows Y tiled render targets.
        *
@@ -301,8 +305,10 @@ brw_miptree_get_horizontal_slice_pitch(const struct brw_context *brw,
                                        const struct intel_mipmap_tree *mt,
                                        unsigned level)
 {
-   if ((brw->gen < 9 && mt->target == GL_TEXTURE_3D) ||
-       (brw->gen == 4 && mt->target == GL_TEXTURE_CUBE_MAP)) {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   if ((devinfo->gen < 9 && mt->target == GL_TEXTURE_3D) ||
+       (devinfo->gen == 4 && mt->target == GL_TEXTURE_CUBE_MAP)) {
       return ALIGN_NPOT(minify(mt->physical_width0, level), mt->halign);
    } else {
       return 0;
@@ -314,9 +320,11 @@ brw_miptree_get_vertical_slice_pitch(const struct brw_context *brw,
                                      const struct intel_mipmap_tree *mt,
                                      unsigned level)
 {
-   assert(mt->array_layout != GEN6_HIZ_STENCIL || brw->gen == 6);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
-   if (brw->gen >= 9) {
+   assert(mt->array_layout != GEN6_HIZ_STENCIL || devinfo->gen == 6);
+
+   if (devinfo->gen >= 9) {
       /* ALL_SLICES_AT_EACH_LOD isn't supported on Gen8+ but this code will
        * effectively end up with a packed qpitch anyway whenever
        * mt->first_level == mt->last_level.
@@ -344,7 +352,7 @@ brw_miptree_get_vertical_slice_pitch(const struct brw_context *brw,
       return qpitch;
 
    } else if (mt->target == GL_TEXTURE_3D ||
-              (brw->gen == 4 && mt->target == GL_TEXTURE_CUBE_MAP) ||
+              (devinfo->gen == 4 && mt->target == GL_TEXTURE_CUBE_MAP) ||
               mt->array_layout == ALL_SLICES_AT_EACH_LOD) {
       return ALIGN_NPOT(minify(mt->physical_height0, level), mt->valign);
 
@@ -361,7 +369,7 @@ brw_miptree_get_vertical_slice_pitch(const struct brw_context *brw,
       const unsigned h0 = ALIGN_NPOT(mt->physical_height0, mt->valign);
       const unsigned h1 = ALIGN_NPOT(minify(mt->physical_height0, 1), mt->valign);
 
-      return h0 + h1 + (brw->gen >= 7 ? 12 : 11) * mt->valign;
+      return h0 + h1 + (devinfo->gen >= 7 ? 12 : 11) * mt->valign;
    }
 }
 
@@ -381,11 +389,13 @@ bool
 gen9_use_linear_1d_layout(const struct brw_context *brw,
                           const struct intel_mipmap_tree *mt)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /* On Gen9+ the mipmap levels of a 1D surface are all laid out in a
     * horizontal line. This isn't done for depth/stencil buffers however
     * because those will be using a tiled layout
     */
-   if (brw->gen >= 9 &&
+   if (devinfo->gen >= 9 &&
        (mt->target == GL_TEXTURE_1D ||
         mt->target == GL_TEXTURE_1D_ARRAY)) {
       GLenum base_format = _mesa_get_format_base_format(mt->format);
@@ -403,6 +413,7 @@ static void
 brw_miptree_layout_texture_array(struct brw_context *brw,
 				 struct intel_mipmap_tree *mt)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    unsigned height = mt->physical_height0;
    bool layout_1d = gen9_use_linear_1d_layout(brw, mt);
    int physical_qpitch;
@@ -427,7 +438,7 @@ brw_miptree_layout_texture_array(struct brw_context *brw,
       /* Unlike previous generations the qpitch is a multiple of the
        * compressed block size on Gen9 so physical_qpitch matches mt->qpitch.
        */
-      physical_qpitch = (mt->compressed && brw->gen < 9 ? mt->qpitch / 4 :
+      physical_qpitch = (mt->compressed && devinfo->gen < 9 ? mt->qpitch / 4 :
                          mt->qpitch);
    }
 
@@ -561,8 +572,10 @@ brw_miptree_choose_tiling(struct brw_context *brw,
       return I915_TILING_NONE;
    }
 
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /* Pre-gen6 doesn't have BLORP to handle Y-tiling, so use X-tiling. */
-   if (brw->gen < 6)
+   if (devinfo->gen < 6)
       return I915_TILING_X;
 
    /* From the Sandybridge PRM, Volume 1, Part 2, page 32:
@@ -571,7 +584,7 @@ brw_miptree_choose_tiling(struct brw_context *brw,
     * 128 bits per pixel translates to 16 bytes per pixel. This is necessary
     * all the way back to 965, but is permitted on Gen7+.
     */
-   if (brw->gen < 7 && mt->cpp >= 16)
+   if (devinfo->gen < 7 && mt->cpp >= 16)
       return I915_TILING_X;
 
    /* From the Ivy Bridge PRM, Vol4 Part1 2.12.2.1 (SURFACE_STATE for most
@@ -586,7 +599,7 @@ brw_miptree_choose_tiling(struct brw_context *brw,
     * to know that ahead of time.  And besides, since we use a vertical
     * alignment of 4 as often as we can, this shouldn't happen very often.
     */
-   if (brw->gen == 7 && mt->valign == 2 &&
+   if (devinfo->gen == 7 && mt->valign == 2 &&
        brw->format_supported_as_render_target[mt->format]) {
       return I915_TILING_X;
    }
@@ -598,9 +611,11 @@ static void
 intel_miptree_set_total_width_height(struct brw_context *brw,
                                      struct intel_mipmap_tree *mt)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    switch (mt->target) {
    case GL_TEXTURE_CUBE_MAP:
-      if (brw->gen == 4) {
+      if (devinfo->gen == 4) {
          /* Gen4 stores cube maps as 3D textures. */
          assert(mt->physical_depth0 == 6);
          brw_miptree_layout_texture_3d(brw, mt);
@@ -611,7 +626,7 @@ intel_miptree_set_total_width_height(struct brw_context *brw,
       break;
 
    case GL_TEXTURE_3D:
-      if (brw->gen >= 9)
+      if (devinfo->gen >= 9)
          brw_miptree_layout_texture_array(brw, mt);
       else
          brw_miptree_layout_texture_3d(brw, mt);
@@ -652,6 +667,8 @@ intel_miptree_set_alignment(struct brw_context *brw,
                             struct intel_mipmap_tree *mt,
                             uint32_t layout_flags)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
    /**
     * From the "Alignment Unit Size" section of various specs, namely:
     * - Gen3 Spec: "Memory Data Formats" Volume,         Section 1.20.1.4
@@ -693,13 +710,13 @@ intel_miptree_set_alignment(struct brw_context *brw,
        * pick is 4 so we effectively have to align to 4 times the block
        * size
        */
-      if (brw->gen >= 9) {
+      if (devinfo->gen >= 9) {
          mt->halign *= 4;
          mt->valign *= 4;
       }
    } else if (mt->format == MESA_FORMAT_S_UINT8) {
       mt->halign = 8;
-      mt->valign = brw->gen >= 7 ? 8 : 4;
+      mt->valign = devinfo->gen >= 7 ? 8 : 4;
    } else {
       mt->halign =
          intel_horizontal_texture_alignment_unit(brw, mt, layout_flags);
@@ -721,7 +738,9 @@ brw_miptree_layout(struct brw_context *brw,
    /* On Gen9+ the alignment values are expressed in multiples of the block
     * size
     */
-   if (brw->gen >= 9) {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   if (devinfo->gen >= 9) {
       unsigned int i, j;
       _mesa_get_format_block_size(mt->format, &i, &j);
       mt->halign /= i;
@@ -733,4 +752,3 @@ brw_miptree_layout(struct brw_context *brw,
 
    return true;
 }
-

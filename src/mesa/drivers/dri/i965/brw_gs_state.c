@@ -39,6 +39,7 @@
 static void
 brw_upload_gs_unit(struct brw_context *brw)
 {
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct brw_gs_unit_state *gs;
 
    gs = brw_state_batch(brw, sizeof(*gs), 32, &brw->ff_gs.state_offset);
@@ -77,7 +78,7 @@ brw_upload_gs_unit(struct brw_context *brw)
 	 gs->thread4.max_threads = 0;
    }
 
-   if (brw->gen == 5)
+   if (devinfo->gen == 5)
       gs->thread4.rendering_enable = 1;
 
    /* BRW_NEW_VIEWPORT_COUNT */
