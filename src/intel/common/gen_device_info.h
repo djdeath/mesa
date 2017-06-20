@@ -48,7 +48,8 @@ struct gen_device_info
    bool is_geminilake;
    bool is_cannonlake;
 
-   bool has_hiz_and_separate_stencil;
+   bool has_hiz;
+   bool has_separate_stencil;
    bool must_use_separate_stencil;
 
    bool has_llc;

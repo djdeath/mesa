@@ -76,7 +76,8 @@ static const struct gen_device_info gen_device_info_ilk = {
 static const struct gen_device_info gen_device_info_snb_gt1 = {
    .gen = 6,
    .gt = 1,
-   .has_hiz_and_separate_stencil = true,
+   .has_hiz = true,
+   .has_separate_stencil = true,
    .has_llc = true,
    .has_pln = true,
    .has_surface_tile_offset = true,
@@ -102,7 +103,8 @@ static const struct gen_device_info gen_device_info_snb_gt1 = {
 static const struct gen_device_info gen_device_info_snb_gt2 = {
    .gen = 6,
    .gt = 2,
-   .has_hiz_and_separate_stencil = true,
+   .has_hiz = true,
+   .has_separate_stencil = true,
    .has_llc = true,
    .has_pln = true,
    .has_surface_tile_offset = true,
@@ -127,7 +129,8 @@ static const struct gen_device_info gen_device_info_snb_gt2 = {
 
 #define GEN7_FEATURES                               \
    .gen = 7,                                        \
-   .has_hiz_and_separate_stencil = true,            \
+   .has_hiz = true,                                 \
+   .has_separate_stencil = true,                    \
    .must_use_separate_stencil = true,               \
    .has_llc = true,                                 \
    .has_pln = true,                                 \
@@ -300,7 +303,8 @@ static const struct gen_device_info gen_device_info_hsw_gt3 = {
 
 #define GEN8_FEATURES                               \
    .gen = 8,                                        \
-   .has_hiz_and_separate_stencil = true,            \
+   .has_hiz = true,                                 \
+   .has_separate_stencil = true,                    \
    .has_resource_streamer = true,                   \
    .must_use_separate_stencil = true,               \
    .has_llc = true,                                 \

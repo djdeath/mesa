@@ -1383,7 +1383,7 @@ intelCreateBuffer(__DRIscreen *dri_screen,
    if (mesaVis->depthBits == 24) {
       assert(mesaVis->stencilBits == 8);
 
-      if (screen->devinfo.has_hiz_and_separate_stencil) {
+      if (screen->devinfo.has_hiz && screen->devinfo.has_separate_stencil) {
          rb = intel_create_private_renderbuffer(MESA_FORMAT_Z24_UNORM_X8_UINT,
                                                 num_samples);
          _mesa_attach_and_own_rb(fb, BUFFER_DEPTH, &rb->Base.Base);

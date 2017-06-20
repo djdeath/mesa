@@ -66,7 +66,7 @@ isl_device_init(struct isl_device *dev,
 
    /* Did we break hiz or stencil? */
    if (ISL_DEV_USE_SEPARATE_STENCIL(dev))
-      assert(info->has_hiz_and_separate_stencil);
+      assert(info->has_hiz && info->has_separate_stencil);
    if (info->must_use_separate_stencil)
       assert(ISL_DEV_USE_SEPARATE_STENCIL(dev));
 
@@ -1847,7 +1847,7 @@ isl_emit_depth_stencil_hiz_s(const struct isl_device *dev, void *batch,
                              const struct isl_depth_stencil_hiz_emit_info *restrict info)
 {
    if (info->depth_surf && info->stencil_surf) {
-      if (!dev->info->has_hiz_and_separate_stencil) {
+      if (!(dev->info->has_hiz && dev->info->has_separate_stencil)) {
          assert(info->depth_surf == info->stencil_surf);
          assert(info->depth_address == info->stencil_address);
       }
