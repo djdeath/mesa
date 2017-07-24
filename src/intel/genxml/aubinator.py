@@ -4,6 +4,7 @@ import mmap
 import os
 import struct
 
+import gen
 import gen9
 
 class FileStream:
@@ -37,6 +38,8 @@ class FileStream:
     def read_dword(self, dword_offset = 0):
         offset = self.offset + dword_offset * 4
         view = self._view_at(offset)
+        #print(offset)
+        #print(len(view['memory']))
         return struct.unpack_from('I', view['memory'], offset - view['offset'])[0]
 
     def has_dwords(self, dwords):
@@ -84,12 +87,9 @@ class Memory:
 
 #
 def read_commands(f, memory, offset, size):
-    end_offset = size
-    while offset < end_offset:
-        dw = f.read_dword(offset)
-        print("%x" % dw)
-        inst = gen9.cs.find_instruction(dw)
-        print(inst.name)
+    state = gen.DecodeState(memory, gen.View(f, offset, size))
+    ret = gen9.cs.decode_instructions(state)
+    print(ret)
 
 #
 def read_aub_block(f, memory):
