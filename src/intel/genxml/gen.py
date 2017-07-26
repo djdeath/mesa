@@ -192,7 +192,8 @@ class Address:
         return True
 
     def decode(self, state):
-        return {} # TODO
+        return { 'value': state.value,
+                 'description': '0x%x' % state.value } # TODO
 
 # Command streamer builder
 class GenCS:
@@ -239,11 +240,12 @@ class GenCS:
     def decode_instructions(self, state):
         ret = []
         while not state.view.ended():
+            print("view_offset=%i" % state.view.offset)
             dw = state.view.read_dword(0)
-            print("%x" % dw)
             inst = self.find_instruction(dw)
-            print("%x" % dw)
-            ret.append(inst.decode(state))
-            state.view.advance(4)
-            break
+            print(inst.name)
+            decoded = inst.decode(state)
+            ret.append(decoded)
+            print('dword_length=%i' % decoded['DWord Length']['value'])
+            state.view.advance(decoded['DWord Length']['value'] + inst.bias)
         return ret

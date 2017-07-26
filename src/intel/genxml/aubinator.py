@@ -1,6 +1,7 @@
 import argparse
 import math
 import mmap
+import pprint
 import os
 import struct
 
@@ -36,10 +37,12 @@ class FileStream:
         return self.view
 
     def read_dword(self, dword_offset = 0):
+        print('read dword file stream offset=%i dw_offset=%i' % (self.offset, dword_offset))
         offset = self.offset + dword_offset * 4
         view = self._view_at(offset)
-        #print(offset)
-        #print(len(view['memory']))
+        print('\toffset=%i' % view['offset'])
+        print('\tlen=%i' % len(view['memory']))
+        print('\taccess=%i' % (offset - view['offset']))
         return struct.unpack_from('I', view['memory'], offset - view['offset'])[0]
 
     def has_dwords(self, dwords):
@@ -80,16 +83,18 @@ class Memory:
     def write_from_stream(self, mem_offset, stream_offset, size):
         pass
 
-    def read_dword(self, offset):
-        c = self._find_chunk(offset)
-        return struct.unpack_from('I', c.memory, offset - c.offset)
+    def read_dword(self, dw_offset):
+        byte_offset = dw_offset * 4
+        c = self._find_chunk(byte_offset)
+        return struct.unpack_from('I', c.memory, byte_offset - c.offset)
 
 
 #
 def read_commands(f, memory, offset, size):
     state = gen.DecodeState(memory, gen.View(f, offset, size))
     ret = gen9.cs.decode_instructions(state)
-    print(ret)
+    pp = pprint.PrettyPrinter(indent=4)
+    pp.pprint(ret)
 
 #
 def read_aub_block(f, memory):
@@ -110,9 +115,9 @@ def read_aub_block(f, memory):
 
     if operation == 0x00000001: # data-write
         #memory.write(offset, data, size)
-        print("===> data-write")
+        print("===> data-write len=%i" % header_length)
     elif operation == 0x00000002: # command-write
-        print("===> command-write")
+        print("===> command-write len=%i" % header_length)
         read_commands(f, memory, header_length + 2, size)
 
     return True
@@ -161,6 +166,7 @@ def read_aub_frame(f, memory):
     else:
         pass
 
+    print("new_offset=%u -> %u" % (f.offset, new_offset))
     f.offset = new_offset
     return not_eos
 
