@@ -68,7 +68,7 @@ _type_to_gen_type = {
     'int': "gen.Integer(%i)",
     'uint': "gen.UInteger(%i)",
     'bool': 'gen.Boolean()',
-    'offset': 'gen.Offset()',
+    'offset': 'gen.OffsetFrom()',
     'address': 'gen.Address()',
 }
 
@@ -91,11 +91,12 @@ def type_to_gen_type(name, size):
 
 def write_field(f, field):
     name = field.get('name')
+    enums = field.findall('.//enum')
     fields = {
         'start': field.get('start'),
         'end': field.get('end'),
         'gen_type': type_to_gen_type(field.get('type'),
-                                     int(field.get('end')) - int(field.get('start')))
+                                     int(field.get('end')) - int(field.get('start')) + 1)
     }
     if 'default' in field.attrib:
         fields['default'] = field.get('default')

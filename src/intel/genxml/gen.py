@@ -21,26 +21,30 @@ class View:
         self.size = size
 
     def ended(self):
+        if self.size == 0:
+            return False
         return self.offset >= (self.start_offset + self.size)
 
-    def advance(self, length):
-        self.offset += length
+    def advance(self, dw_length):
+        self.offset += 4 * dw_length
 
-    def read_dword(self, offset):
-        return self.base.read_dword(self.offset + offset)
+    def read_dword(self, dw_offset):
+        return self.base.read_dword(self.offset / 4 + dw_offset)
 
 # Basic classes
-class Container:
-    def is_container(self):
-        return True
-
-class Struct(Container):
+class Struct:
     def __init__(self, name, length=0, bias=0):
         self.name = name
         self.length = length
         self.bias = bias
         self.fields = []
         self.opcode = None
+
+    def is_base(self):
+        return False
+
+    def is_container(self):
+        return True
 
     def add(self, field):
         self.fields.append(field)
@@ -95,27 +99,44 @@ class VariableGroup():
         return {}
 
 class Field:
-    def __init__(self, name, start, end, gen_type, default=None):
+    def __init__(self, name, start, gen_type, end=None, default=None):
         self.name = name
         self.start = start
-        self.end = end
+        self.end = end if end else start
         self.gen_type = gen_type
         self.default = default
 
     def decode(self, state):
-        if self.gen_type.is_container() and self.start >= 32:
+        if self.gen_type.is_base():
+            # Generate a value field for base types
+            value = 0
+            if (self.start - self.end) <= 32:
+                dw = state.view.read_dword(self.start / 32)
+                value = (dw >> (self.start % 2)) & ((1L << (self.end - self.start + 1)) - 1)
+            else:
+                assert ((self.start - self.end) % 32) == 0
+                value = 0
+                for i in range(self.start - self.end):
+                    dw = state.view.read_dword(self.start / 32)
+                    value = value | (dw << (32 * i))
+            state.value = value
+            ret = self.gen_type.decode(state)
+        elif self.gen_type.is_container() and self.start >= 32:
+            # Just push a new view for container types, they read the view
+            # themselves.
             offset = self.start / 8
             state.push_view(View(state.view, offset, state.view.size - offset))
             ret = self.gen_type.decode(state)
             state.pop_view()
         else:
-            dw = state.view.read_dword(self.start / 32)
-            state.value = (dw >> self.start) & ((1 << (self.end - self.start + 1)) - 1)
             ret = self.gen_type.decode(state)
         return ret
 
 # Basic types
 class BaseType:
+    def is_base(self):
+        return True
+
     def is_container(self):
         return False
 
@@ -132,15 +153,16 @@ class Enum(BaseType):
 
     def value(self, state, value):
         if value in self.index:
-            return { description: self.index[value], value: value }
-        return { value: value }
+            return { 'pretty': self.index[value],
+                     'value': value }
+        return { 'value': value }
 
 class Boolean(BaseType):
     def __init__(self):
         pass
 
     def decode(self, state):
-        return { 'description': 'True' if state.value != 0 else 'False',
+        return { 'pretty': 'True' if state.value != 0 else 'False',
                  'value': state.value }
 
 class Integer(BaseType):
@@ -174,26 +196,46 @@ class SFixed(BaseType):
     def decode(self, state):
         super(state) # TODO
 
-class Offset:
-    def __init__(self):
-        pass
+class OffsetFrom(BaseType):
+    def __init__(self, eval_func=None):
+        self.eval_func = eval_func
 
     def is_container(self):
         return True
 
     def decode(self, state):
+        if not self.eval_func:
+            return { 'value': state.value,
+                     'pretty': '0x%x' % state.value }
+
         return {} # TODO
 
-class Address:
-    def __init__(self):
-        pass
+class Address(BaseType):
+    def __init__(self, decode_func=None):
+        self.decode_func = decode_func
 
     def is_container(self):
         return True
 
     def decode(self, state):
-        return { 'value': state.value,
-                 'description': '0x%x' % state.value } # TODO
+        if not self.decode_func:
+            return { 'value': state.value,
+                     'pretty': '0x%x' % state.value }
+
+        addr = state.value
+        state.push_view(View(state.memory, addr, 0))
+        ret = { 'value': self.decode_func(state),
+                'pretty': '0x%x' % addr }
+        state.pop_view()
+        return ret
+
+class ArrayOf:
+    def __init__(self, gen_type, length):
+        self.gen_type = gen_type
+
+    def decode(self, state):
+        pass
+
 
 # Command streamer builder
 class GenCS:
@@ -235,17 +277,23 @@ class GenCS:
         return None
 
     def decode_instructions_until(self, state):
-        pass
+        ret = []
+        while True:
+            dw = state.view.read_dword(0)
+            inst = self.find_instruction(dw)
+            decoded = inst.decode(state)
+            ret.append(decoded)
+            state.view.advance(decoded['DWord Length']['value'] + inst.bias)
+            if inst.name == 'MI_BATCH_BUFFER_END':
+                break
+        return ret
 
     def decode_instructions(self, state):
         ret = []
         while not state.view.ended():
-            print("view_offset=%i" % state.view.offset)
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
-            print(inst.name)
             decoded = inst.decode(state)
             ret.append(decoded)
-            print('dword_length=%i' % decoded['DWord Length']['value'])
             state.view.advance(decoded['DWord Length']['value'] + inst.bias)
         return ret

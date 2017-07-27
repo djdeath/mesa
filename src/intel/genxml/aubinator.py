@@ -37,12 +37,8 @@ class FileStream:
         return self.view
 
     def read_dword(self, dword_offset = 0):
-        print('read dword file stream offset=%i dw_offset=%i' % (self.offset, dword_offset))
         offset = self.offset + dword_offset * 4
         view = self._view_at(offset)
-        print('\toffset=%i' % view['offset'])
-        print('\tlen=%i' % len(view['memory']))
-        print('\taccess=%i' % (offset - view['offset']))
         return struct.unpack_from('I', view['memory'], offset - view['offset'])[0]
 
     def has_dwords(self, dwords):
@@ -68,7 +64,7 @@ class Memory:
             if c.offset <= offset and (c.offset + c.size) < offset:
                 return c
         offset -= offset % self._CHUNK_SIZE
-        c = MemoryChunk(offset, self._CHUNK_SIZE)
+        c = self.MemoryChunk(offset, self._CHUNK_SIZE)
         self.chunks.append(c)
         return c
 
@@ -86,11 +82,12 @@ class Memory:
     def read_dword(self, dw_offset):
         byte_offset = dw_offset * 4
         c = self._find_chunk(byte_offset)
-        return struct.unpack_from('I', c.memory, byte_offset - c.offset)
+        return struct.unpack_from('I', c.memory, byte_offset - c.offset)[0]
 
 
 #
 def read_commands(f, memory, offset, size):
+    print('initial view offset=%i/%i size=%i' % (f.offset,offset, size))
     state = gen.DecodeState(memory, gen.View(f, offset, size))
     ret = gen9.cs.decode_instructions(state)
     pp = pprint.PrettyPrinter(indent=4)
@@ -118,7 +115,7 @@ def read_aub_block(f, memory):
         print("===> data-write len=%i" % header_length)
     elif operation == 0x00000002: # command-write
         print("===> command-write len=%i" % header_length)
-        read_commands(f, memory, header_length + 2, size)
+        read_commands(f, memory, 4 * (header_length + 2), size)
 
     return True
 
