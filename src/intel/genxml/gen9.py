@@ -2132,7 +2132,7 @@ cs.instruction(name='MI_BATCH_BUFFER_START', length=3, bias=2) \
     .add(gen.Field(name='Second Level Batch Buffer', start=22, end=22, gen_type=gen.UInteger(1))) \
     .add(gen.Field(name='MI Command Opcode', default=49, start=23, end=28, gen_type=gen.UInteger(6))) \
     .add(gen.Field(name='Command Type', default=0, start=29, end=31, gen_type=gen.UInteger(3))) \
-    .add(gen.Field(name='Batch Buffer Start Address', start=34, end=95, gen_type=gen.Address()))
+    .add(gen.Field(name='Batch Buffer Start Address', start=34, end=95, gen_type=gen.Address(cs.decode_instructions_until)))
 cs.instruction(name='MI_CLFLUSH', length=0, bias=2) \
     .add(gen.Field(name='DWord Length', default=1, start=0, end=9, gen_type=gen.UInteger(10))) \
     .add(gen.Field(name='Use Global GTT', start=22, end=22, gen_type=gen.Boolean())) \
