@@ -842,16 +842,13 @@ iter_advance_field(struct gen_field_iterator *iter)
    return true;
 }
 
-bool
-gen_field_iterator_next(struct gen_field_iterator *iter)
+static void
+gen_field_decode(struct gen_field_iterator *iter)
 {
    union {
       uint64_t qw;
       float f;
    } v;
-
-   if (!iter_advance_field(iter))
-      return false;
 
    if (iter->field->name)
       strncpy(iter->name, iter->field->name, sizeof(iter->name));
@@ -933,8 +930,6 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
       snprintf(iter->value + length, sizeof(iter->value) - length,
                " (%s)", enum_name);
    }
-
-   return true;
 }
 
 void
@@ -946,9 +941,25 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
    memset(iter, 0, sizeof(*iter));
 
    iter->group = group;
-   iter->field = group->fields;
+   if (group->fields)
+      iter->field = group->fields;
+   else
+      iter->field = group->next->fields;
    iter->p = p;
    iter->print_colors = print_colors;
+
+   gen_field_decode(iter);
+}
+
+bool
+gen_field_iterator_next(struct gen_field_iterator *iter)
+{
+   if (!iter_advance_field(iter))
+      return false;
+
+   gen_field_decode(iter);
+
+   return true;
 }
 
 static void
@@ -982,7 +993,7 @@ gen_print_group(FILE *outfile, struct gen_group *group,
    int last_dword = -1;
 
    gen_field_iterator_init(&iter, group, p, color);
-   while (gen_field_iterator_next(&iter)) {
+   do {
       if (last_dword != iter.dword) {
          for (int i = last_dword + 1; i <= iter.dword; i++)
             print_dword_header(outfile, &iter, offset, i);
@@ -996,5 +1007,5 @@ gen_print_group(FILE *outfile, struct gen_group *group,
                             &p[iter.dword], color);
          }
       }
-   }
+   } while (gen_field_iterator_next(&iter));
 }
