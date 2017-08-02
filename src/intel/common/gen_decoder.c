@@ -835,10 +835,6 @@ iter_advance_field(struct gen_field_iterator *iter)
    }
 
    iter->field = iter->field->next;
-   if (iter->field->name)
-       strncpy(iter->name, iter->field->name, sizeof(iter->name));
-   else
-      memset(iter->name, 0, sizeof(iter->name));
    iter->dword = iter_group_offset_bits(iter, iter->group_iter) / 32 +
       iter->field->start / 32;
    iter->struct_desc = NULL;
@@ -856,6 +852,11 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
 
    if (!iter_advance_field(iter))
       return false;
+
+   if (iter->field->name)
+      strncpy(iter->name, iter->field->name, sizeof(iter->name));
+   else
+      memset(iter->name, 0, sizeof(iter->name));
 
    if ((iter->field->end - iter->field->start) > 32)
       v.qw = ((uint64_t) iter->p[iter->dword+1] << 32) | iter->p[iter->dword];
