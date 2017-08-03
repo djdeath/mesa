@@ -729,9 +729,12 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
       else
          offset = 0;
 
-      fprintf(outfile, "%s0x%08"PRIx64":  0x%08x:  %-80s%s\n",
+      fprintf(outfile, "%s0x%08"PRIx64":  0x%08x:  %s (%i Dwords) %-80s %s\n",
               color, offset, p[0],
-              gen_group_get_name(inst), reset_color);
+              gen_group_get_name(inst),
+              gen_group_get_length(inst, p),
+              "",
+              reset_color);
 
       if (option_full_decode) {
          decode_group(inst, p, 0);
