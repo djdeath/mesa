@@ -855,9 +855,13 @@ gen_field_decode(struct gen_field_iterator *iter)
    else
       memset(iter->name, 0, sizeof(iter->name));
 
-   if ((iter->field->end - iter->field->start) > 32)
-      v.qw = ((uint64_t) iter->p[iter->dword+1] << 32) | iter->p[iter->dword];
-   else
+   memset(&v, 0, sizeof(v));
+
+   if ((iter->field->end - iter->field->start) > 32) {
+      if (&iter->p[iter->dword + 1] < iter->end)
+         v.qw = ((uint64_t) iter->p[iter->dword+1] << 32);
+      v.qw |= iter->p[iter->dword];
+   } else
       v.qw = iter->p[iter->dword];
 
    const char *enum_name = NULL;
@@ -946,6 +950,7 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
    else
       iter->field = group->next->fields;
    iter->p = p;
+   iter->end = &p[gen_group_get_length(iter->group, iter->p)];
    iter->print_colors = print_colors;
 
    gen_field_decode(iter);
