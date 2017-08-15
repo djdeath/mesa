@@ -280,10 +280,15 @@ class GenCS:
         ret = []
         while True:
             dw = state.view.read_dword(0)
+            print("dw=%x" % dw)
             inst = self.find_instruction(dw)
             decoded = inst.decode(state)
             ret.append(decoded)
-            state.view.advance(decoded['DWord Length']['value'] + inst.bias)
+            print(decoded)
+            if 'DWord Length' in decoded:
+                state.view.advance(decoded['DWord Length']['value'] + inst.bias)
+            else:
+                state.view.advance(1)
             if inst.name == 'MI_BATCH_BUFFER_END':
                 break
         return ret
