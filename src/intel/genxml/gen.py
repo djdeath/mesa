@@ -186,7 +186,9 @@ class UFixed(BaseType):
         self.fract = fract
 
     def decode(self, state):
-        super(state) # TODO
+        max = (1 << self.fract) - 1
+        return { 'pretty': float(state.value) / max,
+                 'value': state.value }
 
 class SFixed(BaseType):
     def __init__(self, num, fract):
@@ -194,6 +196,11 @@ class SFixed(BaseType):
         self.fract = fract
 
     def decode(self, state):
+        sign = state.value & (1 << self.fract)
+        sign = -1 if sign != 0 else 1
+        max = (1 << self.fract) - 1
+        return { 'pretty': sign * float(state.value & max) / max,
+                 'value': state.value }
         super(state) # TODO
 
 class OffsetFrom(BaseType):
