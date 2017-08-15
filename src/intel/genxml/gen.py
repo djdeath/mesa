@@ -190,8 +190,9 @@ class UFixed(BaseType):
         self.fract = fract
 
     def decode(self, state):
+        num = state.value >> self.fract
         max = (1 << self.fract) - 1
-        return { 'pretty': float(state.value) / max,
+        return { 'pretty': num + float(state.value) / max,
                  'value': state.value }
 
 class SFixed(BaseType):
@@ -200,8 +201,9 @@ class SFixed(BaseType):
         self.fract = fract
 
     def decode(self, state):
-        sign = state.value & (1 << self.fract)
-        sign = -1 if sign != 0 else 1
+        num = state.value >> self.fract
+        sign = -1 if (num & (1 << self.num)) != 0 else 1
+        num = num & ((1 << num) - 1)
         max = (1 << self.fract) - 1
         return { 'pretty': sign * float(state.value & max) / max,
                  'value': state.value }
