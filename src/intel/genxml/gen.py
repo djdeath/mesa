@@ -1,3 +1,5 @@
+import struct
+
 class DecodeState:
     def __init__(self, memory, view):
         self.memory = memory
@@ -178,7 +180,9 @@ class Float(BaseType):
         self.bits = bits
 
     def decode(self, state):
-        super(state) # TODO
+        s = struct.pack('>l', state.value)
+        return { 'pretty': struct.unpack('>f', s)[0],
+                 'value': state.value }
 
 class UFixed(BaseType):
     def __init__(self, num, fract):
