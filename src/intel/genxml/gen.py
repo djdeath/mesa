@@ -68,7 +68,13 @@ class Struct:
     def decode(self, state):
         ret = {}
         for f in self.fields:
-            ret[f.name] = f.decode(state)
+            retf = f.decode(state)
+            if hasattr(f, 'name'):
+                ret[f.name] = retf
+            else:
+                i = 0
+                # todo...
+                print("fuuuuuu")
         return ret
 
 class FixedGroup():
