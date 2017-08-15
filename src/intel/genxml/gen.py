@@ -153,11 +153,11 @@ class Enum(BaseType):
         for k, v in self.values.iteritems():
             self.index[v] = k
 
-    def value(self, state, value):
-        if value in self.index:
-            return { 'pretty': self.index[value],
-                     'value': value }
-        return { 'value': value }
+    def decode(self, state):
+        if state.value in self.index:
+            return { 'pretty': self.index[state.value],
+                     'value': state.value }
+        return { 'value': state.value }
 
 class Boolean(BaseType):
     def __init__(self):
