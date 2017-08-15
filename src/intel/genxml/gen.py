@@ -293,11 +293,9 @@ class GenCS:
         ret = []
         while True:
             dw = state.view.read_dword(0)
-            print("dw=%x" % dw)
             inst = self.find_instruction(dw)
             decoded = inst.decode(state)
-            ret.append(decoded)
-            print(decoded)
+            ret.append({ 'name': inst.name, 'value': decoded })
             if 'DWord Length' in decoded:
                 state.view.advance(decoded['DWord Length']['value'] + inst.bias)
             else:
@@ -312,6 +310,6 @@ class GenCS:
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
             decoded = inst.decode(state)
-            ret.append(decoded)
+            ret.append({ 'name': inst.name, 'value': decoded })
             state.view.advance(decoded['DWord Length']['value'] + inst.bias)
         return ret
