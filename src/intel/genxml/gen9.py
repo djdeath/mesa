@@ -1809,7 +1809,7 @@ cs.instruction(name='3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP', length=2, bias=2)
     .add(gen.Field(name='3D Command Opcode', default=0, start=24, end=26, gen_type=gen.UInteger(3))) \
     .add(gen.Field(name='Command SubType', default=3, start=27, end=28, gen_type=gen.UInteger(2))) \
     .add(gen.Field(name='Command Type', default=3, start=29, end=31, gen_type=gen.UInteger(3))) \
-    .add(gen.Field(name='SF Clip Viewport Pointer', start=38, end=63, gen_type=gen.OffsetFrom()))
+    .add(gen.Field(name='SF Clip Viewport Pointer', start=38, end=63, gen_type=gen.OffsetFrom(offset='Dynamic State Base Address', gen_type=cs.type('SF_CLIP_VIEWPORT'))))
 cs.instruction(name='3DSTATE_VS', length=9, bias=2) \
     .add(gen.Field(name='DWord Length', default=7, start=0, end=7, gen_type=gen.UInteger(8))) \
     .add(gen.Field(name='3D Command Sub Opcode', default=16, start=16, end=23, gen_type=gen.UInteger(8))) \

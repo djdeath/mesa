@@ -6,6 +6,7 @@ class DecodeState:
         self.views = [view]
         self.view = view
         self.value = 0
+        self.state = {}
 
     def push_view(self, view):
         self.views.append(view)
@@ -14,6 +15,13 @@ class DecodeState:
     def pop_view(self):
         self.views.pop()
         self.view = self.views[-1]
+
+    def apply(self, name, fields):
+        self.state[name] = {}
+        for k, v in fields.iteritems():
+            print(k)
+            print(v)
+            self.state[name][k] = v
 
 class View:
     def __init__(self, base, offset, size):
@@ -216,18 +224,26 @@ class SFixed(BaseType):
         super(state) # TODO
 
 class OffsetFrom(BaseType):
-    def __init__(self, eval_func=None):
-        self.eval_func = eval_func
+    def __init__(self, offset=None, gen_type=None):
+        self.offset = offset
+        self.gen_type = gen_type
 
     def is_container(self):
         return True
 
     def decode(self, state):
-        if not self.eval_func:
+        if not self.offset:
             return { 'value': state.value,
                      'pretty': '0x%x' % state.value }
 
-        return {} # TODO
+        print(state.state['STATE_BASE_ADDRESS'])
+        print(state.state['STATE_BASE_ADDRESS'][self.offset])
+        addr = state.state['STATE_BASE_ADDRESS'][self.offset]['value'] + state.value
+        state.push_view(View(state.memory, addr, 0))
+        ret = { 'value': self.gen_type.decode(state),
+                'pretty': '0x%x' % addr }
+        state.pop_view()
+        return ret
 
 class Address(BaseType):
     def __init__(self, decode_func=None):
@@ -301,6 +317,7 @@ class GenCS:
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
             decoded = inst.decode(state)
+            state.apply(inst.name, decoded)
             ret.append({ 'name': inst.name, 'value': decoded })
             if 'DWord Length' in decoded:
                 state.view.advance(decoded['DWord Length']['value'] + inst.bias)
@@ -316,6 +333,7 @@ class GenCS:
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
             decoded = inst.decode(state)
+            state.apply(inst.name, decoded)
             ret.append({ 'name': inst.name, 'value': decoded })
             state.view.advance(decoded['DWord Length']['value'] + inst.bias)
         return ret
