@@ -17,7 +17,9 @@ class DecodeState:
         self.view = self.views[-1]
 
     def apply(self, decoded_inst):
-        self.state[decoded_inst['name']] = decoded_inst['value']
+        self.state[decoded_inst['name']] = {}
+        for f in decoded_inst['value']:
+            self.state[decoded_inst['name']][f['name']] = f['value']
 
 class View:
     def __init__(self, base, offset, size):
@@ -70,15 +72,15 @@ class Struct:
         return (self.mask & dword) == self.opcode
 
     def decode(self, state):
-        values = {}
+        values = []
         for f in self.fields:
             value = f.decode(state)
             if hasattr(f, 'name'):
-                values[f.name] = value
+                values.append(value)
             else:
                 # Groups don't have names, just add their fields.
-                for k, v in value.iteritems():
-                    values[k] = v
+                for v in value:
+                    values.append(v)
         if self.name and len(self.name):
             return { 'name': self.name, 'value': values }
         return { 'value': values }
@@ -96,15 +98,17 @@ class FixedGroup():
         return self
 
     def decode(self, state):
-        values = {}
+        values = []
         i = 0
-        for offset in range(self.start,
-                            self.start + self.count * self.size,
-                            self.size):
-            state.push_view(View(state.view, offset, state.view.size - offset))
+        for bit_offset in range(self.start,
+                                self.start + self.count * self.size,
+                                self.size):
+            offset = bit_offset / 8
+            state.push_view(View(state.view, offset / 8, state.view.size - offset))
             for f in self.fields:
                 value = f.decode(state)
-                values["%s%i" % (f.name, i)] = value
+                values.append({ 'name': "%s%i" % (f.name, i),
+                                'value': value })
             state.pop_view()
             i += 1
         return values
@@ -155,6 +159,7 @@ class Field:
             state.pop_view()
         else:
             ret = self.gen_type.decode(state)
+        ret['name'] = self.name
         return ret
 
 # Basic types
@@ -245,7 +250,7 @@ class OffsetFrom(BaseType):
             return { 'value': state.value,
                      'pretty': '0x%x' % state.value }
 
-        addr = state.state['STATE_BASE_ADDRESS'][self.offset]['value'] + state.value
+        addr = state.state['STATE_BASE_ADDRESS'][self.offset] + state.value
         state.push_view(View(state.memory, addr, 0))
         ret = { 'value': self.gen_type.decode(state),
                 'pretty': '0x%x' % addr }
@@ -325,8 +330,8 @@ class GenCS:
             decoded = inst.decode(state)
             state.apply(decoded)
             ret.append(decoded)
-            if 'DWord Length' in decoded['value']:
-                state.view.advance(decoded['value']['DWord Length']['value'] + inst.bias)
+            if 'DWord Length' in state.state[inst.name]:
+                state.view.advance(state.state[inst.name]['DWord Length'] + inst.bias)
             else:
                 state.view.advance(1)
             if inst.name == 'MI_BATCH_BUFFER_END':
@@ -341,5 +346,5 @@ class GenCS:
             decoded = inst.decode(state)
             state.apply(decoded)
             ret.append(decoded)
-            state.view.advance(decoded['value']['DWord Length']['value'] + inst.bias)
+            state.view.advance(state.state[inst.name]['DWord Length'] + inst.bias)
         return ret
