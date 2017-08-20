@@ -139,15 +139,18 @@ class Field:
         if self.gen_type.is_base():
             # Generate a value field for base types
             value = 0
-            if (self.start - self.end) <= 32:
+            if (self.end - self.start) < 32:
+                assert (self.start / 32) == (self.end / 32)
                 dw = state.view.read_dword(self.start / 32)
-                value = (dw >> (self.start % 2)) & ((1L << (self.end - self.start + 1)) - 1)
+                value = (dw >> (self.start % 32)) & ((1L << (self.end - self.start + 1)) - 1)
             else:
-                assert ((self.start - self.end) % 32) == 0
+                assert (self.end - self.start) < 64
                 value = 0
-                for i in range(self.start - self.end):
-                    dw = state.view.read_dword(self.start / 32)
+                i = 0
+                while (self.start + i * 32) < self.end:
+                    dw = state.view.read_dword((self.start + i * 32) / 32)
                     value = value | (dw << (32 * i))
+                    i += 1
             state.value = value
             ret = self.gen_type.decode(state)
         elif self.gen_type.is_container() and self.start >= 32:
@@ -219,8 +222,8 @@ class UFixed(BaseType):
 
     def decode(self, state):
         num = state.value >> self.fract
-        max = (1 << self.fract) - 1
-        return { 'pretty': num + float(state.value) / max,
+        max_fract = (1 << self.fract) - 1
+        return { 'pretty': "%f fixed" % (num + float(state.value & max_fract) / max_fract),
                  'value': state.value }
 
 class SFixed(BaseType):
@@ -232,10 +235,9 @@ class SFixed(BaseType):
         num = state.value >> self.fract
         sign = -1 if (num & (1 << self.num)) != 0 else 1
         num = num & ((1 << num) - 1)
-        max = (1 << self.fract) - 1
-        return { 'pretty': sign * float(state.value & max) / max,
+        max_fract = (1 << self.fract) - 1
+        return { 'pretty': sign * (num + float(state.value & max_fract) / max_fract),
                  'value': state.value }
-        super(state) # TODO
 
 class OffsetFrom(BaseType):
     def __init__(self, offset=None, gen_type=None):
