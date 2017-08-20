@@ -16,12 +16,8 @@ class DecodeState:
         self.views.pop()
         self.view = self.views[-1]
 
-    def apply(self, name, fields):
-        self.state[name] = {}
-        for k, v in fields.iteritems():
-            print(k)
-            print(v)
-            self.state[name][k] = v
+    def apply(self, decoded_inst):
+        self.state[decoded_inst['name']] = decoded_inst['value']
 
 class View:
     def __init__(self, base, offset, size):
@@ -74,16 +70,20 @@ class Struct:
         return (self.mask & dword) == self.opcode
 
     def decode(self, state):
-        ret = {}
+        values = {}
         for f in self.fields:
-            retf = f.decode(state)
+            value = f.decode(state)
             if hasattr(f, 'name'):
-                ret[f.name] = retf
+                values[f.name] = value
             else:
                 i = 0
                 # todo...
                 print("fuuuuuu")
-        return ret
+                print(map(lambda e: e.name if hasattr(e, 'name') else '', f.fields))
+                print(value)
+        if self.name and len(self.name):
+            return { 'name': self.name, 'value': values }
+        return { 'value': values }
 
 class FixedGroup():
     def __init__(self, start, count, size):
@@ -236,8 +236,6 @@ class OffsetFrom(BaseType):
             return { 'value': state.value,
                      'pretty': '0x%x' % state.value }
 
-        print(state.state['STATE_BASE_ADDRESS'])
-        print(state.state['STATE_BASE_ADDRESS'][self.offset])
         addr = state.state['STATE_BASE_ADDRESS'][self.offset]['value'] + state.value
         state.push_view(View(state.memory, addr, 0))
         ret = { 'value': self.gen_type.decode(state),
@@ -270,7 +268,6 @@ class ArrayOf:
 
     def decode(self, state):
         pass
-
 
 # Command streamer builder
 class GenCS:
@@ -317,10 +314,10 @@ class GenCS:
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
             decoded = inst.decode(state)
-            state.apply(inst.name, decoded)
-            ret.append({ 'name': inst.name, 'value': decoded })
-            if 'DWord Length' in decoded:
-                state.view.advance(decoded['DWord Length']['value'] + inst.bias)
+            state.apply(decoded)
+            ret.append(decoded)
+            if 'DWord Length' in decoded['value']:
+                state.view.advance(decoded['value']['DWord Length']['value'] + inst.bias)
             else:
                 state.view.advance(1)
             if inst.name == 'MI_BATCH_BUFFER_END':
@@ -333,7 +330,7 @@ class GenCS:
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
             decoded = inst.decode(state)
-            state.apply(inst.name, decoded)
-            ret.append({ 'name': inst.name, 'value': decoded })
-            state.view.advance(decoded['DWord Length']['value'] + inst.bias)
+            state.apply(decoded)
+            ret.append(decoded)
+            state.view.advance(decoded['value']['DWord Length']['value'] + inst.bias)
         return ret
