@@ -76,11 +76,9 @@ class Struct:
             if hasattr(f, 'name'):
                 values[f.name] = value
             else:
-                i = 0
-                # todo...
-                print("fuuuuuu")
-                print(map(lambda e: e.name if hasattr(e, 'name') else '', f.fields))
-                print(value)
+                # Groups don't have names, just add their fields.
+                for k, v in value.iteritems():
+                    values[k] = v
         if self.name and len(self.name):
             return { 'name': self.name, 'value': values }
         return { 'value': values }
@@ -98,7 +96,18 @@ class FixedGroup():
         return self
 
     def decode(self, state):
-        return {}
+        values = {}
+        i = 0
+        for offset in range(self.start,
+                            self.start + self.count * self.size,
+                            self.size):
+            state.push_view(View(state.view, offset, state.view.size - offset))
+            for f in self.fields:
+                value = f.decode(state)
+                values["%s%i" % (f.name, i)] = value
+            state.pop_view()
+            i += 1
+        return values
 
 class VariableGroup():
     def __init__(self, start, size):
