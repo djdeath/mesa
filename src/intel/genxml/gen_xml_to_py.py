@@ -3,6 +3,10 @@ import re
 import sys
 import xml.etree.cElementTree as et
 
+# TODO:
+#   - nested enums
+#   - registers
+
 class Codegen:
 
     _file = None
