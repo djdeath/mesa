@@ -223,7 +223,7 @@ class UFixed(BaseType):
     def decode(self, state):
         num = state.value >> self.fract
         max_fract = (1 << self.fract) - 1
-        return { 'pretty': "%f fixed" % (num + float(state.value & max_fract) / max_fract),
+        return { 'pretty': num + float(state.value & max_fract) / max_fract,
                  'value': state.value }
 
 class SFixed(BaseType):
@@ -250,7 +250,7 @@ class OffsetFrom(BaseType):
     def decode(self, state):
         if not self.offset:
             return { 'value': state.value,
-                     'pretty': '0x%x' % state.value }
+                     'pretty': '0x%08x' % state.value }
 
         addr = state.state['STATE_BASE_ADDRESS'][self.offset] + state.value
         state.push_view(View(state.memory, addr, 0))
@@ -269,12 +269,12 @@ class Address(BaseType):
     def decode(self, state):
         if not self.decode_func:
             return { 'value': state.value,
-                     'pretty': '0x%x' % state.value }
+                     'pretty': '0x%08x' % state.value }
 
         addr = state.value
         state.push_view(View(state.memory, addr, 0))
         ret = { 'value': self.decode_func(state),
-                'pretty': '0x%x' % addr }
+                'pretty': '0x%08x' % addr }
         state.pop_view()
         return ret
 
