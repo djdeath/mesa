@@ -16,6 +16,10 @@ class DecodeState:
         self.views.pop()
         self.view = self.views[-1]
 
+    def replace_view(self, view):
+        self.views[-1] = view
+        self.view = view
+
     def apply(self, decoded_inst):
         self.state[decoded_inst['name']] = {}
         for f in decoded_inst['value']:
@@ -38,6 +42,33 @@ class View:
 
     def read_dword(self, dw_offset):
         return self.base.read_dword(self.offset / 4 + dw_offset)
+
+def bb_start(state, value):
+    if value['Second Level Batch Buffer'] == 1:
+        state.push_view(View(state.memory, value['Batch Buffer Start Address'], 0))
+    else:
+        state.replace_view(View(state.memory, value['Batch Buffer Start Address'], 0))
+
+def load_reg_imm(state, value):
+    pass
+
+def load_reg_mem(state, value):
+    pass
+
+def load_reg_reg(state, value):
+    pass
+
+def store_data_imm(state, value):
+    addr = value['Address']
+    if value['Store Qword']:
+
+execs = {
+    'MI_BATCH_BUFFER_START': bb_start,
+    'MI_LOAD_REGISTER_IMM': load_reg_imm,
+    'MI_LOAD_REGISTER_MEM': load_reg_mem,
+    'MI_LOAD_REGISTER_REG': load_reg_reg,
+    'MI_STORE_DATA_IMM': store_data_imm,
+}
 
 # Basic classes
 class Struct:
@@ -325,10 +356,15 @@ class GenCS:
         return None
 
     def decode_instructions_until(self, state):
+
         ret = []
         while True:
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
+            if inst is None:
+                print('unknown opcode 0x%x' % dw)
+                state.view.advance(1)
+                continue
             decoded = inst.decode(state)
             state.apply(decoded)
             ret.append(decoded)
@@ -345,6 +381,10 @@ class GenCS:
         while not state.view.ended():
             dw = state.view.read_dword(0)
             inst = self.find_instruction(dw)
+            if inst is None:
+                print('unknown opcode 0x%x' % dw)
+                state.view.advance(1)
+                continue
             decoded = inst.decode(state)
             state.apply(decoded)
             ret.append(decoded)

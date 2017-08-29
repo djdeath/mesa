@@ -105,7 +105,6 @@ class Memory:
         c = self._find_chunk(byte_offset)
         return struct.unpack_from('I', c.memory, byte_offset - c.offset)[0]
 
-
 #
 def read_commands(f, memory, offset, size):
     print('initial view offset=%i/%i size=%i' % (f.byte_offset, offset, size))
