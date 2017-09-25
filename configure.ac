@@ -2839,6 +2839,22 @@ fi
 
 AC_MSG_RESULT([$VALGRIND])
 
+AC_ARG_ENABLE(intel-tools,
+              [AS_HELP_STRING([--enable-intel-tools],
+                             [Build tools for intel GPUs (default: auto)])],
+                             [INTEL_TOOLS=$enableval], [INTEL_TOOLS=auto])
+if test "x$INTEL_TOOLS" != xno; then
+    PKG_CHECK_MODULES([AUBINATOR_UI], [gtk+-3.0 >= 3.20.0 cogl-2.0-experimental >= 1.18.0],
+                      [have_intel_tools=yes], [have_intel_tools=no])
+fi
+AC_MSG_CHECKING([whether to compile tools for intel GPUs])
+if test "x$INTEL_TOOLS" = xauto; then
+    INTEL_TOOLS="$have_intel_tools"
+fi
+AC_MSG_RESULT([$INTEL_TOOLS])
+
+AM_CONDITIONAL(HAVE_INTEL_TOOLS, test "x$INTEL_TOOLS" = xyes)
+
 dnl Restore LDFLAGS and CPPFLAGS
 LDFLAGS="$_SAVE_LDFLAGS"
 CPPFLAGS="$_SAVE_CPPFLAGS"

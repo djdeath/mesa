@@ -43,6 +43,7 @@ pre_args = [
 with_vulkan_icd_dir = get_option('vulkan-icd-dir')
 with_tests = get_option('build-tests')
 with_valgrind = get_option('valgrind')
+with_intel_tools = get_option('intel-tools')
 with_libunwind = get_option('libunwind')
 with_asm = get_option('asm')
 with_llvm = get_option('llvm')
@@ -699,6 +700,12 @@ if with_valgrind != 'false'
 else
   dep_valgrind = []
 endif
+
+dep_aubinator_ui = [
+  dependency('gtk+-3.0', version: '>= 3.20.0'),
+  dependency('cogl-2.0-experimental', version: '>= 1.18.0'),
+]
+with_intel_tools = get_option('intel-tools') and dep_aubinator_ui[0].found() and dep_aubinator_ui[1].found()
 
 # pthread stubs. Lets not and say we didn't
 

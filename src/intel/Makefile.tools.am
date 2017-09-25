@@ -23,6 +23,12 @@ noinst_PROGRAMS += \
 	tools/aubinator \
 	tools/aubinator_error_decode
 
+if HAVE_INTEL_TOOLS
+noinst_PROGRAMS += \
+	tools/aubinator_ui \
+	tools/memory_tests
+endif
+
 tools_aubinator_SOURCES = \
 	tools/aubinator.c \
 	tools/disasm.c \
@@ -43,6 +49,51 @@ tools_aubinator_LDADD = \
 	$(ZLIB_LIBS) \
 	-lm
 
+tools_aubinator_ui_SOURCES = \
+	tools/aubinator_imgui_widgets.cpp \
+	tools/aubinator_imgui_widgets.h \
+	tools/aubinator_ui.cpp \
+	tools/disasm.c \
+	tools/gen_disasm.h \
+	tools/imgui/imconfig.h \
+	tools/imgui/imgui.cpp \
+	tools/imgui/imgui.h \
+	tools/imgui/imgui_demo.cpp \
+	tools/imgui/imgui_draw.cpp \
+	tools/imgui/imgui_impl_gtk3_cogl.cpp \
+	tools/imgui/imgui_impl_gtk3_cogl.h \
+	tools/imgui/imgui_internal.h \
+	tools/imgui/stb_rect_pack.h \
+	tools/imgui/stb_textedit.h \
+	tools/imgui/stb_truetype.h \
+	tools/intel_aub.h \
+	tools/memory.c \
+	tools/memory.h
+
+tools_aubinator_ui_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(EXPAT_CFLAGS) \
+	$(ZLIB_CFLAGS) \
+	$(AUBINATOR_UI_CFLAGS) \
+	-Itools/imgui
+
+tools_aubinator_ui_CXXFLAGS = \
+	-std=c++11 \
+	$(AUBINATOR_UI_CFLAGS) \
+	-Itools/imgui
+
+tools_aubinator_ui_LDADD = \
+	common/libintel_common.la \
+	compiler/libintel_compiler.la \
+	isl/libisl.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(PER_GEN_LIBS) \
+	$(PTHREAD_LIBS) \
+	$(DLOPEN_LIBS) \
+	$(EXPAT_LIBS) \
+	$(ZLIB_LIBS) \
+	$(AUBINATOR_UI_LIBS) \
+	-lm
 
 tools_aubinator_error_decode_SOURCES = \
 	tools/aubinator_error_decode.c \
@@ -59,3 +110,10 @@ tools_aubinator_error_decode_LDADD = \
 tools_aubinator_error_decode_CFLAGS = \
 	$(AM_CFLAGS) \
 	$(ZLIB_CFLAGS)
+
+tools_memory_tests_CFLAGS = \
+	$(AM_CFLAGS) \
+	-DBUILD_TESTS=1
+tools_memory_tests_SOURCES = \
+	tools/memory.c \
+	tools/memory.h
