@@ -1833,7 +1833,7 @@
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="36"/>
     <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
-    <field name="Register Address" start="34" end="54" type="offset"/>
+    <field name="Register Offset" start="34" end="54" type="offset"/>
     <field name="Memory Address" start="66" end="95" type="address"/>
   </instruction>
 

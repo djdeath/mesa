@@ -367,11 +367,11 @@ emit_pipeline_stat(struct anv_cmd_buffer *cmd_buffer, uint32_t stat,
    uint32_t reg = vk_pipeline_stat_to_reg[stat];
 
    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), lrm) {
-      lrm.RegisterAddress  = reg,
+      lrm.RegisterOffset   = reg,
       lrm.MemoryAddress    = (struct anv_address) { bo, offset };
    }
    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), lrm) {
-      lrm.RegisterAddress  = reg + 4,
+      lrm.RegisterOffset   = reg + 4,
       lrm.MemoryAddress    = (struct anv_address) { bo, offset + 4 };
    }
 }
@@ -481,11 +481,11 @@ void genX(CmdWriteTimestamp)(
    switch (pipelineStage) {
    case VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT:
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress  = TIMESTAMP;
+         srm.RegisterOffset   = TIMESTAMP;
          srm.MemoryAddress    = (struct anv_address) { &pool->bo, offset + 8 };
       }
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress  = TIMESTAMP + 4;
+         srm.RegisterOffset   = TIMESTAMP + 4;
          srm.MemoryAddress    = (struct anv_address) { &pool->bo, offset + 12 };
       }
       break;
@@ -530,11 +530,11 @@ emit_load_alu_reg_u64(struct anv_batch *batch, uint32_t reg,
                       struct anv_bo *bo, uint32_t offset)
 {
    anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-      lrm.RegisterAddress  = reg,
+      lrm.RegisterOffset   = reg,
       lrm.MemoryAddress    = (struct anv_address) { bo, offset };
    }
    anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-      lrm.RegisterAddress  = reg + 4;
+      lrm.RegisterOffset   = reg + 4;
       lrm.MemoryAddress    = (struct anv_address) { bo, offset + 4 };
    }
 }
@@ -559,8 +559,8 @@ static void
 emit_load_alu_reg_reg32(struct anv_batch *batch, uint32_t src, uint32_t dst)
 {
    anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_REG), lrr) {
-      lrr.SourceRegisterAddress      = src;
-      lrr.DestinationRegisterAddress = dst;
+      lrr.SourceRegisterOffset      = src;
+      lrr.DestinationRegisterOffset = dst;
    }
 }
 
@@ -645,7 +645,7 @@ gpu_write_query_result(struct anv_batch *batch,
       dst_offset += value_index * 4;
 
    anv_batch_emit(batch, GENX(MI_STORE_REGISTER_MEM), srm) {
-      srm.RegisterAddress  = reg;
+      srm.RegisterOffset   = reg;
       srm.MemoryAddress    = (struct anv_address) {
          .bo = dst_buffer->bo,
          .offset = dst_buffer->offset + dst_offset,
@@ -654,7 +654,7 @@ gpu_write_query_result(struct anv_batch *batch,
 
    if (flags & VK_QUERY_RESULT_64_BIT) {
       anv_batch_emit(batch, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress  = reg + 4;
+         srm.RegisterOffset   = reg + 4;
          srm.MemoryAddress    = (struct anv_address) {
             .bo = dst_buffer->bo,
             .offset = dst_buffer->offset + dst_offset + 4,

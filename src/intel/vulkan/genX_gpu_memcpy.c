@@ -78,11 +78,11 @@ genX(cmd_buffer_mi_memcpy)(struct anv_cmd_buffer *cmd_buffer,
        */
 #define TEMP_REG 0x2440 /* GEN7_3DPRIM_BASE_VERTEX */
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_MEM), load) {
-         load.RegisterAddress = TEMP_REG;
+         load.RegisterOffset = TEMP_REG;
          load.MemoryAddress = src_addr;
       }
       anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), store) {
-         store.RegisterAddress = TEMP_REG;
+         store.RegisterOffset = TEMP_REG;
          store.MemoryAddress = dst_addr;
       }
 #undef TEMP_REG

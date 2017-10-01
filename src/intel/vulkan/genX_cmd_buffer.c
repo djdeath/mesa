@@ -37,7 +37,7 @@ emit_lrm(struct anv_batch *batch,
          uint32_t reg, struct anv_bo *bo, uint32_t offset)
 {
    anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-      lrm.RegisterAddress  = reg;
+      lrm.RegisterOffset   = reg;
       lrm.MemoryAddress    = (struct anv_address) { bo, offset };
    }
 }
@@ -56,8 +56,8 @@ static void
 emit_lrr(struct anv_batch *batch, uint32_t dst, uint32_t src)
 {
    anv_batch_emit(batch, GENX(MI_LOAD_REGISTER_REG), lrr) {
-      lrr.SourceRegisterAddress        = src;
-      lrr.DestinationRegisterAddress   = dst;
+      lrr.SourceRegisterOffset        = src;
+      lrr.DestinationRegisterOffset   = dst;
    }
 }
 #endif

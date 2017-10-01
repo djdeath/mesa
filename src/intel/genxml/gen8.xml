@@ -2835,7 +2835,7 @@
     <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="Async Mode Enable" start="21" end="21" type="bool"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
-    <field name="Register Address" start="34" end="54" type="offset"/>
+    <field name="Register Offset" start="34" end="54" type="offset"/>
     <field name="Memory Address" start="66" end="127" type="address"/>
   </instruction>
 
@@ -2843,8 +2843,8 @@
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="42"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
-    <field name="Source Register Address" start="34" end="54" type="offset"/>
-    <field name="Destination Register Address" start="66" end="86" type="offset"/>
+    <field name="Source Register Offset" start="34" end="54" type="offset"/>
+    <field name="Destination Register Offset" start="66" end="86" type="offset"/>
   </instruction>
 
   <instruction name="MI_LOAD_SCAN_LINES_EXCL" bias="2" length="2">
@@ -3056,7 +3056,7 @@
     <field name="Use Global GTT" start="22" end="22" type="bool"/>
     <field name="Predicate Enable" start="21" end="21" type="bool"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
-    <field name="Register Address" start="34" end="54" type="offset"/>
+    <field name="Register Offset" start="34" end="54" type="offset"/>
     <field name="Memory Address" start="66" end="127" type="address"/>
   </instruction>
 
