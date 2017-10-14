@@ -2649,7 +2649,7 @@ genX(upload_gs_state)(struct brw_context *brw)
             DIV_ROUND_UP(vue_prog_data->vue_map.num_slots, 2) -
             urb_entry_write_offset;
 
-         gs.VertexURBEntryOutputReadOffset = urb_entry_write_offset;
+         gs.VertexURBEntryOutputOffset = urb_entry_write_offset;
          gs.VertexURBEntryOutputLength = MAX2(urb_entry_output_length, 1);
 #endif
       }
