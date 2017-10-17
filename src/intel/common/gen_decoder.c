@@ -718,35 +718,34 @@ gen_group_find_field(struct gen_group *group, const char *name)
 }
 
 int
-gen_group_get_length(struct gen_group *group, const uint32_t *p)
+gen_group_get_length(struct gen_group *group, uint32_t dw0)
 {
-   uint32_t h = p[0];
-   uint32_t type = field_value(h, 29, 31);
+   uint32_t type = field_value(dw0, 29, 31);
 
    switch (type) {
    case 0: /* MI */ {
-      uint32_t opcode = field_value(h, 23, 28);
+      uint32_t opcode = field_value(dw0, 23, 28);
       if (opcode < 16)
          return 1;
       else
-         return field_value(h, 0, 7) + 2;
+         return field_value(dw0, 0, 7) + 2;
       break;
    }
 
    case 2: /* BLT */ {
-      return field_value(h, 0, 7) + 2;
+      return field_value(dw0, 0, 7) + 2;
    }
 
    case 3: /* Render */ {
-      uint32_t subtype = field_value(h, 27, 28);
-      uint32_t opcode = field_value(h, 24, 26);
-      uint16_t whole_opcode = field_value(h, 16, 31);
+      uint32_t subtype = field_value(dw0, 27, 28);
+      uint32_t opcode = field_value(dw0, 24, 26);
+      uint16_t whole_opcode = field_value(dw0, 16, 31);
       switch (subtype) {
       case 0:
          if (whole_opcode == 0x6104 /* PIPELINE_SELECT_965 */)
             return 1;
          else if (opcode < 2)
-            return field_value(h, 0, 7) + 2;
+            return field_value(dw0, 0, 7) + 2;
          else
             return -1;
       case 1:
@@ -756,9 +755,9 @@ gen_group_get_length(struct gen_group *group, const uint32_t *p)
             return -1;
       case 2: {
          if (opcode == 0)
-            return field_value(h, 0, 7) + 2;
+            return field_value(dw0, 0, 7) + 2;
          else if (opcode < 3)
-            return field_value(h, 0, 15) + 2;
+            return field_value(dw0, 0, 15) + 2;
          else
             return -1;
       }
@@ -766,7 +765,7 @@ gen_group_get_length(struct gen_group *group, const uint32_t *p)
          if (whole_opcode == 0x780b)
             return 1;
          else if (opcode < 4)
-            return field_value(h, 0, 7) + 2;
+            return field_value(dw0, 0, 7) + 2;
          else
             return -1;
       }
@@ -805,7 +804,7 @@ iter_more_groups(const struct gen_field_iterator *iter)
 {
    if (iter->group->variable) {
       return iter_group_offset_bits(iter, iter->group_iter + 1) <
-              (gen_group_get_length(iter->group, iter->p) * 32);
+              (gen_group_get_length(iter->group, iter->p[0]) * 32);
    } else {
       return (iter->group_iter + 1) < iter->group->group_count ||
          iter->group->next != NULL;
@@ -978,7 +977,7 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
    else
       iter->field = group->next->fields;
    iter->p = p;
-   iter->p_end = &p[gen_group_get_length(iter->group, iter->p)];
+   iter->p_end = &p[gen_group_get_length(iter->group, p[0])];
    iter->print_colors = print_colors;
 
    iter_decode_field(iter);

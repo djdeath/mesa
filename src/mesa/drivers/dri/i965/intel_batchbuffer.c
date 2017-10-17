@@ -455,7 +455,7 @@ do_batch_dump(struct brw_context *brw)
 
    for (uint32_t *p = batch_data; p < end; p += length) {
       struct gen_group *inst = gen_spec_find_instruction(spec, p);
-      length = gen_group_get_length(inst, p);
+      length = gen_group_get_length(inst, p[0]);
       assert(inst == NULL || length > 0);
       length = MAX2(1, length);
       if (inst == NULL) {

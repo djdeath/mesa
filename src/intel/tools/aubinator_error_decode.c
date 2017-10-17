@@ -250,7 +250,7 @@ static void decode(struct gen_spec *spec,
       uint64_t offset = gtt_offset + 4 * (p - data);
 
       inst = gen_spec_find_instruction(spec, p);
-      length = gen_group_get_length(inst, p);
+      length = gen_group_get_length(inst, p[0]);
       assert(inst == NULL || length > 0);
       length = MAX2(1, length);
       if (inst == NULL) {
