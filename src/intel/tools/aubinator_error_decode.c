@@ -67,9 +67,10 @@ static void
 print_register(struct gen_spec *spec, const char *name, uint32_t reg)
 {
    struct gen_group *reg_spec = gen_spec_find_register_by_name(spec, name);
+   struct gen_dword_reader reader = { &reg, gen_read_dword_from_pointer };
 
    if (reg_spec)
-      gen_print_group(stdout, reg_spec, 0, &reg, option_color == COLOR_ALWAYS);
+      gen_print_group(stdout, reg_spec, 0, &reader, option_color == COLOR_ALWAYS);
 }
 
 struct ring_register_mapping {
@@ -265,7 +266,8 @@ static void decode(struct gen_spec *spec,
       printf("%s0x%08"PRIx64":  0x%08x:  %-80s%s\n",
              color, offset, p[0], gen_group_get_name(inst), reset_color);
 
-      gen_print_group(stdout, inst, offset, p,
+      struct gen_dword_reader reader = { p, gen_read_dword_from_pointer };
+      gen_print_group(stdout, inst, offset, &reader,
                       option_color == COLOR_ALWAYS);
 
       if (strcmp(inst->name, "MI_BATCH_BUFFER_END") == 0)
@@ -273,7 +275,7 @@ static void decode(struct gen_spec *spec,
 
       if (strcmp(inst->name, "STATE_BASE_ADDRESS") == 0) {
          struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
+         gen_field_iterator_init(&iter, inst, &reader, false);
 
          while (gen_field_iterator_next(&iter)) {
             if (strcmp(iter.name, "Instruction Base Address") == 0) {
@@ -284,7 +286,7 @@ static void decode(struct gen_spec *spec,
                  strcmp(inst->name, "3DSTATE_PS") == 0 ||
                  strcmp(inst->name, "3DSTATE_WM") == 0) {
          struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
+         gen_field_iterator_init(&iter, inst, &reader, false);
          uint64_t ksp[3] = {0, 0, 0};
          bool enabled[3] = {false, false, false};
 
@@ -355,7 +357,7 @@ static void decode(struct gen_spec *spec,
                  strcmp(inst->name, "3DSTATE_GS") == 0 ||
                  strcmp(inst->name, "3DSTATE_VS") == 0) {
          struct gen_field_iterator iter;
-         gen_field_iterator_init(&iter, inst, p, false);
+         gen_field_iterator_init(&iter, inst, &reader, false);
          uint64_t ksp = 0;
          bool is_simd8 = false; /* vertex shaders on Gen8+ only */
          bool is_enabled = true;

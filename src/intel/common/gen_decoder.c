@@ -799,12 +799,18 @@ iter_group_offset_bits(const struct gen_field_iterator *iter,
    return iter->group->group_offset + (group_iter * iter->group->group_size);
 }
 
+uint32_t gen_read_dword_from_pointer(void *user_data, uint32_t dword_offset)
+{
+   return ((uint32_t *) user_data)[dword_offset];
+}
+
 static bool
 iter_more_groups(const struct gen_field_iterator *iter)
 {
    if (iter->group->variable) {
       return iter_group_offset_bits(iter, iter->group_iter + 1) <
-              (gen_group_get_length(iter->group, iter->p[0]) * 32);
+             (gen_group_get_length(iter->group,
+                                   gen_read_dword(iter->reader, 0)) * 32);
    } else {
       return (iter->group_iter + 1) < iter->group->group_count ||
          iter->group->next != NULL;
@@ -856,17 +862,20 @@ iter_advance_field(struct gen_field_iterator *iter)
 
 static uint64_t
 iter_decode_field_raw(struct gen_field *field,
-                      const uint32_t *p,
-                      const uint32_t *end)
+                      uint32_t dword_offset,
+                      uint32_t dword_end,
+                      const struct gen_dword_reader *reader)
 {
    uint64_t qw = 0;
 
    if ((field->end - field->start) > 32) {
-      if ((p + 1) < end)
-         qw = ((uint64_t) p[1]) << 32;
-      qw |= p[0];
+      if ((dword_offset + 1) < dword_end) {
+         qw = gen_read_dword(reader, dword_offset + 1);
+         qw <<= 32;
+      }
+      qw |= gen_read_dword(reader, dword_offset);
    } else
-      qw = p[0];
+      qw = gen_read_dword(reader, dword_offset);
 
    qw = field_value(qw, field->start, field->end);
 
@@ -895,8 +904,8 @@ iter_decode_field(struct gen_field_iterator *iter)
 
    memset(&v, 0, sizeof(v));
 
-   v.qw = iter_decode_field_raw(iter->field,
-                                &iter->p[iter->dword], iter->p_end);
+   v.qw = iter_decode_field_raw(iter->field, iter->dword,
+                                iter->dword_end, iter->reader);
 
    const char *enum_name = NULL;
 
@@ -966,7 +975,7 @@ iter_decode_field(struct gen_field_iterator *iter)
 void
 gen_field_iterator_init(struct gen_field_iterator *iter,
                         struct gen_group *group,
-                        const uint32_t *p,
+                        const struct gen_dword_reader *reader,
                         bool print_colors)
 {
    memset(iter, 0, sizeof(*iter));
@@ -976,8 +985,9 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
       iter->field = group->fields;
    else
       iter->field = group->next->fields;
-   iter->p = p;
-   iter->p_end = &p[gen_group_get_length(iter->group, p[0])];
+   iter->reader = reader;
+   iter->dword_end = gen_group_get_length(iter->group,
+                                          gen_read_dword(reader, 0));
    iter->print_colors = print_colors;
 
    iter_decode_field(iter);
@@ -997,10 +1007,12 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
 static void
 print_dword_header(FILE *outfile,
                    struct gen_field_iterator *iter,
-                   uint64_t offset, uint32_t dword)
+                   uint64_t offset,
+                   uint32_t dword)
 {
    fprintf(outfile, "0x%08"PRIx64":  0x%08x : Dword %d\n",
-           offset + 4 * dword, iter->p[dword], dword);
+           offset + 4 * dword,
+           gen_read_dword(iter->reader, dword), dword);
 }
 
 bool
@@ -1018,21 +1030,38 @@ gen_field_is_header(struct gen_field *field)
 }
 
 void gen_field_decode(struct gen_field *field,
-                      const uint32_t *p, const uint32_t *end,
+                      const struct gen_dword_reader *reader,
                       union gen_field_value *value)
 {
+   uint32_t length = gen_group_get_length(field->parent,
+                                          gen_read_dword(reader, 0));
    uint32_t dword = field->start / 32;
-   value->u64 = iter_decode_field_raw(field, &p[dword], end);
+   value->u64 = iter_decode_field_raw(field, dword, length, reader);
+}
+
+struct sub_struct_reader {
+   struct gen_dword_reader base;
+   const struct gen_dword_reader *reader;
+   uint32_t struct_offset;
+};
+
+static uint32_t
+read_struct_dword(void *user_data, uint32_t dword_offset)
+{
+   struct sub_struct_reader *reader = user_data;
+   return gen_read_dword(reader->reader, reader->struct_offset + dword_offset);
 }
 
 void
 gen_print_group(FILE *outfile, struct gen_group *group,
-                uint64_t offset, const uint32_t *p, bool color)
+                uint64_t offset,
+                const struct gen_dword_reader *reader,
+                bool color)
 {
    struct gen_field_iterator iter;
    int last_dword = -1;
 
-   gen_field_iterator_init(&iter, group, p, color);
+   gen_field_iterator_init(&iter, group, reader, color);
    do {
       if (last_dword != iter.dword) {
          for (int i = last_dword + 1; i <= iter.dword; i++)
@@ -1043,8 +1072,16 @@ gen_print_group(FILE *outfile, struct gen_group *group,
          fprintf(outfile, "    %s: %s\n", iter.name, iter.value);
          if (iter.struct_desc) {
             uint64_t struct_offset = offset + 4 * iter.dword;
+            struct sub_struct_reader struct_reader = {
+               .base = {
+                  .user_data = &struct_reader,
+                  .read = read_struct_dword,
+               },
+               .reader = reader,
+               .struct_offset = 4 * iter.dword,
+            };
             gen_print_group(outfile, iter.struct_desc, struct_offset,
-                            &p[iter.dword], color);
+                            &struct_reader.base, color);
          }
       }
    } while (gen_field_iterator_next(&iter));

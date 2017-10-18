@@ -93,8 +93,13 @@ static void
 decode_group(struct gen_group *strct, const uint32_t *p, int starting_dword)
 {
    uint64_t offset = option_print_offsets ? (void *) p - gtt : 0;
+   struct gen_dword_reader reader = {
+      .user_data = (void *) p,
+      .read = gen_read_dword_from_pointer,
+   };
 
-   gen_print_group(outfile, strct, offset, p, option_color == COLOR_ALWAYS);
+   gen_print_group(outfile, strct, offset, &reader,
+                   option_color == COLOR_ALWAYS);
 }
 
 static void

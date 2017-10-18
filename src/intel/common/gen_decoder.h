@@ -39,6 +39,19 @@ struct gen_group;
 struct gen_field;
 union gen_field_value;
 
+struct gen_dword_reader {
+   void *user_data;
+   uint32_t (*read)(void *user_data, uint32_t dword_offset);
+};
+
+uint32_t gen_read_dword_from_pointer(void *user_data, uint32_t dword_offset);
+
+static inline uint32_t
+gen_read_dword(const struct gen_dword_reader *reader, uint32_t dword_offset)
+{
+   return reader->read(reader->user_data, dword_offset);
+}
+
 static inline uint32_t gen_make_gen(uint32_t major, uint32_t minor)
 {
    return (major << 8) | minor;
@@ -63,7 +76,7 @@ struct gen_field *gen_group_find_field(struct gen_group *group, const char *name
 
 bool gen_field_is_header(struct gen_field *field);
 void gen_field_decode(struct gen_field *field,
-                      const uint32_t *p, const uint32_t *end,
+                      const struct gen_dword_reader *reader,
                       union gen_field_value *value);
 
 struct gen_field_iterator {
@@ -71,11 +84,11 @@ struct gen_field_iterator {
    char name[128];
    char value[128];
    struct gen_group *struct_desc;
-   const uint32_t *p;
-   const uint32_t *p_end;
+   const struct gen_dword_reader *reader;
    int dword; /**< current field starts at &p[dword] */
    int start; /**< current field starts at this bit number */
    int end;   /**< current field ends at this bit number */
+   int dword_end;
 
    int group_iter;
 
@@ -176,14 +189,15 @@ struct gen_field {
 
 void gen_field_iterator_init(struct gen_field_iterator *iter,
                              struct gen_group *group,
-                             const uint32_t *p,
+                             const struct gen_dword_reader *reader,
                              bool print_colors);
 
 bool gen_field_iterator_next(struct gen_field_iterator *iter);
 
 void gen_print_group(FILE *out,
                      struct gen_group *group,
-                     uint64_t offset, const uint32_t *p,
+                     uint64_t offset,
+                     const struct gen_dword_reader *reader,
                      bool color);
 
 #ifdef __cplusplus
