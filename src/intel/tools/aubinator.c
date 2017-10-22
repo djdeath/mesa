@@ -692,7 +692,7 @@ parse_commands(struct gen_spec *spec, uint32_t *cmds, int size, int engine)
    struct gen_group *inst;
 
    for (p = cmds; p < end; p += length) {
-      inst = gen_spec_find_instruction(spec, p);
+      inst = gen_spec_find_instruction(spec, p[0]);
       length = gen_group_get_length(inst, p[0]);
       assert(inst == NULL || length > 0);
       length = MAX2(1, length);
