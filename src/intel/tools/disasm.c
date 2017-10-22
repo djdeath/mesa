@@ -26,6 +26,8 @@
 #include "compiler/brw_inst.h"
 #include "compiler/brw_eu.h"
 
+#include "common/gen_decoder.h"
+
 #include "gen_disasm.h"
 
 uint64_t INTEL_DEBUG;
@@ -41,6 +43,38 @@ is_send(uint32_t opcode)
            opcode == BRW_OPCODE_SENDC ||
            opcode == BRW_OPCODE_SENDS ||
            opcode == BRW_OPCODE_SENDSC );
+}
+
+uint32_t
+gen_disasm_get_assembly_size(struct gen_disasm *disasm,
+                             const struct gen_dword_reader *reader)
+{
+   struct gen_device_info *devinfo = &disasm->devinfo;
+   uint32_t size = 0;
+
+   /* This loop exits when send-with-EOT or when opcode is 0 */
+   while (true) {
+      union {
+         brw_inst insn;
+         uint32_t data[sizeof(brw_inst) / sizeof(uint32_t)];
+      } data;
+      for (int i = 0; i < ARRAY_SIZE(data.data); i++)
+         data.data[i] = gen_read_dword(reader, size / 4 + i);
+
+      if (brw_inst_cmpt_control(devinfo, &data.insn)) {
+         size += 8;
+      } else {
+         size += 16;
+      }
+
+      /* Simplistic, but efficient way to terminate disasm */
+      uint32_t opcode = brw_inst_opcode(devinfo, &data.insn);
+      if (opcode == 0 || (is_send(opcode) && brw_inst_eot(devinfo, &data.insn))) {
+         break;
+      }
+   }
+
+   return size;
 }
 
 static int

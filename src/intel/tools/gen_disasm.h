@@ -31,6 +31,8 @@ extern "C" {
 struct gen_disasm;
 
 struct gen_disasm *gen_disasm_create(int pciid);
+uint32_t gen_disasm_get_assembly_size(struct gen_disasm *disasm,
+                                      const struct gen_dword_reader *reader);
 void gen_disasm_disassemble(struct gen_disasm *disasm,
                             void *assembly, int start, FILE *out);
 
