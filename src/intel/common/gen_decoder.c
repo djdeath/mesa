@@ -74,6 +74,14 @@ gen_group_get_opcode(struct gen_group *group)
 }
 
 struct gen_group *
+gen_spec_find_instruction_by_name(struct gen_spec *spec, const char *name)
+{
+   struct hash_entry *entry = _mesa_hash_table_search(spec->commands,
+                                                      name);
+   return entry ? entry->data : NULL;
+}
+
+struct gen_group *
 gen_spec_find_struct(struct gen_spec *spec, const char *name)
 {
    struct hash_entry *entry = _mesa_hash_table_search(spec->structs,

@@ -51,6 +51,7 @@ struct gen_spec *gen_spec_load_from_path(const struct gen_device_info *devinfo,
 void gen_spec_destroy(struct gen_spec *spec);
 uint32_t gen_spec_get_gen(struct gen_spec *spec);
 struct gen_group *gen_spec_find_instruction(struct gen_spec *spec, const uint32_t *p);
+struct gen_group *gen_spec_find_instruction_by_name(struct gen_spec *spec, const char *name);
 struct gen_group *gen_spec_find_register(struct gen_spec *spec, uint32_t offset);
 struct gen_group *gen_spec_find_register_by_name(struct gen_spec *spec, const char *name);
 struct gen_enum *gen_spec_find_enum(struct gen_spec *spec, const char *name);
