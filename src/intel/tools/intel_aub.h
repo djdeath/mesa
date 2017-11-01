@@ -42,6 +42,7 @@
 
 #define AUB_MI_NOOP			(0)
 #define AUB_MI_BATCH_BUFFER_START 	(0x31 << 23)
+#define AUB_MI_BATCH_BUFFER_END 	(0x05 << 24)
 #define AUB_PIPE_CONTROL		(0x7a000002)
 
 /* DW0: instruction type. */

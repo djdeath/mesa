@@ -43,12 +43,6 @@
 #include "intel_aub.h"
 #include "gen_disasm.h"
 
-/* Below is the only command missing from intel_aub.h in libdrm
- * So, reuse intel_aub.h from libdrm and #define the
- * AUB_MI_BATCH_BUFFER_END as below
- */
-#define AUB_MI_BATCH_BUFFER_END (0x0500 << 16)
-
 #define CSI "\e["
 #define BLUE_HEADER  CSI "0;44m"
 #define GREEN_HEADER CSI "1;42m"
