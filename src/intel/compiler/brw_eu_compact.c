@@ -1497,7 +1497,7 @@ brw_compact_instructions(struct brw_codegen *p, int start_offset,
     * number of compacted instructions minus the number of padding NOP/NENOPs
     * that preceded it.
     */
-   int compacted_counts[(p->next_insn_offset - start_offset) / sizeof(brw_inst)];
+   int compacted_counts[(p->next_insn_offset - start_offset) / sizeof(brw_inst) + 1];
    /* For an instruction at byte offset 8*i after compaction, this was its IP
     * (in 16-byte units) before compaction.
     */
