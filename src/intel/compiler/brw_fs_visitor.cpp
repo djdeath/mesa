@@ -715,6 +715,7 @@ fs_visitor::emit_urb_writes(const fs_reg &gs_vertex_count)
          if (opcode == SHADER_OPCODE_URB_WRITE_SIMD8_PER_SLOT)
             payload_sources[1] = per_slot_offsets;
 
+         assert(length <= (int) ARRAY_SIZE(sources));
          memcpy(&payload_sources[header_size], sources,
                 length * sizeof sources[0]);
 
