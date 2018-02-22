@@ -151,7 +151,7 @@ endforeach
 
 i965_oa_sources = []
 foreach hw : ['hsw', 'bdw', 'chv', 'sklgt2', 'sklgt3', 'sklgt4', 'bxt',
-              'kblgt2', 'kblgt3', 'glk', 'cflgt2', 'cflgt3']
+              'kblgt2', 'kblgt3', 'glk', 'cflgt2', 'cflgt3', 'cnl']
   _name = 'brw_oa_@0@'.format(hw)
   i965_oa_sources += custom_target(
     _name,

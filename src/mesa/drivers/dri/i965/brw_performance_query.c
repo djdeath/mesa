@@ -83,6 +83,7 @@
 #include "brw_oa_glk.h"
 #include "brw_oa_cflgt2.h"
 #include "brw_oa_cflgt3.h"
+#include "brw_oa_cnl.h"
 #include "intel_batchbuffer.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
@@ -2154,6 +2155,8 @@ get_register_queries_function(const struct gen_device_info *devinfo)
       if (devinfo->gt == 3)
          return brw_oa_register_queries_cflgt3;
    }
+   if (devinfo->is_cannonlake)
+      return brw_oa_register_queries_cnl;
 
    return NULL;
 }

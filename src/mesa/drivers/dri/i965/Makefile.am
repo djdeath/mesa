@@ -122,6 +122,7 @@ EXTRA_DIST = \
 	brw_oa_glk.xml \
 	brw_oa_cflgt2.xml \
 	brw_oa_cflgt3.xml \
+	brw_oa_cnl.xml \
 	brw_oa.py \
 	meson.build
 
