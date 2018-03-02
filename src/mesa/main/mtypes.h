@@ -4240,6 +4240,7 @@ struct gl_extensions
    GLboolean ATI_fragment_shader;
    GLboolean ATI_separate_stencil;
    GLboolean GREMEDY_string_marker;
+   GLboolean INTEL_blackhole_render;
    GLboolean INTEL_conservative_rasterization;
    GLboolean INTEL_performance_query;
    GLboolean KHR_blend_equation_advanced;
@@ -4585,6 +4586,11 @@ struct gl_driver_flags
 
    /** Programmable sample location state for gl_context::DrawBuffer */
    uint64_t NewSampleLocations;
+
+   /**
+    * gl_context::IntelBlackholeRender
+    */
+   uint64_t NewIntelBlackholeRender;
 };
 
 struct gl_buffer_binding
@@ -5005,6 +5011,8 @@ struct gl_context
    GLboolean ConservativeRasterization; /**< GL_CONSERVATIVE_RASTERIZATION_NV */
    GLfloat ConservativeRasterDilate;
    GLenum16 ConservativeRasterMode;
+
+   GLboolean IntelBlackholeRender; /**< GL_INTEL_blackhole_render */
 
    /** Does glVertexAttrib(0) alias glVertex()? */
    bool _AttribZeroAliasesVertex;
