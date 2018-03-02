@@ -94,6 +94,7 @@ extern const struct brw_tracked_state gen7_push_constant_space;
 extern const struct brw_tracked_state gen7_urb;
 extern const struct brw_tracked_state gen8_pma_fix;
 extern const struct brw_tracked_state brw_cs_work_groups_surface;
+extern const struct brw_tracked_state brw_cs_noop;
 
 static inline bool
 brw_state_dirty(const struct brw_context *brw,
@@ -115,6 +116,9 @@ uint32_t
 brw_depthbuffer_format(struct brw_context *brw);
 
 void brw_upload_state_base_address(struct brw_context *brw);
+
+void brw_set_cs_noop(struct brw_context *brw, bool enable_noop);
+void brw_hold_cs_noop(struct brw_context *brw);
 
 /* gen8_depth_state.c */
 void gen8_write_pma_stall_bits(struct brw_context *brw,

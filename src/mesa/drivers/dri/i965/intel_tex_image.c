@@ -26,6 +26,7 @@
 #include "intel_tiled_memcpy.h"
 #include "brw_context.h"
 #include "brw_blorp.h"
+#include "brw_state.h"
 
 #define FILE_DEBUG_FLAG DEBUG_TEXTURE
 
@@ -327,6 +328,8 @@ intel_upload_tex(struct gl_context * ctx,
 
    if (mt && mt->format == MESA_FORMAT_S_UINT8)
       mt->r8stencil_needs_update = true;
+
+   brw_hold_cs_noop(brw);
 
    if (_mesa_is_bufferobj(packing->BufferObj) || tex_busy ||
        mt->aux_usage == ISL_AUX_USAGE_CCS_E) {
@@ -821,6 +824,8 @@ intel_get_tex_sub_image(struct gl_context *ctx,
    bool ok;
 
    DBG("%s\n", __func__);
+
+   brw_hold_cs_noop(brw);
 
    if (_mesa_is_bufferobj(ctx->Pack.BufferObj)) {
       if (intel_gettexsubimage_blorp(brw, texImage,

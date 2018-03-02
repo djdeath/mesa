@@ -37,6 +37,7 @@
 
 #include "brw_context.h"
 #include "brw_blorp.h"
+#include "brw_state.h"
 #include "intel_screen.h"
 #include "intel_batchbuffer.h"
 #include "intel_buffers.h"
@@ -271,6 +272,8 @@ intelReadPixels(struct gl_context * ctx,
    dirty = brw->front_buffer_dirty;
    intel_prepare_render(brw);
    brw->front_buffer_dirty = dirty;
+
+   brw_hold_cs_noop(brw);
 
    if (_mesa_is_bufferobj(pack->BufferObj)) {
       if (intel_readpixels_blorp(ctx, x, y, width, height,

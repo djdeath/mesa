@@ -247,6 +247,9 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
    if (!_mesa_check_conditional_render(ctx))
       return;
 
+   if (ctx->IntelBlackholeRender)
+      return;
+
    if (mask & (BUFFER_BIT_FRONT_LEFT | BUFFER_BIT_FRONT_RIGHT)) {
       brw->front_buffer_dirty = true;
    }

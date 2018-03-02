@@ -234,6 +234,7 @@ void brw_init_state( struct brw_context *brw )
    ctx->DriverFlags.NewImageUnits = BRW_NEW_IMAGE_UNITS;
    ctx->DriverFlags.NewDefaultTessLevels = BRW_NEW_DEFAULT_TESS_LEVELS;
    ctx->DriverFlags.NewIntelConservativeRasterization = BRW_NEW_CONSERVATIVE_RASTERIZATION;
+   ctx->DriverFlags.NewIntelBlackholeRender = BRW_NEW_CS_NOOP;
 }
 
 
@@ -369,6 +370,7 @@ static struct dirty_bit_map brw_bits[] = {
    DEFINE_BIT(BRW_NEW_CONSERVATIVE_RASTERIZATION),
    DEFINE_BIT(BRW_NEW_DRAW_CALL),
    DEFINE_BIT(BRW_NEW_AUX_STATE),
+   DEFINE_BIT(BRW_NEW_CS_NOOP),
    {0, 0, 0}
 };
 

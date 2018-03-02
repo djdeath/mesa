@@ -811,3 +811,59 @@ brw_upload_state_base_address(struct brw_context *brw)
    brw->ctx.NewDriverState |= BRW_NEW_STATE_BASE_ADDRESS;
    brw->batch.state_base_address_emitted = true;
 }
+
+void
+brw_set_cs_noop(struct brw_context *brw, bool enable_noop)
+{
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   uint32_t reg_offset = devinfo->gen >= 9 ? CS_DEBUG_MODE2 : INSTPM;
+   uint32_t reg_mask = devinfo->gen >= 9 ?
+      REG_MASK(CSDBG2_3D_RENDERER_INSTRUCTION_DISABLE |
+               CSDBG2_MEDIA_INSTRUCTION_DISABLE) :
+      REG_MASK(INSTPM_3D_RENDERER_INSTRUCTION_DISABLE |
+               INSTPM_MEDIA_INSTRUCTION_DISABLE);
+   uint32_t reg_value = 0;
+
+   if (enable_noop) {
+      reg_value = devinfo->gen >= 9 ?
+         (CSDBG2_3D_RENDERER_INSTRUCTION_DISABLE |
+          CSDBG2_MEDIA_INSTRUCTION_DISABLE) :
+         (INSTPM_3D_RENDERER_INSTRUCTION_DISABLE |
+          INSTPM_MEDIA_INSTRUCTION_DISABLE);
+   }
+
+   if (devinfo->gen >= 8) {
+      brw_emit_pipe_control_write(brw,
+                                  PIPE_CONTROL_LRI_WRITE_IMMEDIATE |
+                                  PIPE_CONTROL_CS_STALL,
+                                  NULL, reg_offset, reg_mask | reg_value);
+   } else {
+      brw_load_register_imm32_force_posted(brw,
+                                           reg_offset,
+                                           reg_mask | reg_value);
+   }
+}
+
+void
+brw_hold_cs_noop(struct brw_context *brw)
+{
+   if (!brw->ctx.IntelBlackholeRender)
+      return;
+
+   brw_set_cs_noop(brw, false);
+   brw->ctx.NewDriverState |= brw->ctx.DriverFlags.NewIntelBlackholeRender;
+}
+
+static void
+brw_emit_cs_noop(struct brw_context *brw)
+{
+   brw_set_cs_noop(brw, brw->ctx.IntelBlackholeRender);
+}
+
+const struct brw_tracked_state brw_cs_noop = {
+   .dirty = {
+      .mesa = 0,
+      .brw = BRW_NEW_CS_NOOP,
+   },
+   .emit = brw_emit_cs_noop,
+};

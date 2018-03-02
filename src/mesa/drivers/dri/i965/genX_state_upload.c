@@ -5770,6 +5770,7 @@ genX(init_atoms)(struct brw_context *brw)
 
       &genX(cut_index),
       &gen8_pma_fix,
+      &brw_cs_noop,
    };
 #endif
 
@@ -5789,6 +5790,9 @@ genX(init_atoms)(struct brw_context *brw)
       &brw_cs_work_groups_surface,
       &genX(cs_samplers),
       &genX(cs_state),
+#if GEN_GEN >= 8
+      &brw_cs_noop,
+#endif
    };
 
    STATIC_ASSERT(ARRAY_SIZE(compute_atoms) <= ARRAY_SIZE(brw->compute_atoms));

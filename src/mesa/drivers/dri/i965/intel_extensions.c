@@ -292,6 +292,14 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.OES_texture_view = true;
    }
 
+   if (brw->screen->kernel_features & KERNEL_ALLOWS_CONTEXT_ISOLATION &&
+       devinfo->gen >= 8) {
+      /* We'll be able to enable Haswell when the kernel command parser allows
+       * INSTPM.
+       */
+      ctx->Extensions.INTEL_blackhole_render = true;
+   }
+
    if (devinfo->gen >= 8) {
       ctx->Extensions.ARB_gpu_shader_int64 = devinfo->has_64bit_types;
       /* requires ARB_gpu_shader_int64 */

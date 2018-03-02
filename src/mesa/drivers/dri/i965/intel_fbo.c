@@ -50,6 +50,7 @@
 #include "intel_tex.h"
 #include "brw_context.h"
 #include "brw_defines.h"
+#include "brw_state.h"
 
 #define FILE_DEBUG_FLAG DEBUG_FBO
 
@@ -122,6 +123,8 @@ intel_map_renderbuffer(struct gl_context *ctx,
       *out_stride = rowStride;
       return;
    }
+
+   brw_hold_cs_noop(brw);
 
    intel_prepare_render(brw);
 
@@ -879,6 +882,9 @@ intel_blit_framebuffer(struct gl_context *ctx,
     *     section 10.10 (Bug 9562)."
     */
    if (!_mesa_check_conditional_render(ctx))
+      return;
+
+   if (ctx->IntelBlackholeRender)
       return;
 
    if (devinfo->gen < 6) {

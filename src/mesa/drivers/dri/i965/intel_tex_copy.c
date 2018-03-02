@@ -38,6 +38,7 @@
 #include "intel_fbo.h"
 #include "intel_tex.h"
 #include "brw_context.h"
+#include "brw_state.h"
 
 #define FILE_DEBUG_FLAG DEBUG_TEXTURE
 
@@ -51,6 +52,8 @@ intelCopyTexSubImage(struct gl_context *ctx, GLuint dims,
                      GLsizei width, GLsizei height)
 {
    struct brw_context *brw = brw_context(ctx);
+
+   brw_hold_cs_noop(brw);
 
    /* Try BLORP first.  It can handle almost everything. */
    if (brw_blorp_copytexsubimage(brw, rb, texImage, slice, x, y,
