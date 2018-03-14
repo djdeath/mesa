@@ -28,7 +28,10 @@
 #include <unistd.h>
 #include "gen_device_info.h"
 #include "compiler/shader_enums.h"
+#include "util/bitscan.h"
 #include "util/macros.h"
+
+#include <i915_drm.h>
 
 /**
  * Get the PCI ID for the device name.
@@ -911,6 +914,132 @@ fill_masks(struct gen_device_info *devinfo)
          }
       }
    }
+}
+
+static void
+reset_masks(struct gen_device_info *devinfo)
+{
+   devinfo->subslice_slice_stride =
+      devinfo->eu_subslice_stride =
+      devinfo->eu_slice_stride = 0;
+
+   devinfo->num_slices =
+      devinfo->num_eu_per_subslice = 0;
+   memset(devinfo->num_subslices, 0, sizeof(devinfo->num_subslices));
+
+   memset(&devinfo->slice_masks, 0, sizeof(devinfo->slice_masks));
+   memset(devinfo->subslice_masks, 0, sizeof(devinfo->subslice_masks));
+   memset(devinfo->eu_masks, 0, sizeof(devinfo->eu_masks));
+}
+
+void
+gen_device_info_update_from_masks(struct gen_device_info *devinfo,
+                                  uint32_t slice_mask,
+                                  uint32_t subslice_mask,
+                                  uint32_t n_eus)
+{
+   reset_masks(devinfo);
+
+   assert((slice_mask & 0xff) == slice_mask);
+
+   devinfo->slice_masks = slice_mask;
+   devinfo->num_slices = __builtin_popcount(devinfo->slice_masks);
+
+   uint32_t max_slices = util_last_bit(slice_mask);
+   uint32_t max_subslices = util_last_bit(subslice_mask);
+   devinfo->subslice_slice_stride = DIV_ROUND_UP(max_subslices, 8);
+   uint32_t n_subslices = 0;
+   for (int s = 0; s < util_last_bit(slice_mask); s++) {
+      if ((slice_mask & (1UL << s)) == 0)
+         continue;
+
+      for (int b = 0; b < devinfo->subslice_slice_stride; b++) {
+         int subslice_offset = s * devinfo->subslice_slice_stride + b;
+
+         devinfo->subslice_masks[subslice_offset] =
+            (subslice_mask >> (b * 8)) & 0xff;
+         devinfo->num_subslices[s] +=
+            __builtin_popcount(devinfo->subslice_masks[subslice_offset]);
+      }
+
+      n_subslices += devinfo->num_subslices[s];
+   }
+
+   /* We expect the total number of EUs to be uniformly distributed throughout
+    * the subslices.
+    */
+   assert((n_eus % n_subslices) == 0);
+   devinfo->num_eu_per_subslice = n_eus / n_subslices;
+
+   devinfo->eu_subslice_stride = DIV_ROUND_UP(devinfo->num_eu_per_subslice, 8);
+   devinfo->eu_slice_stride = devinfo->eu_subslice_stride * max_subslices;
+
+   for (int s = 0; s < max_slices; s++) {
+      if ((slice_mask & (1UL << s)) == 0)
+         continue;
+
+      for (int ss = 0; ss < max_subslices; ss++) {
+         if ((subslice_mask & (1UL << ss)) == 0)
+            continue;
+
+         for (int b = 0; b < devinfo->eu_subslice_stride; b++) {
+            int eus_offset = s * devinfo->eu_slice_stride +
+               ss * devinfo->eu_subslice_stride + b;
+
+            devinfo->eu_masks[eus_offset] =
+               (((1UL << devinfo->num_eu_per_subslice) - 1) >> (b * 8)) & 0xff;
+         }
+      }
+   }
+}
+
+void
+gen_device_info_update_from_topology(struct gen_device_info *devinfo,
+                                     const struct drm_i915_query_topology_info *topology)
+{
+   reset_masks(devinfo);
+
+   devinfo->subslice_slice_stride = topology->subslice_stride;
+
+   devinfo->eu_subslice_stride = DIV_ROUND_UP(topology->max_eus_per_subslice, 8);
+   devinfo->eu_slice_stride = topology->max_subslices * devinfo->eu_subslice_stride;
+
+   assert(sizeof(devinfo->slice_masks) >= DIV_ROUND_UP(topology->max_slices, 8));
+   memcpy(&devinfo->slice_masks, topology->data, DIV_ROUND_UP(topology->max_slices, 8));
+   devinfo->num_slices = __builtin_popcount(devinfo->slice_masks);
+
+   uint32_t subslice_mask_len =
+      topology->max_slices * topology->subslice_stride;
+   assert(sizeof(devinfo->subslice_masks) >= subslice_mask_len);
+   memcpy(devinfo->subslice_masks, &topology->data[topology->subslice_offset],
+          subslice_mask_len);
+
+   uint32_t n_subslices = 0;
+   for (int s = 0; s < topology->max_slices; s++) {
+      if ((devinfo->slice_masks & (1UL << s)) == 0)
+         continue;
+
+      for (int b = 0; b < devinfo->subslice_slice_stride; b++) {
+         devinfo->num_subslices[s] +=
+            __builtin_popcount(devinfo->subslice_masks[b]);
+      }
+      n_subslices += devinfo->num_subslices[s];
+   }
+
+   uint32_t eu_mask_len =
+      topology->eu_stride * topology->max_subslices * topology->max_slices;
+   assert(sizeof(devinfo->eu_masks) >= eu_mask_len);
+   memcpy(devinfo->eu_masks, &topology->data[topology->eu_offset], eu_mask_len);
+
+   uint32_t n_eus = 0;
+   for (int b = 0; b < eu_mask_len; b++)
+      n_eus += __builtin_popcount(devinfo->eu_masks[b]);
+
+   /* We expect the total number of EUs to be uniformly distributed throughout
+    * the subslices.
+    */
+   assert((n_eus % n_subslices) == 0);
+   devinfo->num_eu_per_subslice = n_eus / n_subslices;
 }
 
 bool
