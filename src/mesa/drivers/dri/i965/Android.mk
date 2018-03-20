@@ -315,7 +315,7 @@ i965_oa_xml_FILES := $(addprefix $(LOCAL_PATH)/, \
 $(intermediates)/brw_oa_metrics.c: $(LOCAL_PATH)/brw_oa.py $(i965_oa_xml_FILES)
 	@echo "target Generated: $(PRIVATE_MODULE) <= $(notdir $(@))"
 	@mkdir -p $(dir $@)
-	$(hide) $(MESA_PYTHON2) $< --code=$@ $(i965_oa_xml_FILES) --header=$@ $(i965_oa_xml_FILES)
+	$(hide) $(MESA_PYTHON2) $< --code=$@ --header=$(dir $@)/brw_oa_metrics.h $(i965_oa_xml_FILES)
 
 $(intermediates)/brw_oa_metrics.h: $(intermediates)/brw_oa_metrics.c
 
