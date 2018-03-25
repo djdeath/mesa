@@ -135,6 +135,11 @@ struct gen_device_info
    unsigned num_thread_per_eu;
 
    /**
+    * Total number of subslices on the device, computed from num_subslices.
+    */
+   unsigned num_total_subslices;
+
+   /**
     * Total number of execution units on the device, computed from eu_masks.
     */
    unsigned num_total_eus;

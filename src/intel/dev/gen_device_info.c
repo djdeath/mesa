@@ -907,14 +907,14 @@ fill_masks(struct gen_device_info *devinfo)
 
    /* Subslice masks */
    unsigned max_subslices = 0;
-   unsigned n_subslices = 0;
    for (int s = 0; s < devinfo->num_slices; s++) {
       max_subslices = MAX2(devinfo->num_subslices[s], max_subslices);
-      n_subslices += devinfo->num_subslices[s];
+      devinfo->num_total_subslices += devinfo->num_subslices[s];
    }
    devinfo->subslice_slice_stride = DIV_ROUND_UP(max_subslices, 8);
 
-   devinfo->num_total_eus = n_subslices * devinfo->num_eu_per_subslice;
+   devinfo->num_total_eus =
+      devinfo->num_total_subslices * devinfo->num_eu_per_subslice;
 
    for (int s = 0; s < devinfo->num_slices; s++) {
       devinfo->subslice_masks[s * devinfo->subslice_slice_stride] =
@@ -1017,6 +1017,7 @@ reset_masks(struct gen_device_info *devinfo)
    devinfo->num_slices = 0;
    devinfo->num_eu_per_subslice = 0;
    memset(devinfo->num_subslices, 0, sizeof(devinfo->num_subslices));
+   devinfo->num_total_subslices = 0;
    devinfo->num_total_eus = 0;
 
    memset(&devinfo->slice_masks, 0, sizeof(devinfo->slice_masks));
@@ -1045,7 +1046,6 @@ gen_device_info_update_from_topology(struct gen_device_info *devinfo,
    memcpy(devinfo->subslice_masks, &topology->data[topology->subslice_offset],
           subslice_mask_len);
 
-   uint32_t n_subslices = 0;
    for (int s = 0; s < topology->max_slices; s++) {
       if ((devinfo->slice_masks & (1UL << s)) == 0)
          continue;
@@ -1054,7 +1054,7 @@ gen_device_info_update_from_topology(struct gen_device_info *devinfo,
          devinfo->num_subslices[s] +=
             __builtin_popcount(devinfo->subslice_masks[b]);
       }
-      n_subslices += devinfo->num_subslices[s];
+      devinfo->num_total_subslices += devinfo->num_subslices[s];
    }
 
    uint32_t eu_mask_len =
@@ -1066,7 +1066,7 @@ gen_device_info_update_from_topology(struct gen_device_info *devinfo,
       devinfo->num_total_eus += __builtin_popcount(devinfo->eu_masks[b]);
 
    devinfo->num_eu_per_subslice = DIV_ROUND_UP(devinfo->num_total_eus,
-                                               n_subslices);
+                                               devinfo->num_total_subslices);
 }
 
 bool
