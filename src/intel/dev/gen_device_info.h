@@ -135,6 +135,11 @@ struct gen_device_info
    unsigned num_thread_per_eu;
 
    /**
+    * Total number of execution units on the device, computed from eu_masks.
+    */
+   unsigned num_total_eus;
+
+   /**
     * A bit mask of the slices available.
     */
    uint8_t slice_masks;

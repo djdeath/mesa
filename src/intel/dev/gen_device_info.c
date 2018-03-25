@@ -907,9 +907,14 @@ fill_masks(struct gen_device_info *devinfo)
 
    /* Subslice masks */
    unsigned max_subslices = 0;
-   for (int s = 0; s < devinfo->num_slices; s++)
+   unsigned n_subslices = 0;
+   for (int s = 0; s < devinfo->num_slices; s++) {
       max_subslices = MAX2(devinfo->num_subslices[s], max_subslices);
+      n_subslices += devinfo->num_subslices[s];
+   }
    devinfo->subslice_slice_stride = DIV_ROUND_UP(max_subslices, 8);
+
+   devinfo->num_total_eus = n_subslices * devinfo->num_eu_per_subslice;
 
    for (int s = 0; s < devinfo->num_slices; s++) {
       devinfo->subslice_masks[s * devinfo->subslice_slice_stride] =
@@ -983,7 +988,23 @@ gen_device_info_update_from_masks(struct gen_device_info *devinfo,
       }
    }
 
+   /* We don't know where the fused EUs are, so just fused the first ones
+    * until we get a number equal to what the kernel reported.
+    */
+   uint32_t n_fused_eus = (n_subslices * num_eu_per_subslice) - n_eus;
+   uint32_t fused_eus = 0;
+   uint32_t eu_bit = topology.base.eu_offset * 8;
+   while (fused_eus < n_fused_eus) {
+      if (topology.base.data[eu_bit / 8] & 1U << (eu_bit % 8)) {
+         topology.base.data[eu_bit / 8] &= ~(1U << (eu_bit % 8));
+         fused_eus++;
+      }
+      eu_bit++;
+   }
+
    gen_device_info_update_from_topology(devinfo, &topology.base);
+
+   assert(devinfo->num_total_eus == n_eus);
 }
 
 static void
@@ -996,6 +1017,7 @@ reset_masks(struct gen_device_info *devinfo)
    devinfo->num_slices = 0;
    devinfo->num_eu_per_subslice = 0;
    memset(devinfo->num_subslices, 0, sizeof(devinfo->num_subslices));
+   devinfo->num_total_eus = 0;
 
    memset(&devinfo->slice_masks, 0, sizeof(devinfo->slice_masks));
    memset(devinfo->subslice_masks, 0, sizeof(devinfo->subslice_masks));
@@ -1040,11 +1062,11 @@ gen_device_info_update_from_topology(struct gen_device_info *devinfo,
    assert(sizeof(devinfo->eu_masks) >= eu_mask_len);
    memcpy(devinfo->eu_masks, &topology->data[topology->eu_offset], eu_mask_len);
 
-   uint32_t n_eus = 0;
    for (int b = 0; b < eu_mask_len; b++)
-      n_eus += __builtin_popcount(devinfo->eu_masks[b]);
+      devinfo->num_total_eus += __builtin_popcount(devinfo->eu_masks[b]);
 
-   devinfo->num_eu_per_subslice = DIV_ROUND_UP(n_eus, n_subslices);
+   devinfo->num_eu_per_subslice = DIV_ROUND_UP(devinfo->num_total_eus,
+                                               n_subslices);
 }
 
 bool
