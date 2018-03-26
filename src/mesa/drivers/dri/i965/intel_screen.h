@@ -106,14 +106,10 @@ struct intel_screen
    int cmd_parser_version;
 
    /**
-    * Number of subslices reported by the I915_PARAM_SUBSLICE_TOTAL parameter
+    * Whether the kernel is able to report accurate GPU topology (required for
+    * Gen10+ performance queries).
     */
-   int subslice_total;
-
-   /**
-    * Number of EUs reported by the I915_PARAM_EU_TOTAL parameter
-    */
-   int eu_total;
+   bool kernel_supports_topology;
 
    bool mesa_format_supports_texture[MESA_FORMAT_COUNT];
    bool mesa_format_supports_render[MESA_FORMAT_COUNT];

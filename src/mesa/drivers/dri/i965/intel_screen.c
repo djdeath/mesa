@@ -1760,22 +1760,53 @@ intel_cs_timestamp_frequency(struct intel_screen *screen)
    screen->devinfo.timestamp_frequency = freq;
 }
 
+static bool
+intel_query_topology(struct intel_screen *screen)
+{
+   struct drm_i915_query_item item = {
+      .query_id = DRM_I915_QUERY_TOPOLOGY_INFO,
+   };
+   struct drm_i915_query query = {
+      .num_items = 1,
+      .items_ptr = (uintptr_t) &item,
+   };
+
+   if (drmIoctl(screen->driScrnPriv->fd, DRM_IOCTL_I915_QUERY, &query))
+      return false;
+
+   struct drm_i915_query_topology_info *topo_info =
+      (struct drm_i915_query_topology_info *) calloc(1, item.length);
+   item.data_ptr = (uintptr_t) topo_info;
+
+   if (drmIoctl(screen->driScrnPriv->fd, DRM_IOCTL_I915_QUERY, &query) ||
+       item.length <= 0)
+      return false;
+
+   gen_device_info_update_from_topology(&screen->devinfo,
+                                        topo_info);
+
+   free(topo_info);
+
+   return true;
+}
+
 static void
 intel_detect_sseu(struct intel_screen *screen)
 {
-   assert(screen->devinfo.gen >= 8);
    int ret;
+   int slice_mask = 0;
+   int subslice_mask = 0;
+   int eu_total = 0;
 
-   screen->subslice_total = -1;
-   screen->eu_total = -1;
-
-   ret = intel_get_param(screen, I915_PARAM_SUBSLICE_TOTAL,
-                         &screen->subslice_total);
+   ret = intel_get_param(screen, I915_PARAM_SLICE_MASK, &slice_mask);
    if (ret < 0 && ret != -EINVAL)
       goto err_out;
 
-   ret = intel_get_param(screen,
-                         I915_PARAM_EU_TOTAL, &screen->eu_total);
+   ret = intel_get_param(screen, I915_PARAM_SUBSLICE_MASK, &subslice_mask);
+   if (ret < 0 && ret != -EINVAL)
+      goto err_out;
+
+   ret = intel_get_param(screen, I915_PARAM_EU_TOTAL, &eu_total);
    if (ret < 0 && ret != -EINVAL)
       goto err_out;
 
@@ -1783,15 +1814,16 @@ intel_detect_sseu(struct intel_screen *screen)
     * and we have to use conservative numbers for GPGPU on many platforms, but
     * otherwise, things will just work.
     */
-   if (screen->subslice_total < 1 || screen->eu_total < 1)
+   if (slice_mask == 0 || subslice_mask == 0 || eu_total == 0)
       _mesa_warning(NULL,
                     "Kernel 4.1 required to properly query GPU properties.\n");
+
+   gen_device_info_update_from_masks(&screen->devinfo, slice_mask,
+                                     subslice_mask, eu_total);
 
    return;
 
 err_out:
-   screen->subslice_total = -1;
-   screen->eu_total = -1;
    _mesa_warning(NULL, "Failed to query GPU properties (%s).\n", strerror(-ret));
 }
 
@@ -2465,11 +2497,17 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
    if (devinfo->gen >= 10)
       intel_cs_timestamp_frequency(screen);
 
-   /* GENs prior to 8 do not support EU/Subslice info */
-   if (devinfo->gen >= 8) {
-      intel_detect_sseu(screen);
-   } else if (devinfo->gen == 7) {
-      screen->subslice_total = 1 << (devinfo->gt - 1);
+   /* Starting with 4.17, the kernel reports the topology of the GPU on
+    * Gen7.5+.
+    */
+   if (devinfo->gen >= 8 || devinfo->is_haswell) {
+
+      if (!intel_query_topology(screen)) {
+         /* If that's not available, try the to get information through
+          * GETPARAM.
+          */
+         intel_detect_sseu(screen);
+      }
    }
 
    /* Gen7-7.5 kernel requirements / command parser saga:

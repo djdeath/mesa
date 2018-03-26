@@ -384,7 +384,7 @@ brw_alloc_stage_scratch(struct brw_context *brw,
       thread_count = devinfo->max_wm_threads;
       break;
    case MESA_SHADER_COMPUTE: {
-      unsigned subslices = MAX2(brw->screen->subslice_total, 1);
+      unsigned subslices = devinfo->num_total_subslices;
 
       /* The documentation for 3DSTATE_PS "Scratch Space Base Pointer" says:
        *
@@ -395,12 +395,12 @@ brw_alloc_stage_scratch(struct brw_context *brw,
        * According to the other driver team, this applies to compute shaders
        * as well.  This is not currently documented at all.
        *
-       * brw->screen->subslice_total is the TOTAL number of subslices
-       * and we wish to view that there are 4 subslices per slice
-       * instead of the actual number of subslices per slice.
+       * devinfo->num_total_subslices is the TOTAL number of subslices and we
+       * wish to view that there are 4 subslices per slice instead of the
+       * actual number of subslices per slice.
        */
       if (devinfo->gen >= 9)
-         subslices = 4 * brw->screen->devinfo.num_slices;
+         subslices = 4 * devinfo->num_slices;
 
       unsigned scratch_ids_per_subslice;
       if (devinfo->is_haswell) {

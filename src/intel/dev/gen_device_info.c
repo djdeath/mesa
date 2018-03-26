@@ -1067,6 +1067,13 @@ gen_device_info_update_from_topology(struct gen_device_info *devinfo,
 
    devinfo->num_eu_per_subslice = DIV_ROUND_UP(devinfo->num_total_eus,
                                                devinfo->num_total_subslices);
+
+   /* Logical CS threads = EUs per subslice * 7 threads per EU */
+   uint32_t max_cs_threads =
+      devinfo->num_total_eus * devinfo->num_thread_per_eu;
+   /* Fuse configurations may give more threads than expected, never less. */
+   if (max_cs_threads > devinfo->max_cs_threads)
+      devinfo->max_cs_threads = max_cs_threads;
 }
 
 bool
