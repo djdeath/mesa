@@ -1483,7 +1483,7 @@ read_slice_unslice_frequencies(struct brw_context *brw,
     * OA_DEBUG_REGISTER is set to 1. This is how the kernel programs this
     * global register (see drivers/gpu/drm/i915/i915_perf.c)
     */
-   if (devinfo->gen < 9)
+   if (devinfo->gen < 8)
       return;
 
    begin_report = obj->oa.map;
