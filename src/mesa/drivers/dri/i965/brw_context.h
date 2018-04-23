@@ -683,7 +683,6 @@ enum brw_query_kind {
    OA_COUNTERS,
    OA_COUNTERS_RAW,
    PIPELINE_STATS,
-   NULL_RENDERER,
 };
 
 struct brw_perf_query_register_prog {
@@ -1225,7 +1224,6 @@ struct brw_context
 
       int n_active_oa_queries;
       int n_active_pipeline_stats_queries;
-      int n_active_null_renderers;
 
       /* The number of queries depending on running OA counters which
        * extends beyond brw_end_perf_query() since we need to wait until
