@@ -2605,6 +2605,7 @@
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="34"/>
     <field name="Byte Write Disables" start="8" end="11" type="uint"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
+    <field name="Force Posted" start="12" end="12" type="bool"/>
     <field name="Register Offset" start="34" end="54" type="offset"/>
     <field name="Data DWord" start="64" end="95" type="uint"/>
     <group count="0" start="64" size="64">
