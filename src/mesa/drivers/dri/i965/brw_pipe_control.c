@@ -158,6 +158,19 @@ brw_emit_pipe_control(struct brw_context *brw, uint32_t flags,
          }
       }
 
+      /* Project: SKL
+       *
+       * "PIPECONTROL command with “Command Streamer Stall Enable” must be
+       * programmed prior to programming a PIPECONTROL command with LRI Post
+       * Sync Operation in GPGPU mode of operation (i.e when PIPELINE_SELECT
+       * command is set to GPGPU mode of operation)."
+       */
+      if (devinfo->is_skylake &&
+          brw->last_pipeline == BRW_COMPUTE_PIPELINE &&
+          (flags & PIPE_CONTROL_LRI_WRITE_IMMEDIATE)) {
+         brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL);
+      }
+
       if (devinfo->gen == 10)
          gen10_add_rcpfe_workaround_bits(&flags);
 
