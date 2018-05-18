@@ -179,6 +179,9 @@ brw_emit_pipe_control(struct brw_context *brw, uint32_t flags,
       OUT_BATCH(flags);
       if (bo) {
          OUT_RELOC64(bo, RELOC_WRITE, offset);
+      } else if ((flags & PIPE_CONTROL_LRI_WRITE_IMMEDIATE) != 0) {
+         OUT_BATCH(offset);
+         OUT_BATCH(0);
       } else {
          OUT_BATCH(0);
          OUT_BATCH(0);
@@ -210,6 +213,9 @@ brw_emit_pipe_control(struct brw_context *brw, uint32_t flags,
       OUT_BATCH(flags);
       if (bo) {
          OUT_RELOC(bo, RELOC_WRITE | RELOC_NEEDS_GGTT, gen6_gtt | offset);
+      } else if (devinfo->gen >= 7 &&
+                 (flags & PIPE_CONTROL_LRI_WRITE_IMMEDIATE) != 0) {
+         OUT_BATCH(offset);
       } else {
          OUT_BATCH(0);
       }
