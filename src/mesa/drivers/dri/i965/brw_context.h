@@ -1410,6 +1410,8 @@ void brw_store_register_mem64(struct brw_context *brw,
                               struct brw_bo *bo, uint32_t reg, uint32_t offset);
 void brw_load_register_imm32(struct brw_context *brw,
                              uint32_t reg, uint32_t imm);
+void brw_load_register_imm32_force_posted(struct brw_context *brw,
+                                          uint32_t reg, uint32_t imm);
 void brw_load_register_imm64(struct brw_context *brw,
                              uint32_t reg, uint64_t imm);
 void brw_load_register_reg(struct brw_context *brw, uint32_t src,

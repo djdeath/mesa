@@ -1192,6 +1192,19 @@ brw_load_register_imm32(struct brw_context *brw, uint32_t reg, uint32_t imm)
    ADVANCE_BATCH();
 }
 
+void
+brw_load_register_imm32_force_posted(struct brw_context *brw, uint32_t reg, uint32_t imm)
+{
+   assert(brw->screen->devinfo.gen >= 6);
+
+   BEGIN_BATCH(3);
+   OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2) |
+             MI_LOAD_REGISTER_IMM_FORCE_POSTED);
+   OUT_BATCH(reg);
+   OUT_BATCH(imm);
+   ADVANCE_BATCH();
+}
+
 /*
  * Write a 64-bit register using immediate data.
  */
