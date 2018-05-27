@@ -69,6 +69,7 @@ EXTRA_DIST = \
 	dev/meson.build \
 	genxml/meson.build \
 	isl/meson.build \
+	perf/meson.build \
 	tools/intel_sanitize_gpu.c \
 	tools/intel_sanitize_gpu.in \
 	tools/meson.build \
@@ -81,6 +82,7 @@ include Makefile.compiler.am
 include Makefile.dev.am
 include Makefile.genxml.am
 include Makefile.isl.am
+include Makefile.perf.am
 include Makefile.tools.am
 
 include Makefile.vulkan.am

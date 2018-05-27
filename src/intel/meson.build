@@ -26,6 +26,7 @@ subdir('genxml')
 subdir('isl')
 subdir('common')
 subdir('compiler')
+subdir('perf')
 subdir('tools')
 if with_intel_vk
   subdir('vulkan')
