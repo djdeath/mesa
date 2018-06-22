@@ -22,6 +22,7 @@
 SUBDIRS = . \
 	xmlpool \
 	tests/hash_table \
+	tests/rb_tree \
 	tests/string_buffer
 
 if HAVE_STD_CXX11

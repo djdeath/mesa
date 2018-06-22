@@ -160,6 +160,7 @@ if with_tests
   )
 
   subdir('tests/hash_table')
+  subdir('tests/rb_tree')
   subdir('tests/string_buffer')
   subdir('tests/vma')
 endif
