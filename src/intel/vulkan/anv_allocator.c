@@ -109,13 +109,11 @@ struct anv_mmap_cleanup {
 
 #define ANV_MMAP_CLEANUP_INIT ((struct anv_mmap_cleanup){0})
 
-#ifndef HAVE_MEMFD_CREATE
 static inline int
-memfd_create(const char *name, unsigned int flags)
+local_memfd_create(const char *name, unsigned int flags)
 {
    return syscall(SYS_memfd_create, name, flags);
 }
-#endif
 
 static inline uint32_t
 ilog2_round_up(uint32_t value)
@@ -255,7 +253,7 @@ anv_block_pool_init(struct anv_block_pool *pool,
 
    anv_bo_init(&pool->bo, 0, 0);
 
-   pool->fd = memfd_create("block pool", MFD_CLOEXEC);
+   pool->fd = local_memfd_create("block pool", MFD_CLOEXEC);
    if (pool->fd == -1)
       return vk_error(VK_ERROR_INITIALIZATION_FAILED);
 

@@ -18,16 +18,26 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-aubinator = executable(
-  'aubinator',
-  files('aubinator.c', 'intel_aub.h'),
-  dependencies : [dep_expat, dep_zlib, dep_dl, dep_thread, dep_m],
-  include_directories : [inc_common, inc_intel],
-  link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
-  c_args : [c_vis_args, no_override_init_args],
-  build_by_default : with_tools.contains('intel'),
-  install : with_tools.contains('intel'),
-)
+has_memfd_create = cc.compiles('''#include <sys/syscall.h>
+                                  int main() {
+                                     return SYS_memfd_create;
+                                  }''',
+                               name : 'memfd create')
+
+if has_memfd_create
+  aubinator = executable(
+    'aubinator',
+    files('aubinator.c', 'intel_aub.h'),
+    dependencies : [dep_expat, dep_zlib, dep_dl, dep_thread, dep_m],
+    include_directories : [inc_common, inc_intel],
+    link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
+    c_args : [c_vis_args, no_override_init_args],
+    build_by_default : with_tools.contains('intel'),
+    install : with_tools.contains('intel'),
+  )
+else
+  warning('''aubinator can't be built without memfd_create() support''')
+endif
 
 aubinator_error_decode = executable(
   'aubinator_error_decode',

@@ -875,7 +875,16 @@ AC_CHECK_HEADERS([endian.h])
 AC_CHECK_FUNC([strtof], [DEFINES="$DEFINES -DHAVE_STRTOF"])
 AC_CHECK_FUNC([mkostemp], [DEFINES="$DEFINES -DHAVE_MKOSTEMP"])
 AC_CHECK_FUNC([timespec_get], [DEFINES="$DEFINES -DHAVE_TIMESPEC_GET"])
-AC_CHECK_FUNC([memfd_create], [DEFINES="$DEFINES -DHAVE_MEMFD_CREATE"])
+AC_CHECK_FUNC([memfd_create], [MEMFD_CREATE=yes], [MEMFD_CREATE=no])
+
+AC_COMPILE_IFELSE(
+[AC_LANG_PROGRAM([], [[
+#include <sys/syscall.h>
+int main() { return SYS_memfd_create; }
+]])],
+have_memfd_nr=yes; AC_MSG_RESULT(yes),
+AC_MSG_RESULT(no))
+AM_CONDITIONAL(HAVE_MEMFD_CREATE, test "x$have_memfd_nr" = xyes)
 
 AC_MSG_CHECKING([whether strtod has locale support])
 AC_LINK_IFELSE([AC_LANG_SOURCE([[
@@ -2900,7 +2909,7 @@ if test "x$enable_llvm" = xyes; then
     fi
 
     dnl The gallium-xlib GLX and gallium OSMesa targets directly embed the
-    dnl swr/llvmpipe driver into the final binary.  Adding LLVM_LIBS results in 
+    dnl swr/llvmpipe driver into the final binary.  Adding LLVM_LIBS results in
     dnl the LLVM library propagated in the Libs.private of the respective .pc
     dnl file which ensures complete dependency information when statically
     dnl linking.

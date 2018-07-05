@@ -36,6 +36,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 
 #include "util/list.h"
 #include "util/macros.h"
@@ -46,15 +47,11 @@
 #include "common/gen_gem.h"
 #include "intel_aub.h"
 
-#ifndef HAVE_MEMFD_CREATE
-#include <sys/syscall.h>
-
 static inline int
-memfd_create(const char *name, unsigned int flags)
+local_memfd_create(const char *name, unsigned int flags)
 {
    return syscall(SYS_memfd_create, name, flags);
 }
-#endif
 
 /* Below is the only command missing from intel_aub.h in libdrm
  * So, reuse intel_aub.h from libdrm and #define the
@@ -907,7 +904,7 @@ int main(int argc, char *argv[])
    if (isatty(1) && pager)
       setup_pager();
 
-   mem_fd = memfd_create("phys memory", 0);
+   mem_fd = local_memfd_create("phys memory", 0);
 
    list_inithead(&maps);
 
