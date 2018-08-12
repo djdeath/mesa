@@ -346,6 +346,63 @@ destroy_window_noop(struct window *win)
 {
 }
 
+static bool rect_fits(const cairo_rectangle_int_t *rect1,
+                      const cairo_rectangle_int_t *rect2)
+{
+   if (rect1->width < rect2->width)
+      return false;
+   return rect1->height >= rect2->height;
+}
+
+static int rect_compare(const cairo_rectangle_int_t *rect1,
+                        const cairo_rectangle_int_t *rect2)
+{
+   return (rect1->width * rect1->height) -
+      (rect2->width * rect2->height);
+}
+
+static ImVec2
+find_window_position(const ImVec2 &size)
+{
+   cairo_rectangle_int_t window_rect;
+   window_rect.x = window_rect.y = 0;
+   window_rect.width = gtk_widget_get_allocated_width(context.gtk_window);
+   window_rect.height = gtk_widget_get_allocated_height(context.gtk_window);
+
+   cairo_region_t *region = cairo_region_create_rectangle(&window_rect);
+   list_for_each_entry(struct window, window, &context.windows, link) {
+      window_rect.x = window->position.x;
+      window_rect.y = window->position.y;
+      window_rect.width = window->size.x;
+      window_rect.height = window->size.y;
+
+      cairo_region_subtract_rectangle(region, &window_rect);
+   }
+
+   cairo_rectangle_int_t search_rect;
+   search_rect.x = search_rect.y = 0;
+   search_rect.width = size.x;
+   search_rect.height = size.y;
+
+   cairo_rectangle_int_t best_rect;
+   memset(&best_rect, 0, sizeof(best_rect));
+
+   int n_rects = cairo_region_num_rectangles(region);
+   for (int r = 0; r < n_rects; r++) {
+      cairo_rectangle_int_t rect;
+      cairo_region_get_rectangle(region, r, &rect);
+
+      if (rect_fits(&rect, &search_rect)) {
+         return ImVec2(rect.x, rect.y);
+      }
+
+      if (rect_compare(&best_rect, &rect) < 0)
+         best_rect = rect;
+   }
+
+   return ImVec2(best_rect.x, best_rect.y);
+}
+
 /* Shader windows */
 
 static void
@@ -381,8 +438,8 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
             "%s (0x%lx)##%p", desc, address, window);
 
    list_inithead(&window->base.parent_link);
-   window->base.position = ImVec2(-1, -1);
    window->base.size = ImVec2(700, 300);
+   window->base.position = find_window_position(window->base.size);
    window->base.opened = true;
    window->base.display = display_shader_window;
    window->base.destroy = destroy_shader_window;
@@ -446,8 +503,8 @@ new_urb_window(struct aub_viewer_decode_ctx *decode_ctx, uint64_t address)
             "URB view (0x%lx)##%p", address, window);
 
    list_inithead(&window->base.parent_link);
-   window->base.position = ImVec2(-1, -1);
    window->base.size = ImVec2(700, 300);
+   window->base.position = find_window_position(window->base.size);
    window->base.opened = true;
    window->base.display = display_urb_window;
    window->base.destroy = destroy_urb_window;
@@ -521,8 +578,8 @@ new_edit_window(const char *title, struct aub_mem *mem,
    struct edit_window *window = xtzalloc(*window);
 
    list_inithead(&window->base.parent_link);
-   window->base.position = ImVec2(-1, -1);
    window->base.size = ImVec2(500, 600);
+   window->base.position = find_window_position(window->base.size);
    window->base.opened = true;
    window->base.display = display_edit_window;
    window->base.destroy = destroy_edit_window;
@@ -642,8 +699,8 @@ show_pml4_window(struct pml4_window *window, struct aub_mem *mem)
             "4-Level page tables##%p", window);
 
    list_inithead(&window->base.parent_link);
-   window->base.position = ImVec2(-1, -1);
    window->base.size = ImVec2(500, 600);
+   window->base.position = find_window_position(window->base.size);
    window->base.opened = true;
    window->base.display = display_pml4_window;
    window->base.destroy = destroy_window_noop;
@@ -842,8 +899,8 @@ new_batch_window(int exec_idx)
 
    list_inithead(&window->base.parent_link);
    list_inithead(&window->base.children_windows);
-   window->base.position = ImVec2(-1, -1);
    window->base.size = ImVec2(600, 700);
+   window->base.position = find_window_position(window->base.size);
    window->base.opened = true;
    window->base.display = display_batch_window;
    window->base.destroy = destroy_batch_window;
