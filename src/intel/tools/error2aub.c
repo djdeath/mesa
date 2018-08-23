@@ -160,6 +160,7 @@ struct bo {
    uint64_t addr;
    uint32_t *data;
    uint64_t size;
+   uint32_t ring;
 
    struct list_head link;
 };
@@ -296,6 +297,7 @@ main(int argc, char *argv[])
             assert(aub_use_execlists(&aub));
             struct bo *bo_entry = find_or_create(&bo_list, ((uint64_t)hi) << 32 | lo);
             bo_entry->size = size;
+            bo_entry->ring = active_ring;
             num_ring_bos--;
          } else {
             fail("Not enough BO entries in the active table\n");
@@ -381,7 +383,7 @@ main(int argc, char *argv[])
    bool batch_found = false;
    list_for_each_entry(struct bo, bo_entry, &bo_list, link) {
       if (bo_entry->type == BO_TYPE_BATCH) {
-         aub_write_exec(&aub, bo_entry->addr, aub_gtt_size(&aub), I915_EXEC_RENDER);
+         aub_write_exec(&aub, bo_entry->addr, aub_gtt_size(&aub), bo_entry->ring);
          batch_found = true;
          break;
       }
