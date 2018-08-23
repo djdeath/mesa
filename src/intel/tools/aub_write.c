@@ -485,6 +485,40 @@ aub_write_default_setup(struct aub_file *aub)
       write_legacy_default_setup(aub);
 }
 
+void
+aub_write_ggtt(struct aub_file *aub, uint64_t virt_addr, uint64_t size, const void *data)
+{
+   /* GGTT PT */
+   uint32_t ggtt_ptes = DIV_ROUND_UP(size, 4096);
+
+   assert(virt_addr % 4096 == 0);
+   assert((aub->phys_addrs_allocator + size) < (1UL << 32));
+
+   uint64_t phys_addr = aub->phys_addrs_allocator << 12;
+
+   mem_trace_memory_write_header_out(aub, sizeof(uint64_t) * (virt_addr >> 12),
+                                     ggtt_ptes * GEN8_PTE_SIZE,
+                                     AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_GGTT_ENTRY,
+                                     "GGTT PT");
+   for (uint32_t i = 0; i < ggtt_ptes; i++) {
+      dword_out(aub, 1 + phys_addr + i * 4096);
+      dword_out(aub, 0);
+   }
+
+   static const char null_block[8 * 4096];
+   for (uint32_t offset = 0; offset < size; offset += 4096) {
+      uint32_t block_size = min(4096, size - offset);
+
+      mem_trace_memory_write_header_out(aub, phys_addr + offset, block_size,
+                                        aub->default_addr_space,
+                                        "GGTT buffer");
+      data_out(aub, (char *) data + offset, block_size);
+
+      /* Pad to a multiple of 4 bytes. */
+      data_out(aub, null_block, -block_size & 3);
+   }
+}
+
 /**
  * Break up large objects into multiple writes.  Otherwise a 128kb VBO
  * would overflow the 16 bits of size field in the packet header and
@@ -686,4 +720,12 @@ aub_write_exec(struct aub_file *aub, uint64_t batch_addr,
       aub_dump_ringbuffer(aub, batch_addr, offset, ring_flag);
    }
    fflush(aub->file);
+}
+
+void
+aub_write_context_execlists(struct aub_file *aub, uint64_t context_addr, int ring_flag)
+{
+   const struct engine *cs = engine_from_ring_flag(ring_flag);
+   uint64_t descriptor = ((uint64_t)1 << 62 | context_addr  | CONTEXT_FLAGS);
+   aub_dump_execlist(aub, cs, descriptor);
 }

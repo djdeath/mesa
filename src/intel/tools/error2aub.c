@@ -36,6 +36,7 @@
 #include "aub_write.h"
 #include "i915_drm.h"
 #include "intel_aub.h"
+#include "gen_context.h"
 
 static void __attribute__ ((format(__printf__, 2, 3)))
 fail_if(int cond, const char *format, ...)
@@ -163,30 +164,66 @@ struct bo {
       BO_TYPE_RINGBUFFER,
       BO_TYPE_STATUS,
       BO_TYPE_CONTEXT_WA,
+      BO_TYPE_NULL,
    } type;
-   bool ppgtt;
    uint64_t addr;
-   uint32_t *data;
+   uint8_t *data;
    uint64_t size;
-   uint32_t ring;
+
+   enum drm_i915_gem_engine_class engine_class;
+   int engine_instance;
+
+   const char *name;
 
    struct list_head link;
 };
 
 static struct bo *
-find_or_create(struct list_head *bo_list, uint64_t addr, enum address_space gtt)
+find_or_create(struct list_head *bo_list, uint64_t addr, enum address_space gtt,
+               enum drm_i915_gem_engine_class engine_class, int engine_instance)
 {
    list_for_each_entry(struct bo, bo_entry, bo_list, link) {
-      if (bo_entry->addr == addr && bo_entry->gtt == gtt)
+      if (bo_entry->addr == addr && bo_entry->gtt == gtt &&
+          bo_entry->engine_class == engine_class &&
+          bo_entry->engine_instance == engine_instance)
          return bo_entry;
    }
 
    struct bo *new_bo = calloc(1, sizeof(*new_bo));
    new_bo->addr = addr;
    new_bo->gtt = gtt;
+   new_bo->engine_class = engine_class;
+   new_bo->engine_instance = engine_instance;
    list_addtail(&new_bo->link, bo_list);
 
    return new_bo;
+}
+
+static void
+ring_for_engine_name(const char *engine_name,
+                     enum drm_i915_gem_engine_class *engine_class,
+                     int *engine_instance)
+{
+   const struct {
+      const char *match;
+      enum drm_i915_gem_engine_class engine_class;
+   } rings[] = {
+      { "rcs", I915_ENGINE_CLASS_RENDER },
+      { "vcs", I915_ENGINE_CLASS_VIDEO },
+      { "vecs", I915_ENGINE_CLASS_VIDEO_ENHANCE },
+      { "bcs", I915_ENGINE_CLASS_COPY },
+      { NULL, BO_TYPE_UNKNOWN },
+   }, *r;
+
+   for (r = rings; r->match; r++) {
+      if (strncasecmp(engine_name, r->match, strlen(r->match)) == 0) {
+         *engine_class = r->engine_class;
+         *engine_instance = strtol(engine_name + strlen(r->match), NULL, 10);
+         return;
+      }
+   }
+
+   fail("Unknown engine %s\n", engine_name);
 }
 
 int
@@ -241,14 +278,12 @@ main(int argc, char *argv[])
 
    struct aub_file aub = {};
 
-   uint32_t active_ring = 0;
-   int num_ring_bos = 0;
+   enum drm_i915_gem_engine_class active_engine_class = I915_ENGINE_CLASS_INVALID;
+   int active_engine_instance = -1;
    enum address_space active_gtt = PPGTT;
 
    struct list_head bo_list;
    list_inithead(&bo_list);
-
-   struct bo *last_bo = NULL;
 
    char *line = NULL;
    size_t line_size;
@@ -267,38 +302,18 @@ main(int argc, char *argv[])
             aub.verbose_log_file = stdout;
 
          aub_write_header(&aub, "error state");
-         aub_write_default_setup(&aub);
          continue;
       }
 
       const char *active_start = "Active (";
       if (strncmp(line, active_start, strlen(active_start)) == 0) {
-         fail_if(active_ring != 0, "TODO: Handle multiple active rings\n");
+         fail_if(active_engine_class != I915_ENGINE_CLASS_INVALID,
+                 "TODO: Handle multiple active rings\n");
 
          char *ring = line + strlen(active_start);
-
-         const struct {
-            const char *match;
-            uint32_t ring;
-         } rings[] = {
-            { "rcs", I915_EXEC_RENDER },
-            { "vcs", I915_EXEC_VEBOX },
-            { "bcs", I915_EXEC_BLT },
-            { NULL, BO_TYPE_UNKNOWN },
-         }, *r;
-
-         for (r = rings; r->match; r++) {
-            if (strncasecmp(ring, r->match, strlen(r->match)) == 0) {
-               active_ring = r->ring;
-               break;
-            }
-         }
+         ring_for_engine_name(ring, &active_engine_class, &active_engine_instance);
 
          active_gtt = PPGTT;
-
-         char *count = strchr(ring, '[');
-         fail_if(!count || sscanf(count, "[%d]:", &num_ring_bos) < 1,
-                 "Failed to parse BO table header\n");
          continue;
       }
 
@@ -308,27 +323,16 @@ main(int argc, char *argv[])
          continue;
       }
 
-      if (num_ring_bos > 0) {
-         unsigned hi, lo, size;
-         if (sscanf(line, " %x_%x %d", &hi, &lo, &size) == 3) {
-            assert(aub_use_execlists(&aub));
-            struct bo *bo_entry = find_or_create(&bo_list, ((uint64_t)hi) << 32 | lo, active_gtt);
-            bo_entry->size = size;
-            bo_entry->ring = active_ring;
-            num_ring_bos--;
-         } else {
-            fail("Not enough BO entries in the active table\n");
-         }
-         continue;
-      }
-
-      if (line[0] == ':' || line[0] == '~') {
-         if (!last_bo || last_bo->type == BO_TYPE_UNKNOWN)
-            continue;
-
-         int count = ascii85_decode(line+1, &last_bo->data, line[0] == ':');
-         fail_if(count == 0, "ASCII85 decode failed.\n");
-         last_bo->size = count * 4;
+      unsigned hi, lo, size;
+      if (sscanf(line, " %x_%x %d", &hi, &lo, &size) == 3) {
+         assert(aub_use_execlists(&aub));
+         struct bo *bo_entry = find_or_create(&bo_list,
+                                              ((uint64_t)hi) << 32 | lo,
+                                              active_gtt,
+                                              I915_ENGINE_CLASS_INVALID,
+                                              -1);
+         bo_entry->size = size;
+         fprintf(stderr, "0x%lx -> %lu\n", bo_entry->addr, bo_entry->size);
          continue;
       }
 
@@ -341,13 +345,14 @@ main(int argc, char *argv[])
             enum bo_type type;
             enum address_space gtt;
          } bo_types[] = {
-            { "gtt_offset", BO_TYPE_BATCH,      PPGTT },
-            { "user",       BO_TYPE_USER,       PPGTT },
-            { "HW context", BO_TYPE_CONTEXT,    GGTT },
-            { "ringbuffer", BO_TYPE_RINGBUFFER, GGTT },
-            { "HW Status",  BO_TYPE_STATUS,     GGTT },
-            { "WA context", BO_TYPE_CONTEXT_WA, GGTT },
-            { NULL,         BO_TYPE_UNKNOWN,    GGTT },
+            { "gtt_offset",   BO_TYPE_BATCH,      PPGTT },
+            { "user",         BO_TYPE_USER,       PPGTT },
+            { "HW context",   BO_TYPE_CONTEXT,    GGTT },
+            { "ringbuffer",   BO_TYPE_RINGBUFFER, GGTT },
+            { "HW Status",    BO_TYPE_STATUS,     GGTT },
+            { "WA context",   BO_TYPE_CONTEXT_WA, GGTT },
+            /* { "NULL context", BO_TYPE_NULL,       GGTT }, */
+            { NULL,           BO_TYPE_UNKNOWN,    GGTT },
          }, *b;
          for (b = bo_types; b->match; b++) {
             if (strncasecmp(dashes, b->match, strlen(b->match)) == 0) {
@@ -356,7 +361,7 @@ main(int argc, char *argv[])
          }
 
          if (!b->match) {
-            fprintf(stdout, "Ignoring BO: %s", dashes);
+            fprintf(stderr, "Ignoring BO: %s", dashes);
             continue;
          }
 
@@ -365,14 +370,43 @@ main(int argc, char *argv[])
          if (!bo_address_str || sscanf(bo_address_str, "= 0x%08x %08x\n", &hi, &lo) != 2)
             continue;
 
-         last_bo = find_or_create(&bo_list, ((uint64_t) hi) << 32 | lo, b->gtt);
+         ring_for_engine_name(line, &active_engine_class, &active_engine_instance);
+
+         struct bo *bo_entry = find_or_create(&bo_list,
+                                              ((uint64_t) hi) << 32 | lo, b->gtt,
+                                              b->gtt == GGTT ? I915_ENGINE_CLASS_INVALID : active_engine_class,
+                                              b->gtt == GGTT ? -1 : active_engine_instance);
+
+         bo_entry->engine_class = active_engine_class;
+         bo_entry->engine_instance = active_engine_instance;
 
          /* The batch buffer will appear twice as gtt_offset and user. Only
           * keep the batch type.
           */
-         if (last_bo->type == BO_TYPE_UNKNOWN)
-            last_bo->type = b->type;
+         if (bo_entry->type == BO_TYPE_UNKNOWN)
+            bo_entry->type = b->type;
+         bo_entry->name = b->match;
 
+         fail_if(getline(&line, &line_size, err_file) <= 0, "Cannot read BO content");
+
+         if (bo_entry->type == BO_TYPE_UNKNOWN) {
+            fprintf(stderr, "Ignoring BO: %s", dashes);
+            continue;
+         }
+
+         if (line[0] == ':' || line[0] == '~') {
+            fprintf(stderr, "adding data to 0x%lx name=%s engine_class=%i engine_instance=%i\n",
+                    bo_entry->addr, bo_entry->name, bo_entry->engine_class, bo_entry->engine_instance);
+
+            assert(bo_entry->data == NULL);
+            int count = ascii85_decode(line+1, (uint32_t **) &bo_entry->data, line[0] == ':');
+            fail_if(count == 0, "ASCII85 decode failed.\n");
+
+            if (bo_entry->size != count * 4)
+               fprintf(stderr, "Inconsistent buffer size buffer=%s size=%lu/%u\n",
+                       bo_entry->name, bo_entry->size, count * 4);
+            bo_entry->size = count * 4;
+         }
          continue;
       }
    }
@@ -380,13 +414,29 @@ main(int argc, char *argv[])
    if (verbose) {
       fprintf(stdout, "BOs found:\n");
       list_for_each_entry(struct bo, bo_entry, &bo_list, link) {
-         fprintf(stdout, "\t type=%i gtt=%5s addr=0x%016" PRIx64 " size=%" PRIu64 "\n",
+         if (bo_entry->type == BO_TYPE_UNKNOWN)
+            continue;
+         fprintf(stdout, "\t type=%i gtt=%5s "
+                 "addr=0x%016" PRIx64 "-0x%016" PRIx64 " size=%" PRIu64 " (%s)\n",
                  bo_entry->type, bo_entry->gtt == PPGTT ? "ppgtt" : "ggtt",
-                 bo_entry->addr, bo_entry->size);
+                 bo_entry->addr, bo_entry->addr + bo_entry->size,
+                 bo_entry->size, bo_entry->name ? bo_entry->name : "unknown");
       }
    }
 
+   /* Find the batch that trigger the hang */
+   struct bo *batch_bo = NULL;
+   list_for_each_entry(struct bo, bo_entry, &bo_list, link) {
+      if (bo_entry->type == BO_TYPE_BATCH) {
+         batch_bo = bo_entry;
+         break;
+      }
+   }
+   fail_if(!batch_bo, "Failed to find batch buffer.\n");
+
+
    /* Add all the BOs to the aub file */
+   struct bo *hwsp_bo = NULL;
    list_for_each_entry(struct bo, bo_entry, &bo_list, link) {
       switch (bo_entry->type) {
       case BO_TYPE_BATCH:
@@ -398,21 +448,45 @@ main(int argc, char *argv[])
          aub_map_ppgtt(&aub, bo_entry->addr, bo_entry->size);
          aub_write_trace_block(&aub, AUB_TRACE_TYPE_NOTYPE,
                                bo_entry->data, bo_entry->size, bo_entry->addr);
+         break;
+      case BO_TYPE_CONTEXT:
+         if (bo_entry->engine_class == batch_bo->engine_class &&
+             bo_entry->engine_instance == batch_bo->engine_instance) {
+            hwsp_bo = bo_entry;
+
+            uint32_t *context = (uint32_t *) (bo_entry->data + 4096 /* GuC */ + 4096 /* HWSP */);
+
+            /* The error state doesn't provide a dump of the page tables, so
+             * we have to provide our own, that's easy enough.
+             *
+             * TODO: current the pml4 is always at GGTT address 0.
+             */
+            context[49] = aub.pml4.phys_addr >> 32;
+            context[51] = aub.pml4.phys_addr & 0xffffffff;
+
+            for (int i = 0; i < 4096; i++) {
+               if (i % 4 == 0)
+                  fprintf(stderr, "\n 0x%08lx: ", bo_entry->addr + 8192 + i * 4);
+               fprintf(stderr, "0x%08x ", context[i]);
+            }
+            fprintf(stderr, "\n");
+
+
+         }
+         aub_write_ggtt(&aub, bo_entry->addr, bo_entry->size, bo_entry->data);
+         break;
+      case BO_TYPE_RINGBUFFER:
+      case BO_TYPE_STATUS:
+      case BO_TYPE_CONTEXT_WA:
+         aub_write_ggtt(&aub, bo_entry->addr, bo_entry->size, bo_entry->data);
+         break;
       default:
          break;
       }
    }
 
-   /* Finally exec the batch BO */
-   bool batch_found = false;
-   list_for_each_entry(struct bo, bo_entry, &bo_list, link) {
-      if (bo_entry->type == BO_TYPE_BATCH) {
-         aub_write_exec(&aub, bo_entry->addr, aub_gtt_size(&aub), bo_entry->ring);
-         batch_found = true;
-         break;
-      }
-   }
-   fail_if(!batch_found, "Failed to find batch buffer.\n");
+   fail_if(!hwsp_bo, "Failed to find Context buffer.\n");
+   aub_write_context_execlists(&aub, hwsp_bo->addr + 4096 /* skip GuC page */, hwsp_bo->engine_class);
 
    /* Cleanup */
    list_for_each_entry_safe(struct bo, bo_entry, &bo_list, link) {
