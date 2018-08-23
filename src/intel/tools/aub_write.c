@@ -51,6 +51,10 @@
          _a > _b ? _a : _b;                     \
       })
 
+static void
+mem_trace_memory_write_header_out(struct aub_file *aub, uint64_t addr,
+                                  uint32_t len, uint32_t addr_space,
+                                  const char *desc);
 
 enum gen_ring {
    GEN_RING_RENDER,
@@ -101,6 +105,22 @@ align_u32(uint32_t v, uint32_t a)
 }
 
 static void
+data_out(struct aub_file *aub, const void *data, size_t size)
+{
+   if (size == 0)
+      return;
+
+   fail_if(fwrite(data, 1, size, aub->file) == 0,
+           "Writing to output failed\n");
+}
+
+static void
+dword_out(struct aub_file *aub, uint32_t data)
+{
+   data_out(aub, &data, sizeof(data));
+}
+
+static void
 aub_ppgtt_table_finish(struct aub_ppgtt_table *table, int level)
 {
    if (level == 1)
@@ -125,8 +145,16 @@ aub_file_init(struct aub_file *aub, FILE *file, uint16_t pci_id)
            "failed to identify chipset=0x%x\n", pci_id);
    aub->addr_bits = aub->devinfo.gen >= 8 ? 48 : 32;
 
-   aub->pml4.phys_addr = PML4_PHYS_ADDR;
+   aub->phys_addrs_allocator = 0;
+   aub->pml4.phys_addr = aub->phys_addrs_allocator++ << 12;
    aub->default_addr_space = AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_PHYSICAL;
+
+   mem_trace_memory_write_header_out(aub, 0,
+                                     GEN8_PTE_SIZE,
+                                     AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_GGTT_ENTRY,
+                                     "GGTT PT");
+   dword_out(aub, 1);
+   dword_out(aub, 0);
 }
 
 void
@@ -140,22 +168,6 @@ uint32_t
 aub_gtt_size(struct aub_file *aub)
 {
    return NUM_PT_ENTRIES * (aub->addr_bits > 32 ? GEN8_PTE_SIZE : PTE_SIZE);
-}
-
-static void
-data_out(struct aub_file *aub, const void *data, size_t size)
-{
-   if (size == 0)
-      return;
-
-   fail_if(fwrite(data, 1, size, aub->file) == 0,
-           "Writing to output failed\n");
-}
-
-static void
-dword_out(struct aub_file *aub, uint32_t data)
-{
-   data_out(aub, &data, sizeof(data));
 }
 
 static void
@@ -196,7 +208,6 @@ static void
 populate_ppgtt_table(struct aub_file *aub, struct aub_ppgtt_table *table,
                      int start, int end, int level)
 {
-   static uint64_t phys_addrs_allocator = (PML4_PHYS_ADDR >> 12) + 1;
    uint64_t entries[512] = {0};
    int dirty_start = 512, dirty_end = 0;
 
@@ -212,7 +223,7 @@ populate_ppgtt_table(struct aub_file *aub, struct aub_ppgtt_table *table,
          dirty_end = max(dirty_end, i);
          if (level == 1) {
             table->subtables[i] =
-               (void *)(phys_addrs_allocator++ << 12);
+               (void *)(aub->phys_addrs_allocator++ << 12);
             if (aub->verbose_log_file) {
                fprintf(aub->verbose_log_file,
                        "   Adding entry: %x, phys_addr: 0x%016" PRIx64 "\n",
@@ -222,7 +233,7 @@ populate_ppgtt_table(struct aub_file *aub, struct aub_ppgtt_table *table,
             table->subtables[i] =
                calloc(1, sizeof(struct aub_ppgtt_table));
             table->subtables[i]->phys_addr =
-               phys_addrs_allocator++ << 12;
+               aub->phys_addrs_allocator++ << 12;
             if (aub->verbose_log_file) {
                fprintf(aub->verbose_log_file,
                        "   Adding entry: %x, phys_addr: 0x%016" PRIx64 "\n",
@@ -368,14 +379,17 @@ static void
 write_execlists_default_setup(struct aub_file *aub)
 {
    /* GGTT PT */
+   uint64_t phys_addr = aub->phys_addrs_allocator;
    uint32_t ggtt_ptes = STATIC_GGTT_MAP_SIZE >> 12;
 
-   mem_trace_memory_write_header_out(aub, STATIC_GGTT_MAP_START >> 12,
+   aub->phys_addrs_allocator += ggtt_ptes;
+
+   mem_trace_memory_write_header_out(aub, sizeof(uint64_t) * (STATIC_GGTT_MAP_START >> 12),
                                      ggtt_ptes * GEN8_PTE_SIZE,
                                      AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_GGTT_ENTRY,
                                      "GGTT PT");
    for (uint32_t i = 0; i < ggtt_ptes; i++) {
-      dword_out(aub, 1 + 0x1000 * i + STATIC_GGTT_MAP_START);
+      dword_out(aub, 1 + 0x1000 * i + phys_addr);
       dword_out(aub, 0);
    }
 
