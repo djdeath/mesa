@@ -402,6 +402,20 @@ write_execlists_header(struct aub_file *aub, const char *name)
    register_write_out(aub, GFX_MODE_RCSUNIT, 0x80008000 /* execlist enable */);
    register_write_out(aub, GFX_MODE_VCSUNIT0, 0x80008000 /* execlist enable */);
    register_write_out(aub, GFX_MODE_BCSUNIT, 0x80008000 /* execlist enable */);
+
+   /* Initialize the context on each CS with an empty batch to make the HW
+    * write the default values into the context image.
+    */
+   uint32_t empty_batch[2] = {
+      MI_BATCH_BUFFER_END,
+      0,
+   };
+   aub_map_ppgtt(aub, 0, sizeof(empty_batch));
+   aub_write_trace_block(aub, AUB_TRACE_TYPE_BATCH, empty_batch, sizeof(empty_batch), 0);
+
+   aub_write_exec(aub, 0, 0, I915_EXEC_RENDER);
+   aub_write_exec(aub, 0, 0, I915_EXEC_BSD);
+   aub_write_exec(aub, 0, 0, I915_EXEC_BLT);
 }
 
 static void write_legacy_header(struct aub_file *aub, const char *name)
