@@ -159,6 +159,10 @@ struct bo {
       BO_TYPE_UNKNOWN = 0,
       BO_TYPE_BATCH,
       BO_TYPE_USER,
+      BO_TYPE_CONTEXT,
+      BO_TYPE_RINGBUFFER,
+      BO_TYPE_STATUS,
+      BO_TYPE_CONTEXT_WA,
    } type;
    bool ppgtt;
    uint64_t addr;
@@ -337,14 +341,23 @@ main(int argc, char *argv[])
             enum bo_type type;
             enum address_space gtt;
          } bo_types[] = {
-            { "gtt_offset", BO_TYPE_BATCH, PPGTT },
-            { "user", BO_TYPE_USER, PPGTT },
-            { NULL, BO_TYPE_UNKNOWN, GGTT },
+            { "gtt_offset", BO_TYPE_BATCH,      PPGTT },
+            { "user",       BO_TYPE_USER,       PPGTT },
+            { "HW context", BO_TYPE_CONTEXT,    GGTT },
+            { "ringbuffer", BO_TYPE_RINGBUFFER, GGTT },
+            { "HW Status",  BO_TYPE_STATUS,     GGTT },
+            { "WA context", BO_TYPE_CONTEXT_WA, GGTT },
+            { NULL,         BO_TYPE_UNKNOWN,    GGTT },
          }, *b;
          for (b = bo_types; b->match; b++) {
             if (strncasecmp(dashes, b->match, strlen(b->match)) == 0) {
                break;
             }
+         }
+
+         if (!b->match) {
+            fprintf(stdout, "Ignoring BO: %s", dashes);
+            continue;
          }
 
          uint32_t hi, lo;
@@ -367,8 +380,9 @@ main(int argc, char *argv[])
    if (verbose) {
       fprintf(stdout, "BOs found:\n");
       list_for_each_entry(struct bo, bo_entry, &bo_list, link) {
-         fprintf(stdout, "\t type=%i addr=0x%016" PRIx64 " size=%" PRIu64 "\n",
-                 bo_entry->type, bo_entry->addr, bo_entry->size);
+         fprintf(stdout, "\t type=%i gtt=%5s addr=0x%016" PRIx64 " size=%" PRIu64 "\n",
+                 bo_entry->type, bo_entry->gtt == PPGTT ? "ppgtt" : "ggtt",
+                 bo_entry->addr, bo_entry->size);
       }
    }
 
