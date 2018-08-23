@@ -31,6 +31,7 @@
 #include "util/macros.h"
 
 #include "aub_read.h"
+#include "gen_context.h"
 #include "intel_aub.h"
 
 #define TYPE(dw)       (((dw) >> 29) & 7)
@@ -183,7 +184,7 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
    uint64_t context_descriptor;
 
    switch (offset) {
-   case 0x2230: /* render elsp */
+   case EXECLIST_SUBMITPORT_RCSUNIT: /* render elsp */
       read->render_elsp[read->render_elsp_index++] = value;
       if (read->render_elsp_index < 4)
          return;
@@ -193,7 +194,7 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       context_descriptor = (uint64_t)read->render_elsp[2] << 32 |
          read->render_elsp[3];
       break;
-   case 0x22230: /* blitter elsp */
+   case EXECLIST_SUBMITPORT_BCSUNIT: /* blitter elsp */
       read->blitter_elsp[read->blitter_elsp_index++] = value;
       if (read->blitter_elsp_index < 4)
          return;
@@ -203,28 +204,28 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       context_descriptor = (uint64_t)read->blitter_elsp[2] << 32 |
          read->blitter_elsp[3];
       break;
-   case 0x2510: /* render elsq0 lo */
+   case EXECLIST_SQ_CONTENTS0_RCSUNIT: /* render elsq0 lo */
       read->render_elsp[3] = value;
       return;
       break;
-   case 0x2514: /* render elsq0 hi */
+   case (EXECLIST_SQ_CONTENTS0_RCSUNIT + 4): /* render elsq0 hi */
       read->render_elsp[2] = value;
       return;
       break;
-   case 0x22510: /* blitter elsq0 lo */
+   case EXECLIST_SQ_CONTENTS0_BCSUNIT: /* blitter elsq0 lo */
       read->blitter_elsp[3] = value;
       return;
       break;
-   case 0x22514: /* blitter elsq0 hi */
+   case (EXECLIST_SQ_CONTENTS0_BCSUNIT + 4): /* blitter elsq0 hi */
       read->blitter_elsp[2] = value;
       return;
       break;
-   case 0x2550: /* render elsc */
+   case EXECLIST_CONTROL_RCSUNIT: /* render elsc */
       engine = GEN_ENGINE_RENDER;
       context_descriptor = (uint64_t)read->render_elsp[2] << 32 |
          read->render_elsp[3];
       break;
-   case 0x22550: /* blitter elsc */
+   case EXECLIST_CONTROL_BCSUNIT: /* blitter elsc */
       engine = GEN_ENGINE_BLITTER;
       context_descriptor = (uint64_t)read->blitter_elsp[2] << 32 |
          read->blitter_elsp[3];
