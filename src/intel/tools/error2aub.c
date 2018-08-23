@@ -151,6 +151,10 @@ print_help(const char *progname, FILE *file)
 }
 
 struct bo {
+   enum address_space {
+      PPGTT = 0,
+      GGTT,
+   } gtt;
    enum bo_type {
       BO_TYPE_UNKNOWN = 0,
       BO_TYPE_BATCH,
@@ -166,16 +170,16 @@ struct bo {
 };
 
 static struct bo *
-find_or_create(struct list_head *bo_list, uint64_t addr)
+find_or_create(struct list_head *bo_list, uint64_t addr, enum address_space gtt)
 {
    list_for_each_entry(struct bo, bo_entry, bo_list, link) {
-      if (bo_entry->addr == addr)// && bo_entry->ppgtt == ppgtt)
+      if (bo_entry->addr == addr && bo_entry->gtt == gtt)
          return bo_entry;
    }
 
    struct bo *new_bo = calloc(1, sizeof(*new_bo));
    new_bo->addr = addr;
-   //new_bo->ppgtt = ppgtt;
+   new_bo->gtt = gtt;
    list_addtail(&new_bo->link, bo_list);
 
    return new_bo;
@@ -235,6 +239,7 @@ main(int argc, char *argv[])
 
    uint32_t active_ring = 0;
    int num_ring_bos = 0;
+   enum address_space active_gtt = PPGTT;
 
    struct list_head bo_list;
    list_inithead(&bo_list);
@@ -285,9 +290,17 @@ main(int argc, char *argv[])
             }
          }
 
+         active_gtt = PPGTT;
+
          char *count = strchr(ring, '[');
          fail_if(!count || sscanf(count, "[%d]:", &num_ring_bos) < 1,
                  "Failed to parse BO table header\n");
+         continue;
+      }
+
+      const char *global_start = "Pinned (global) [";
+      if (strncmp(line, global_start, strlen(global_start)) == 0) {
+         active_gtt = GGTT;
          continue;
       }
 
@@ -295,7 +308,7 @@ main(int argc, char *argv[])
          unsigned hi, lo, size;
          if (sscanf(line, " %x_%x %d", &hi, &lo, &size) == 3) {
             assert(aub_use_execlists(&aub));
-            struct bo *bo_entry = find_or_create(&bo_list, ((uint64_t)hi) << 32 | lo);
+            struct bo *bo_entry = find_or_create(&bo_list, ((uint64_t)hi) << 32 | lo, active_gtt);
             bo_entry->size = size;
             bo_entry->ring = active_ring;
             num_ring_bos--;
@@ -319,37 +332,34 @@ main(int argc, char *argv[])
       if (dashes) {
          dashes += 4;
 
+         const struct {
+            const char *match;
+            enum bo_type type;
+            enum address_space gtt;
+         } bo_types[] = {
+            { "gtt_offset", BO_TYPE_BATCH, PPGTT },
+            { "user", BO_TYPE_USER, PPGTT },
+            { NULL, BO_TYPE_UNKNOWN, GGTT },
+         }, *b;
+         for (b = bo_types; b->match; b++) {
+            if (strncasecmp(dashes, b->match, strlen(b->match)) == 0) {
+               break;
+            }
+         }
 
          uint32_t hi, lo;
          char *bo_address_str = strchr(dashes, '=');
          if (!bo_address_str || sscanf(bo_address_str, "= 0x%08x %08x\n", &hi, &lo) != 2)
             continue;
 
-         last_bo = find_or_create(&bo_list, ((uint64_t) hi) << 32 | lo);
+         last_bo = find_or_create(&bo_list, ((uint64_t) hi) << 32 | lo, b->gtt);
 
-         const struct {
-            const char *match;
-            enum bo_type type;
-         } bo_types[] = {
-            { "gtt_offset", BO_TYPE_BATCH },
-            { "user", BO_TYPE_USER },
-            { "HW context", BO_TYPE_CONTEXT },
-            { NULL, BO_TYPE_UNKNOWN },
-         }, *b;
+         /* The batch buffer will appear twice as gtt_offset and user. Only
+          * keep the batch type.
+          */
+         if (last_bo->type == BO_TYPE_UNKNOWN)
+            last_bo->type = b->type;
 
-         for (b = bo_types; b->match; b++) {
-            if (strncasecmp(dashes, b->match, strlen(b->match)) == 0) {
-
-               /* The batch buffer will appear twice as gtt_offset and user.
-                * Only keep the batch type.
-                */
-               if (last_bo->type == BO_TYPE_BATCH && b->type == BO_TYPE_USER)
-                  break;
-
-               last_bo->type = b->type;
-               break;
-            }
-         }
          continue;
       }
    }
