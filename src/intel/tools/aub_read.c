@@ -204,6 +204,16 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       context_descriptor = (uint64_t)read->blitter_elsp[2] << 32 |
          read->blitter_elsp[3];
       break;
+   case EXECLIST_SUBMITPORT_VCSUNIT0: /* video elsp */
+      read->video_elsp[read->video_elsp_index++] = value;
+      if (read->video_elsp_index < 4)
+         return;
+
+      read->video_elsp_index = 0;
+      engine = GEN_ENGINE_VIDEO;
+      context_descriptor = (uint64_t)read->video_elsp[2] << 32 |
+         read->video_elsp[3];
+      break;
    case EXECLIST_SQ_CONTENTS0_RCSUNIT: /* render elsq0 lo */
       read->render_elsp[3] = value;
       return;
@@ -220,6 +230,14 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       read->blitter_elsp[2] = value;
       return;
       break;
+   case EXECLIST_SQ_CONTENTS0_VCSUNIT0: /* video elsq0 lo */
+      read->video_elsp[3] = value;
+      return;
+      break;
+   case (EXECLIST_SQ_CONTENTS0_VCSUNIT0 + 4): /* video elsq0 hi */
+      read->video_elsp[2] = value;
+      return;
+      break;
    case EXECLIST_CONTROL_RCSUNIT: /* render elsc */
       engine = GEN_ENGINE_RENDER;
       context_descriptor = (uint64_t)read->render_elsp[2] << 32 |
@@ -229,6 +247,11 @@ handle_memtrace_reg_write(struct aub_read *read, const uint32_t *p)
       engine = GEN_ENGINE_BLITTER;
       context_descriptor = (uint64_t)read->blitter_elsp[2] << 32 |
          read->blitter_elsp[3];
+      break;
+   case EXECLIST_CONTROL_VCSUNIT0: /* video elsc */
+      engine = GEN_ENGINE_VIDEO;
+      context_descriptor = (uint64_t)read->video_elsp[2] << 32 |
+         read->video_elsp[3];
       break;
    default:
       return;
