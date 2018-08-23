@@ -184,7 +184,7 @@ int
 main(int argc, char *argv[])
 {
    int i, c;
-   bool help = false;
+   bool help = false, verbose;
    char *out_filename = NULL, *in_filename = NULL;
    const struct option aubinator_opts[] = {
       { "help",       no_argument,       NULL,     'h' },
@@ -254,7 +254,7 @@ main(int argc, char *argv[])
                  "%s currently only works on gen8+\n", argv[0]);
 
          if (verbose)
-            aub->verbose_log_file = stdout;
+            aub.verbose_log_file = stdout;
 
          aub_write_header(&aub, "error state");
          aub_write_default_setup(&aub);
