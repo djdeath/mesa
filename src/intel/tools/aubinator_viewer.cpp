@@ -342,8 +342,18 @@ window_has_ctrl_key(int key)
 }
 
 static void
-destroy_window_noop(struct window *win)
+destroy_window(struct window *win)
 {
+   /* This works because children windows are inserted at the back of the
+    * list, ensuring the deletion loop goes through the children after calling
+    * this function.
+    */
+   list_for_each_entry(struct window, child_window,
+                       &win->children_windows, parent_link)
+      destroy_window(child_window);
+
+   win->opened = false;
+
 }
 
 static bool rect_fits(const cairo_rectangle_int_t *rect1,
@@ -403,6 +413,29 @@ find_window_position(const ImVec2 &size)
    return ImVec2(best_rect.x, best_rect.y);
 }
 
+static void
+init_window(struct window *window,
+            const ImVec2& size,
+            void (*display)(struct window*),
+            void (*destroy)(struct window*),
+            const char *title_fmt, ...)
+{
+   list_inithead(&window->parent_link);
+   list_inithead(&window->children_windows);
+   window->size = size;
+   window->position = find_window_position(window->size);
+   window->opened = true;
+   window->display = display;
+   window->destroy = destroy;
+
+   va_list ap;
+   va_start(ap, title_fmt);
+   vsnprintf(window->name, sizeof(window->name), title_fmt, ap);
+   va_end(ap);
+
+   list_addtail(&window->link, &context.windows);
+}
+
 /* Shader windows */
 
 static void
@@ -425,6 +458,8 @@ destroy_shader_window(struct window *win)
 {
    struct shader_window *window = (struct shader_window *) win;
 
+   destroy_window(&window->base);
+
    free(window->shader);
    free(window);
 }
@@ -434,15 +469,11 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
 {
    struct shader_window *window = xtzalloc(*window);
 
-   snprintf(window->base.name, sizeof(window->base.name),
-            "%s (0x%lx)##%p", desc, address, window);
-
-   list_inithead(&window->base.parent_link);
-   window->base.size = ImVec2(700, 300);
-   window->base.position = find_window_position(window->base.size);
-   window->base.opened = true;
-   window->base.display = display_shader_window;
-   window->base.destroy = destroy_shader_window;
+   init_window(&window->base,
+               ImVec2(700, 300),
+               display_shader_window,
+               destroy_shader_window,
+               "%s (0x%lx)##%p", desc, address, window);
 
    struct gen_batch_decode_bo shader_bo;
    if (mem->pml4)
@@ -457,8 +488,6 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
          fclose(f);
       }
    }
-
-   list_addtail(&window->base.link, &context.windows);
 
    return window;
 }
@@ -499,21 +528,15 @@ new_urb_window(struct aub_viewer_decode_ctx *decode_ctx, uint64_t address)
 {
    struct urb_window *window = xtzalloc(*window);
 
-   snprintf(window->base.name, sizeof(window->base.name),
-            "URB view (0x%lx)##%p", address, window);
-
-   list_inithead(&window->base.parent_link);
-   window->base.size = ImVec2(700, 300);
-   window->base.position = find_window_position(window->base.size);
-   window->base.opened = true;
-   window->base.display = display_urb_window;
-   window->base.destroy = destroy_urb_window;
+   init_window(&window->base,
+               ImVec2(700, 300),
+               display_urb_window,
+               destroy_urb_window,
+               "URB view (0x%lx)##%p", address, window);
 
    window->end_urb_offset = decode_ctx->end_urb_offset;
    memcpy(window->urb_stages, decode_ctx->urb_stages, sizeof(window->urb_stages));
    window->urb_view = AubinatorViewerUrb();
-
-   list_addtail(&window->base.link, &context.windows);
 
    return window;
 }
@@ -577,13 +600,6 @@ new_edit_window(const char *title, struct aub_mem *mem,
 {
    struct edit_window *window = xtzalloc(*window);
 
-   list_inithead(&window->base.parent_link);
-   window->base.size = ImVec2(500, 600);
-   window->base.position = find_window_position(window->base.size);
-   window->base.opened = true;
-   window->base.display = display_edit_window;
-   window->base.destroy = destroy_edit_window;
-
    window->mem = mem;
    window->address = address;
    if (ppgtt) {
@@ -601,9 +617,12 @@ new_edit_window(const char *title, struct aub_mem *mem,
    window->editor.WriteFn = write_edit_window;
    window->editor.ReadOnly = window->aub_bo.map == NULL;
 
-   snprintf(window->base.name, sizeof(window->base.name),
-            "%s at 0x%lx (%s) ##%p", title, address,
-            window->aub_bo.map ? "read/write" : "read only", window);
+   init_window(&window->base,
+               ImVec2(500, 600),
+               display_edit_window,
+               destroy_edit_window,
+               "%s at 0x%lx (%s) ##%p", title, address,
+               window->aub_bo.map ? "read/write" : "read only", window);
 
    if (window->aub_bo.map) {
       uint64_t unaligned_map = (uint64_t) window->aub_bo.map;
@@ -616,8 +635,6 @@ new_edit_window(const char *title, struct aub_mem *mem,
    }
 
    window->gtt_offset = address - window->gtt_bo.addr;
-
-   list_addtail(&window->base.link, &context.windows);
 
    return window;
 }
@@ -695,19 +712,13 @@ show_pml4_window(struct pml4_window *window, struct aub_mem *mem)
       return;
    }
 
-   snprintf(window->base.name, sizeof(window->base.name),
-            "4-Level page tables##%p", window);
-
-   list_inithead(&window->base.parent_link);
-   window->base.size = ImVec2(500, 600);
-   window->base.position = find_window_position(window->base.size);
-   window->base.opened = true;
-   window->base.display = display_pml4_window;
-   window->base.destroy = destroy_window_noop;
+   init_window(&window->base,
+               ImVec2(500, 600),
+               display_pml4_window,
+               destroy_window,
+               "4-Level page tables##%p", window);
 
    window->mem = mem;
-
-   list_addtail(&window->base.link, &context.windows);
 }
 
 /* Batch decoding windows */
@@ -875,16 +886,11 @@ destroy_batch_window(struct window *win)
 {
    struct batch_window *window = (struct batch_window *) win;
 
+   window->pml4_window.base.opened = false;
+
    aub_mem_fini(&window->mem);
 
-   /* This works because children windows are inserted at the back of the
-    * list, ensuring the deletion loop goes through the children after calling
-    * this function.
-    */
-   list_for_each_entry(struct window, child_window,
-                       &window->base.children_windows, parent_link)
-      child_window->opened = false;
-   window->pml4_window.base.opened = false;
+   destroy_window(&window->base);
 
    free(window);
 }
@@ -894,16 +900,11 @@ new_batch_window(int exec_idx)
 {
    struct batch_window *window = xtzalloc(*window);
 
-   snprintf(window->base.name, sizeof(window->base.name),
-            "Batch view##%p", window);
-
-   list_inithead(&window->base.parent_link);
-   list_inithead(&window->base.children_windows);
-   window->base.size = ImVec2(600, 700);
-   window->base.position = find_window_position(window->base.size);
-   window->base.opened = true;
-   window->base.display = display_batch_window;
-   window->base.destroy = destroy_batch_window;
+   init_window(&window->base,
+               ImVec2(600, 700),
+               display_batch_window,
+               destroy_batch_window,
+               "Batch view##%p", window);
 
    window->collapsed = true;
    window->decode_cfg = aub_viewer_decode_cfg();
@@ -921,8 +922,6 @@ new_batch_window(int exec_idx)
    window->decode_ctx.edit_address = batch_edit_address;
 
    update_batch_window(window, false, exec_idx);
-
-   list_addtail(&window->base.link, &context.windows);
 }
 
 /**/
@@ -960,16 +959,11 @@ show_register_window(void)
       return;
    }
 
-   snprintf(window->name, sizeof(window->name), "Registers");
-
-   list_inithead(&window->parent_link);
-   window->position = ImVec2(-1, -1);
-   window->size = ImVec2(200, 400);
-   window->opened = true;
-   window->display = display_registers_window;
-   window->destroy = destroy_window_noop;
-
-   list_addtail(&window->link, &context.windows);
+   init_window(window,
+               ImVec2(200, 400),
+               display_registers_window,
+               destroy_window,
+               "Registers");
 }
 
 static void
@@ -1045,16 +1039,11 @@ show_commands_window(void)
       return;
    }
 
-   snprintf(window->name, sizeof(window->name), "Commands & structs");
-
-   list_inithead(&window->parent_link);
-   window->position = ImVec2(-1, -1);
-   window->size = ImVec2(300, 400);
-   window->opened = true;
-   window->display = display_commands_window;
-   window->destroy = destroy_window_noop;
-
-   list_addtail(&window->link, &context.windows);
+   init_window(window,
+               ImVec2(300, 400),
+               display_commands_window,
+               destroy_window,
+               "Commands & structs");
 }
 
 /* Main window */
@@ -1141,17 +1130,11 @@ show_aubfile_window(void)
    if (window->opened)
       return;
 
-   snprintf(window->name, sizeof(window->name),
-            "Aubinator Viewer: Intel AUB file decoder/editor");
-
-   list_inithead(&window->parent_link);
-   window->size = ImVec2(-1, 250);
-   window->position = ImVec2(0, 0);
-   window->opened = true;
-   window->display = display_aubfile_window;
-   window->destroy = NULL;
-
-   list_addtail(&window->link, &context.windows);
+   init_window(window,
+               ImVec2(-1, 250),
+               display_aubfile_window,
+               destroy_window,
+               "Aubinator Viewer: Intel AUB file decoder/editor");
 }
 
 /* Main redrawing */
