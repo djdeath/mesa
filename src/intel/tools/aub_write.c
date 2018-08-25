@@ -56,33 +56,6 @@ mem_trace_memory_write_header_out(struct aub_file *aub, uint64_t addr,
                                   uint32_t len, uint32_t addr_space,
                                   const char *desc);
 
-enum gen_ring {
-   GEN_RING_RENDER,
-   GEN_RING_BLITTER,
-   GEN_RING_VIDEO,
-};
-
-static const uint32_t *
-get_context_init(const struct gen_device_info *devinfo, enum gen_ring ring)
-{
-   static const uint32_t *gen8_contexts[] = {
-      [GEN_RING_RENDER] = gen8_render_context_init,
-      [GEN_RING_BLITTER] = gen8_blitter_context_init,
-      [GEN_RING_VIDEO] = gen8_video_context_init,
-   };
-   static const uint32_t *gen10_contexts[] = {
-      [GEN_RING_RENDER] = gen10_render_context_init,
-      [GEN_RING_BLITTER] = gen10_blitter_context_init,
-      [GEN_RING_VIDEO] = gen10_video_context_init,
-   };
-
-   assert(devinfo->gen >= 8);
-
-   if (devinfo->gen <= 10)
-      return gen8_contexts[ring];
-   return gen10_contexts[ring];
-}
-
 static void __attribute__ ((format(__printf__, 2, 3)))
 fail_if(int cond, const char *format, ...)
 {
@@ -415,7 +388,7 @@ write_execlists_default_setup(struct aub_file *aub)
       dword_out(aub, 0);
 
    /* RENDER_CONTEXT */
-   data_out(aub, get_context_init(&aub->devinfo, GEN_RING_RENDER), CONTEXT_RENDER_SIZE);
+   data_out(aub, gen_context_get_init(&aub->devinfo, I915_EXEC_RENDER), CONTEXT_RENDER_SIZE);
 
    /* BLITTER_RING */
    mem_trace_memory_write_header_out(aub, BLITTER_RING_ADDR, RING_SIZE,
@@ -434,7 +407,7 @@ write_execlists_default_setup(struct aub_file *aub)
       dword_out(aub, 0);
 
    /* BLITTER_CONTEXT */
-   data_out(aub, get_context_init(&aub->devinfo, GEN_RING_BLITTER), CONTEXT_OTHER_SIZE);
+   data_out(aub, gen_context_get_init(&aub->devinfo, I915_EXEC_BLT), CONTEXT_OTHER_SIZE);
 
    /* VIDEO_RING */
    mem_trace_memory_write_header_out(aub, VIDEO_RING_ADDR, RING_SIZE,
@@ -453,7 +426,7 @@ write_execlists_default_setup(struct aub_file *aub)
       dword_out(aub, 0);
 
    /* VIDEO_CONTEXT */
-   data_out(aub, get_context_init(&aub->devinfo, GEN_RING_VIDEO), CONTEXT_OTHER_SIZE);
+   data_out(aub, gen_context_get_init(&aub->devinfo, I915_EXEC_BSD), CONTEXT_OTHER_SIZE);
 
    register_write_out(aub, HWS_PGA_RCSUNIT, RENDER_CONTEXT_ADDR);
    register_write_out(aub, HWS_PGA_VCSUNIT0, VIDEO_CONTEXT_ADDR);

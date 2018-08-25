@@ -26,6 +26,10 @@
 
 #include <stdint.h>
 
+#include <i915_drm.h>
+
+#include "dev/gen_device_info.h"
+
 #define RING_SIZE         (1 * 4096)
 #define PPHWSP_SIZE         (1 * 4096)
 
@@ -103,5 +107,26 @@
 
 #include "gen8_context.h"
 #include "gen10_context.h"
+
+static inline const uint32_t *
+gen_context_get_init(const struct gen_device_info *devinfo, uint32_t ring_flag)
+{
+   static const uint32_t *gen8_contexts[] = {
+      [I915_EXEC_RENDER] = gen8_render_context_init,
+      [I915_EXEC_BLT] = gen8_blitter_context_init,
+      [I915_EXEC_BSD] = gen8_video_context_init,
+   };
+   static const uint32_t *gen10_contexts[] = {
+      [I915_EXEC_RENDER] = gen10_render_context_init,
+      [I915_EXEC_BLT] = gen10_blitter_context_init,
+      [I915_EXEC_BSD] = gen10_video_context_init,
+   };
+
+   assert(devinfo->gen >= 8);
+
+   if (devinfo->gen <= 10)
+      return gen8_contexts[ring_flag];
+   return gen10_contexts[ring_flag];
+}
 
 #endif /* GEN_CONTEXT_H */

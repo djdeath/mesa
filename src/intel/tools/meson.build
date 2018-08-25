@@ -21,7 +21,7 @@
 libaub = static_library(
   'aub',
   files('aub_read.c', 'aub_mem.c'),
-  include_directories : [inc_common, inc_intel],
+  include_directories : [inc_common, inc_intel, inc_drm_uapi],
   link_with : [libintel_common, libintel_dev, libmesa_util],
   c_args : [c_vis_args, no_override_init_args],
   install : false
