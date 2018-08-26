@@ -51,12 +51,19 @@ struct ggtt_entry {
    uint64_t phys_addr;
 };
 
+#define PHYS_MEM_PAGE_SIZE (32 * 1024)
+
 struct phys_mem {
    struct rb_node node;
    uint64_t fd_offset;
    uint64_t phys_addr;
    uint8_t *data;
    const uint8_t *aub_data;
+};
+
+struct phys_mem_mapping {
+   struct phys_mem *page;
+   uint64_t offset;
 };
 
 static void
@@ -142,23 +149,30 @@ static inline int
 cmp_phys_mem(const struct rb_node *node, const void *addr)
 {
    struct phys_mem *mem = rb_node_data(struct phys_mem, node, node);
-   return cmp_uint64(mem->phys_addr, *(uint64_t *)addr);
+   uint64_t search_addr = *(uint64_t *)addr;
+   if (search_addr < mem->phys_addr)
+      return 1;
+   if (search_addr >= (mem->phys_addr + PHYS_MEM_PAGE_SIZE))
+      return -1;
+   return 0;
 }
 
-static struct phys_mem *
+static struct phys_mem_mapping
 ensure_phys_mem(struct aub_mem *mem, uint64_t phys_addr)
 {
    struct rb_node *node = rb_tree_search_sloppy(&mem->mem, &phys_addr, cmp_phys_mem);
    int cmp = 0;
    if (!node || (cmp = cmp_phys_mem(node, &phys_addr))) {
       struct phys_mem *new_mem = calloc(1, sizeof(*new_mem));
-      new_mem->phys_addr = phys_addr;
+      new_mem->phys_addr = phys_addr - (phys_addr % PHYS_MEM_PAGE_SIZE);
       new_mem->fd_offset = mem->mem_fd_len;
 
-      MAYBE_UNUSED int ftruncate_res = ftruncate(mem->mem_fd, mem->mem_fd_len += 4096);
+      MAYBE_UNUSED int ftruncate_res =
+         ftruncate(mem->mem_fd, mem->mem_fd_len += PHYS_MEM_PAGE_SIZE);
       assert(ftruncate_res == 0);
 
-      new_mem->data = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED,
+      new_mem->data = mmap(NULL, PHYS_MEM_PAGE_SIZE,
+                           PROT_READ | PROT_WRITE, MAP_SHARED,
                            mem->mem_fd, new_mem->fd_offset);
       assert(new_mem->data != MAP_FAILED);
 
@@ -166,20 +180,25 @@ ensure_phys_mem(struct aub_mem *mem, uint64_t phys_addr)
       node = &new_mem->node;
    }
 
-   return rb_node_data(struct phys_mem, node, node);
+   struct phys_mem *phys_page = rb_node_data(struct phys_mem, node, node);
+   return (struct phys_mem_mapping) {
+      .page = phys_page,
+      .offset = phys_addr - phys_page->phys_addr
+   };
 }
 
-static struct phys_mem *
+static struct phys_mem_mapping
 search_phys_mem(struct aub_mem *mem, uint64_t phys_addr)
 {
-   phys_addr &= ~0xfff;
-
    struct rb_node *node = rb_tree_search(&mem->mem, &phys_addr, cmp_phys_mem);
-
    if (!node)
-      return NULL;
+      return (struct phys_mem_mapping) {};
 
-   return rb_node_data(struct phys_mem, node, node);
+   struct phys_mem *phys_page = rb_node_data(struct phys_mem, node, node);
+   return (struct phys_mem_mapping) {
+      .page = phys_page,
+      .offset = phys_addr - phys_page->phys_addr,
+   };
 }
 
 void
@@ -218,12 +237,12 @@ aub_mem_phys_write(void *_mem, uint64_t phys_address,
    struct aub_mem *mem = _mem;
    uint32_t to_write = size;
    for (uint64_t page = phys_address & ~0xfff; page < phys_address + size; page += 4096) {
-      struct phys_mem *pmem = ensure_phys_mem(mem, page);
+      struct phys_mem_mapping pmem = ensure_phys_mem(mem, page);
       uint64_t offset = MAX2(page, phys_address) - page;
-      uint32_t size_this_page = MIN2(to_write, 4096 - offset);
+      uint32_t size_this_page = MIN2(to_write, PHYS_MEM_PAGE_SIZE - (pmem.offset + offset));
       to_write -= size_this_page;
-      memcpy(pmem->data + offset, data, size_this_page);
-      pmem->aub_data = data - offset;
+      memcpy(pmem.page->data + pmem.offset + offset, data, size_this_page);
+      //pmem->aub_data = data - offset;
       data = (const uint8_t *)data + size_this_page;
    }
 }
@@ -283,14 +302,15 @@ aub_mem_get_ggtt_bo(void *_mem, uint64_t address)
         i;
         i = i == last ? NULL : ggtt_entry_next(i)) {
       uint64_t phys_addr = i->phys_addr & ~0xfff;
-      struct phys_mem *phys_mem = search_phys_mem(mem, phys_addr);
+      struct phys_mem_mapping mapping = search_phys_mem(mem, phys_addr);
 
-      if (!phys_mem)
+      if (!mapping.page)
          continue;
 
       uint32_t map_offset = i->virt_addr - address;
       void *res = mmap((uint8_t *)bo.map + map_offset, 4096, PROT_READ,
-                       MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
+                       MAP_SHARED | MAP_FIXED, mem->mem_fd,
+                       mapping.page->fd_offset + mapping.offset);
       assert(res != MAP_FAILED);
    }
 
@@ -299,19 +319,19 @@ aub_mem_get_ggtt_bo(void *_mem, uint64_t address)
    return bo;
 }
 
-static struct phys_mem *
+static struct phys_mem_mapping
 ppgtt_walk(struct aub_mem *mem, uint64_t pml4, uint64_t address)
 {
    uint64_t shift = 39;
    uint64_t addr = pml4;
    for (int level = 4; level > 0; level--) {
-      struct phys_mem *table = search_phys_mem(mem, addr);
-      if (!table)
-         return NULL;
+      struct phys_mem_mapping table = search_phys_mem(mem, addr);
+      if (!table.page)
+         return (struct phys_mem_mapping) {};
       int index = (address >> shift) & 0x1ff;
-      uint64_t entry = ((uint64_t *)table->data)[index];
+      uint64_t entry = ((uint64_t *)(table.page->data + table.offset))[index];
       if (!(entry & 1))
-         return NULL;
+         return (struct phys_mem_mapping) {};
       addr = entry & ~0xfff;
       shift -= 9;
    }
@@ -321,7 +341,7 @@ ppgtt_walk(struct aub_mem *mem, uint64_t pml4, uint64_t address)
 static bool
 ppgtt_mapped(struct aub_mem *mem, uint64_t pml4, uint64_t address)
 {
-   return ppgtt_walk(mem, pml4, address) != NULL;
+   return ppgtt_walk(mem, pml4, address).page != NULL;
 }
 
 struct gen_batch_decode_bo
@@ -352,10 +372,11 @@ aub_mem_get_ppgtt_bo(void *_mem, uint64_t address)
    assert(bo.map != MAP_FAILED);
 
    for (uint64_t page = address; page < end; page += 4096) {
-      struct phys_mem *phys_mem = ppgtt_walk(mem, mem->pml4, page);
+      struct phys_mem_mapping mapping = ppgtt_walk(mem, mem->pml4, page);
 
       void *res = mmap((uint8_t *)bo.map + (page - bo.addr), 4096, PROT_READ,
-                       MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
+                       MAP_SHARED | MAP_FIXED, mem->mem_fd,
+                       mapping.page->fd_offset + mapping.offset);
       assert(res != MAP_FAILED);
    }
 
@@ -401,26 +422,35 @@ aub_mem_fini(struct aub_mem *mem)
 struct gen_batch_decode_bo
 aub_mem_get_phys_addr_data(struct aub_mem *mem, uint64_t phys_addr)
 {
-   struct phys_mem *page = search_phys_mem(mem, phys_addr);
-   return page ?
-      (struct gen_batch_decode_bo) { .map = page->data, .addr = page->phys_addr, .size = 4096 } :
+   struct phys_mem_mapping mapping = search_phys_mem(mem, phys_addr);
+   return mapping.page ?
+      (struct gen_batch_decode_bo) {
+         .map = mapping.page->data + mapping.offset,
+         .addr = mapping.page->phys_addr + mapping.offset,
+         .size = 4096 } :
       (struct gen_batch_decode_bo) {};
 }
 
 struct gen_batch_decode_bo
 aub_mem_get_ppgtt_addr_data(struct aub_mem *mem, uint64_t virt_addr)
 {
-   struct phys_mem *page = ppgtt_walk(mem, mem->pml4, virt_addr);
-   return page ?
-      (struct gen_batch_decode_bo) { .map = page->data, .addr = virt_addr & ~((1ULL << 12) - 1), .size = 4096 } :
+   struct phys_mem_mapping mapping = ppgtt_walk(mem, mem->pml4, virt_addr);
+   return mapping.page ?
+      (struct gen_batch_decode_bo) {
+         .map = mapping.page->data + mapping.offset,
+         .addr = virt_addr & ~((1ULL << 12) - 1),
+         .size = 4096 } :
       (struct gen_batch_decode_bo) {};
 }
 
 struct gen_batch_decode_bo
 aub_mem_get_ppgtt_addr_aub_data(struct aub_mem *mem, uint64_t virt_addr)
 {
-   struct phys_mem *page = ppgtt_walk(mem, mem->pml4, virt_addr);
-   return page ?
-      (struct gen_batch_decode_bo) { .map = page->aub_data, .addr = virt_addr & ~((1ULL << 12) - 1), .size = 4096 } :
+   struct phys_mem_mapping mapping = ppgtt_walk(mem, mem->pml4, virt_addr);
+   return mapping.page ?
+      (struct gen_batch_decode_bo) {
+         .map = mapping.page->aub_data + mapping.offset,
+         .addr = virt_addr & ~((1ULL << 12) - 1),
+         .size = 4096 } :
       (struct gen_batch_decode_bo) {};
 }
