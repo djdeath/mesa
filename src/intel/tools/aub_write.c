@@ -520,6 +520,8 @@ aub_write_ggtt(struct aub_file *aub, uint64_t virt_addr, uint64_t size, const vo
       /* Pad to a multiple of 4 bytes. */
       data_out(aub, null_block, -block_size & 3);
    }
+
+   aub->phys_addrs_allocator += ggtt_ptes;
 }
 
 /**
