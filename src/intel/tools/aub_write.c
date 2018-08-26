@@ -575,7 +575,7 @@ static const struct engine {
    uint32_t default_ring_addr;
    uint64_t default_descriptor;
 } engines[] = {
-   [I915_EXEC_RENDER] = {
+   [I915_ENGINE_CLASS_RENDER] = {
       .elsp_reg = EXECLIST_SUBMITPORT_RCSUNIT,
       .elsq_reg = EXECLIST_SQ_CONTENTS0_RCSUNIT,
       .status_reg = EXECLIST_STATUS_RCSUNIT,
@@ -584,7 +584,7 @@ static const struct engine {
       .default_ring_addr = RENDER_RING_ADDR,
       .default_descriptor = RENDER_CONTEXT_DESCRIPTOR,
    },
-   [I915_EXEC_BSD] = {
+   [I915_ENGINE_CLASS_VIDEO] = {
       .elsp_reg = EXECLIST_SUBMITPORT_VCSUNIT0,
       .elsq_reg = EXECLIST_SQ_CONTENTS0_VCSUNIT0,
       .status_reg = EXECLIST_STATUS_VCSUNIT0,
@@ -593,7 +593,7 @@ static const struct engine {
       .default_ring_addr = VIDEO_RING_ADDR,
       .default_descriptor = VIDEO_CONTEXT_DESCRIPTOR,
    },
-   [I915_EXEC_BLT] = {
+   [I915_ENGINE_CLASS_COPY] = {
       .elsp_reg = EXECLIST_SUBMITPORT_BCSUNIT,
       .elsq_reg = EXECLIST_SQ_CONTENTS0_BCSUNIT,
       .status_reg = EXECLIST_STATUS_BCSUNIT,
@@ -605,16 +605,13 @@ static const struct engine {
 };
 
 static const struct engine *
-engine_from_ring_flag(uint32_t ring_flag)
+engine_from_ring_flag(enum drm_i915_gem_engine_class engine_class)
 {
-   switch (ring_flag) {
-   case I915_EXEC_DEFAULT:
-      return &engines[I915_EXEC_RENDER];
-      break;
-   case I915_EXEC_RENDER:
-   case I915_EXEC_BSD:
-   case I915_EXEC_BLT:
-      return &engines[ring_flag];
+   switch (engine_class) {
+   case I915_ENGINE_CLASS_RENDER:
+   case I915_ENGINE_CLASS_COPY:
+   case I915_ENGINE_CLASS_VIDEO:
+      return &engines[engine_class];
    default:
       unreachable("unknown ring");
    }
@@ -672,16 +669,16 @@ aub_dump_execlist(struct aub_file *aub, const struct engine *cs, uint64_t descri
 
 static void
 aub_dump_ringbuffer(struct aub_file *aub, uint64_t batch_offset,
-                    uint64_t offset, int ring_flag)
+                    uint64_t offset, enum drm_i915_gem_engine_class engine_class)
 {
    uint32_t ringbuffer[4096];
    unsigned aub_mi_bbs_len;
    int ring = AUB_TRACE_TYPE_RING_PRB0; /* The default ring */
    int ring_count = 0;
 
-   if (ring_flag == I915_EXEC_BSD)
+   if (engine_class == I915_ENGINE_CLASS_VIDEO)
       ring = AUB_TRACE_TYPE_RING_PRB1;
-   else if (ring_flag == I915_EXEC_BLT)
+   else if (engine_class == I915_ENGINE_CLASS_COPY)
       ring = AUB_TRACE_TYPE_RING_PRB2;
 
    /* Make a ring buffer to execute our batchbuffer. */
@@ -709,23 +706,24 @@ aub_dump_ringbuffer(struct aub_file *aub, uint64_t batch_offset,
 
 void
 aub_write_exec(struct aub_file *aub, uint64_t batch_addr,
-               uint64_t offset, int ring_flag)
+               uint64_t offset, enum drm_i915_gem_engine_class engine_class)
 {
    if (aub_use_execlists(aub)) {
-      const struct engine *cs = engine_from_ring_flag(ring_flag);
+      const struct engine *cs = engine_from_ring_flag(engine_class);
       aub_dump_ring_buffer(aub, cs, batch_addr);
       aub_dump_execlist(aub, cs, cs->default_descriptor);
    } else {
       /* Dump ring buffer */
-      aub_dump_ringbuffer(aub, batch_addr, offset, ring_flag);
+      aub_dump_ringbuffer(aub, batch_addr, offset, engine_class);
    }
    fflush(aub->file);
 }
 
 void
-aub_write_context_execlists(struct aub_file *aub, uint64_t context_addr, int ring_flag)
+aub_write_context_execlists(struct aub_file *aub, uint64_t context_addr,
+                            enum drm_i915_gem_engine_class engine_class)
 {
-   const struct engine *cs = engine_from_ring_flag(ring_flag);
+   const struct engine *cs = engine_from_ring_flag(engine_class);
    uint64_t descriptor = ((uint64_t)1 << 62 | context_addr  | CONTEXT_FLAGS);
    aub_dump_execlist(aub, cs, descriptor);
 }
