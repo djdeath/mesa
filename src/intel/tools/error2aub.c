@@ -316,6 +316,8 @@ main(int argc, char *argv[])
 
       const char *global_start = "Pinned (global) [";
       if (strncmp(line, global_start, strlen(global_start)) == 0) {
+         active_engine_class = I915_ENGINE_CLASS_INVALID;
+         active_engine_instance = -1;
          active_gtt = GGTT;
          continue;
       }
@@ -326,10 +328,9 @@ main(int argc, char *argv[])
          struct bo *bo_entry = find_or_create(&bo_list,
                                               ((uint64_t)hi) << 32 | lo,
                                               active_gtt,
-                                              I915_ENGINE_CLASS_INVALID,
-                                              -1);
+                                              active_engine_class,
+                                              active_engine_instance);
          bo_entry->size = size;
-         fprintf(stderr, "0x%lx -> %lu\n", bo_entry->addr, bo_entry->size);
          continue;
       }
 
@@ -349,17 +350,12 @@ main(int argc, char *argv[])
             { "HW Status",    BO_TYPE_STATUS,     GGTT },
             { "WA context",   BO_TYPE_CONTEXT_WA, GGTT },
             /* { "NULL context", BO_TYPE_NULL,       GGTT }, */
-            { NULL,           BO_TYPE_UNKNOWN,    GGTT },
+            { "unknown",      BO_TYPE_UNKNOWN,    GGTT },
          }, *b;
-         for (b = bo_types; b->match; b++) {
+         for (b = bo_types; b->match != BO_TYPE_UNKNOWN; b++) {
             if (strncasecmp(dashes, b->match, strlen(b->match)) == 0) {
                break;
             }
-         }
-
-         if (!b->match) {
-            fprintf(stderr, "Ignoring BO: %s", dashes);
-            continue;
          }
 
          uint32_t hi, lo;
@@ -380,27 +376,28 @@ main(int argc, char *argv[])
          /* The batch buffer will appear twice as gtt_offset and user. Only
           * keep the batch type.
           */
-         if (bo_entry->type == BO_TYPE_UNKNOWN)
+         if (bo_entry->type == BO_TYPE_UNKNOWN) {
             bo_entry->type = b->type;
+         } else {
+            fprintf(stdout, "Already provided BO: %s", dashes);
+            continue;
+         }
          bo_entry->name = b->match;
 
          fail_if(getline(&line, &line_size, err_file) <= 0, "Cannot read BO content");
 
          if (bo_entry->type == BO_TYPE_UNKNOWN) {
-            fprintf(stderr, "Ignoring BO: %s", dashes);
+            fprintf(stdout, "Ignoring BO: %s", dashes);
             continue;
          }
 
          if (line[0] == ':' || line[0] == '~') {
-            fprintf(stderr, "adding data to 0x%lx name=%s engine_class=%i engine_instance=%i\n",
-                    bo_entry->addr, bo_entry->name, bo_entry->engine_class, bo_entry->engine_instance);
-
             assert(bo_entry->data == NULL);
             int count = ascii85_decode(line+1, (uint32_t **) &bo_entry->data, line[0] == ':');
             fail_if(count == 0, "ASCII85 decode failed.\n");
 
             if (bo_entry->size != count * 4)
-               fprintf(stderr, "Inconsistent buffer size buffer=%s size=%lu/%u\n",
+               fprintf(stdout, "Inconsistent buffer size buffer=%s size=%lu/%u\n",
                        bo_entry->name, bo_entry->size, count * 4);
             bo_entry->size = count * 4;
          }
@@ -461,13 +458,13 @@ main(int argc, char *argv[])
             context[49] = aub.pml4.phys_addr >> 32;
             context[51] = aub.pml4.phys_addr & 0xffffffff;
 
-            for (int i = 0; i < 4096; i++) {
+            fprintf(stdout, "context dump:\n");
+            for (int i = 0; i < 60; i++) {
                if (i % 4 == 0)
-                  fprintf(stderr, "\n 0x%08lx: ", bo_entry->addr + 8192 + i * 4);
-               fprintf(stderr, "0x%08x ", context[i]);
+                  fprintf(stdout, "\n 0x%08lx: ", bo_entry->addr + 8192 + i * 4);
+               fprintf(stdout, "0x%08x ", context[i]);
             }
-            fprintf(stderr, "\n");
-
+            fprintf(stdout, "\n");
 
          }
          aub_write_ggtt(&aub, bo_entry->addr, bo_entry->size, bo_entry->data);
