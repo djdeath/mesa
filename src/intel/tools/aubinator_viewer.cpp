@@ -543,13 +543,18 @@ display_edit_window(struct window *win)
 {
    struct edit_window *window = (struct edit_window *) win;
 
-   if (window->aub_bo.map && window->gtt_bo.map) {
+   if (window->gtt_bo.map) {
       ImGui::BeginChild(ImGui::GetID("##block"));
-      window->editor.DrawContents((uint8_t *) window,
-                                  MIN3(window->len,
-                                       window->gtt_bo.size - window->gtt_offset,
-                                       window->aub_bo.size - window->aub_offset),
-                                  window->address);
+
+      size_t mem_size =
+         window->aub_bo.map ?
+         MIN3(window->len,
+              window->gtt_bo.size - window->gtt_offset,
+              window->aub_bo.size - window->aub_offset) :
+         MIN2(window->len,
+              window->gtt_bo.size - window->gtt_offset);
+
+      window->editor.DrawContents((uint8_t *) window, mem_size, window->address);
       ImGui::EndChild();
    } else {
       ImGui::Text("Memory view at 0x%lx not available", window->address);
@@ -567,12 +572,10 @@ destroy_edit_window(struct window *win)
 }
 
 static struct edit_window *
-new_edit_window(struct aub_mem *mem, uint64_t address, uint32_t len)
+new_edit_window(const char *title, struct aub_mem *mem,
+                bool ppgtt, uint64_t address, uint32_t len)
 {
    struct edit_window *window = xtzalloc(*window);
-
-   snprintf(window->base.name, sizeof(window->base.name),
-            "Editing aub at 0x%lx##%p", address, window);
 
    list_inithead(&window->base.parent_link);
    window->base.size = ImVec2(500, 600);
@@ -583,14 +586,24 @@ new_edit_window(struct aub_mem *mem, uint64_t address, uint32_t len)
 
    window->mem = mem;
    window->address = address;
-   window->aub_bo = aub_mem_get_ppgtt_addr_aub_data(mem, address);
-   window->gtt_bo = aub_mem_get_ppgtt_addr_data(mem, address);
+   if (ppgtt) {
+      window->aub_bo = aub_mem_get_ppgtt_addr_aub_data(mem, address);
+      window->gtt_bo = aub_mem_get_ppgtt_addr_data(mem, address);
+   } else {
+      window->gtt_bo = aub_mem_get_ggtt_bo(mem, address);
+   }
    window->len = len;
    window->editor = MemoryEditor();
+   window->editor.Cols = 16;
    window->editor.OptShowDataPreview = true;
    window->editor.OptShowAscii = false;
    window->editor.ReadFn = read_edit_window;
    window->editor.WriteFn = write_edit_window;
+   window->editor.ReadOnly = window->aub_bo.map == NULL;
+
+   snprintf(window->base.name, sizeof(window->base.name),
+            "%s at 0x%lx (%s) ##%p", title, address,
+            window->aub_bo.map ? "read/write" : "read only", window);
 
    if (window->aub_bo.map) {
       uint64_t unaligned_map = (uint64_t) window->aub_bo.map;
@@ -724,7 +737,7 @@ batch_edit_address(void *user_data, uint64_t address, uint32_t len)
 {
    struct batch_window *window = (struct batch_window *) user_data;
    struct edit_window *edit_window =
-      new_edit_window(&window->mem, address, len);
+      new_edit_window("Edit instruction", &window->mem, true /* PPGTT */, address, len);
 
    list_add(&edit_window->base.parent_link, &window->base.children_windows);
 }
@@ -788,6 +801,19 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
    void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr);
 
    window->uses_ppgtt = true;
+
+   if (ImGui::Button("Show context image")) {
+      struct edit_window *edit_window =
+         new_edit_window("Context image", &window->mem, false /* GGTT */,
+                         pphwsp_bo.addr + pphwsp_size, pphwsp_bo.size - pphwsp_size);
+      list_add(&edit_window->base.parent_link, &window->base.children_windows);
+   } ImGui::SameLine();
+   if (ImGui::Button("Show HWSP image")) {
+      struct edit_window *edit_window =
+         new_edit_window("HWSP image", &window->mem, false /* GGTT */,
+                         pphwsp_bo.addr, pphwsp_size);
+      list_add(&edit_window->base.parent_link, &window->base.children_windows);
+   }
 
    aub_viewer_render_batch(&window->decode_ctx, commands,
                            ring_buffer_tail - ring_buffer_head,
