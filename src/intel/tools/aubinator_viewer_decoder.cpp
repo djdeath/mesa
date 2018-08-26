@@ -960,8 +960,15 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                                "Secondary batch at 0x%08" PRIx64 " unavailable",
                                next_batch.addr);
          } else {
-            aub_viewer_render_batch(ctx, next_batch.map, next_batch.size,
-                                    next_batch.addr);
+            if (ctx->batch_level < 10) {
+               ctx->batch_level++;
+               aub_viewer_render_batch(ctx, next_batch.map, next_batch.size,
+                                       next_batch.addr);
+               ctx->batch_level--;
+            } else {
+               ImGui::TextColored(ctx->cfg->error_color,
+                                  "Too many batch levels (%i)", ctx->batch_level);
+            }
          }
          if (second_level) {
             /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" set acts
