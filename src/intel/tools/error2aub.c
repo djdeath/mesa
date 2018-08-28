@@ -282,6 +282,14 @@ main(int argc, char *argv[])
    int active_engine_instance = -1;
    enum address_space active_gtt = PPGTT;
 
+   struct {
+      struct {
+         uint32_t ring_buffer_head;
+         uint32_t ring_buffer_tail;
+      } instances[3];
+   } engines[I915_ENGINE_CLASS_VIDEO_ENHANCE + 1];
+   memset(engines, 0, sizeof(engines));
+
    struct list_head bo_list;
    list_inithead(&bo_list);
 
@@ -302,11 +310,26 @@ main(int argc, char *argv[])
          continue;
       }
 
+      if (strstr(line, " command stream:")) {
+         ring_for_engine_name(line, &active_engine_class, &active_engine_instance);
+         continue;
+      }
+
+      if (sscanf(line, "  ring->head: 0x%x\n",
+                 &engines[
+                    active_engine_class].instances[
+                       active_engine_instance].ring_buffer_head) == 1) {
+         continue;
+      }
+
+      if (sscanf(line, "  ring->tail: 0x%x\n",
+                 &engines[
+                    active_engine_class].instances[
+                       active_engine_instance].ring_buffer_tail) == 1) {
+         continue;
+      }
       const char *active_start = "Active (";
       if (strncmp(line, active_start, strlen(active_start)) == 0) {
-         fail_if(active_engine_class != I915_ENGINE_CLASS_INVALID,
-                 "TODO: Handle multiple active rings\n");
-
          char *ring = line + strlen(active_start);
          ring_for_engine_name(ring, &active_engine_class, &active_engine_instance);
 
@@ -449,6 +472,12 @@ main(int argc, char *argv[])
             hwsp_bo = bo_entry;
 
             uint32_t *context = (uint32_t *) (bo_entry->data + 4096 /* GuC */ + 4096 /* HWSP */);
+
+            /* Update the ring buffer at the last known location. */
+            context[5] = engines[bo_entry->engine_class].instances[bo_entry->engine_instance].ring_buffer_head;
+            context[7] = engines[bo_entry->engine_class].instances[bo_entry->engine_instance].ring_buffer_tail;
+            fprintf(stdout, "engine start=0x%x head/tail=0x%x/0x%x\n",
+                    context[9], context[5], context[7]);
 
             /* The error state doesn't provide a dump of the page tables, so
              * we have to provide our own, that's easy enough.
