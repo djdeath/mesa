@@ -666,7 +666,7 @@ display_pml4_level(struct pml4_window *window, uint64_t table_addr, uint64_t tab
          if (!available)
             continue;
          ImGui::Text("Entry%03i - phys_addr=0x%lx - virt_addr=0x%lx",
-                     e, table[e], entry_virt_addr); ImGui::SameLine();
+                     e, table[e] & ~0xffful, entry_virt_addr); ImGui::SameLine();
 
          char label[40];
          snprintf(label, sizeof(label), "View page##%lx", entry_virt_addr);
@@ -685,7 +685,7 @@ display_pml4_level(struct pml4_window *window, uint64_t table_addr, uint64_t tab
              ImGui::TreeNodeEx(&table[e],
                                available ? ImGuiTreeNodeFlags_Framed : 0,
                                "Entry%03i - phys_addr=0x%lx - virt_addr=0x%lx",
-                               e, table[e], entry_virt_addr)) {
+                               e, table[e] & ~0xfful, entry_virt_addr)) {
             display_pml4_level(window, table[e] & ~0xffful, entry_virt_addr, level -1);
             ImGui::TreePop();
          }
