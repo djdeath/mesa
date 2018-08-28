@@ -165,7 +165,7 @@ handle_execlist_write(void *user_data, enum gen_engine engine, uint64_t context_
 
    (void)engine; /* TODO */
    gen_print_batch(&batch_ctx, commands, ring_buffer_tail - ring_buffer_head,
-                   0);
+                   0, true);
    aub_mem_clear_bo_maps(&mem);
 }
 
@@ -182,7 +182,7 @@ handle_ring_write(void *user_data, enum gen_engine engine,
    batch_ctx.user_data = &mem;
    batch_ctx.get_bo = get_legacy_bo;
 
-   gen_print_batch(&batch_ctx, data, data_len, 0);
+   gen_print_batch(&batch_ctx, data, data_len, 0, false);
 
    aub_mem_clear_bo_maps(&mem);
 }

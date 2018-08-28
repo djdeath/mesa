@@ -702,7 +702,7 @@ display_batch_ring_write(void *user_data, enum gen_engine engine,
 
    window->uses_ppgtt = false;
 
-   aub_viewer_render_batch(&window->decode_ctx, data, data_len, 0);
+   aub_viewer_render_batch(&window->decode_ctx, data, data_len, 0, false);
 }
 
 static void
@@ -734,7 +734,7 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
 
    aub_viewer_render_batch(&window->decode_ctx, commands,
                            ring_buffer_tail - ring_buffer_head,
-                           ring_buffer_start);
+                           ring_buffer_start, true);
 }
 
 static void

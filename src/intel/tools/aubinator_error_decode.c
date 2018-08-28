@@ -611,7 +611,7 @@ read_data_file(FILE *file)
           strcmp(sections[s].buffer_name, "ring buffer") == 0 ||
           strcmp(sections[s].buffer_name, "HW Context") == 0) {
          gen_print_batch(&batch_ctx, sections[s].data, sections[s].count,
-                         sections[s].gtt_offset);
+                         sections[s].gtt_offset, false);
       }
    }
 
