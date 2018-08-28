@@ -160,14 +160,14 @@ handle_execlist_write(void *user_data, enum gen_engine engine, uint64_t context_
    struct gen_batch_decode_bo ring_bo = aub_mem_get_ggtt_bo(&mem,
                                                             ring_buffer_start);
    assert(ring_bo.size > 0);
-   void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr);
+   void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr) + ring_buffer_head;
 
    batch_ctx.get_bo = get_bo;
 
    (void)engine; /* TODO */
    gen_print_batch(&batch_ctx, commands,
                    MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
-                   0, true);
+                   ring_bo.addr + ring_buffer_head, true);
    aub_mem_clear_bo_maps(&mem);
 }
 
