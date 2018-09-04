@@ -225,6 +225,8 @@ struct gen_batch_decode_ctx {
    uint64_t instruction_base;
 
    int max_vbo_decoded_lines;
+
+   int n_batch_buffer_start;
 };
 
 void gen_batch_decode_ctx_init(struct gen_batch_decode_ctx *ctx,
