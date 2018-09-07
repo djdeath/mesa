@@ -617,7 +617,7 @@ static const struct gen_device_info gen_device_info_skl_gt1 = {
    .num_subslices = { 2, },
    .num_eu_per_subslice = 6,
    .l3_banks = 2,
-   .urb.size = 192,
+   .urb.size = 128,
    .simulator_id = 12,
 };
 

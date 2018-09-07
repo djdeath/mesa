@@ -101,6 +101,20 @@ static const struct gen_l3_config chv_l3_configs[] = {
    {{ 0 }}
 };
 
+static const struct gen_l3_config gen9_gt1_l3_configs[] = {
+   /* SLM URB ALL DC  RO  IS   C   T */
+   {{  0, 32, 32,  0,  0,  0,  0,  0 }},
+   /* Below entries are untested. */
+   {{  0, 32,  0, 16, 32,  0,  0,  0 }},
+   {{  0, 32,  0, 16, 48,  0,  0,  0 }},
+   {{  0, 32,  0,  0, 64,  0,  0,  0 }},
+   {{  0, 32, 64,  0,  0,  0,  0,  0 }},
+   {{ 16, 16, 32,  0,  0,  0,  0,  0 }},
+   {{ 16, 16,  0, 16, 32,  0,  0,  0 }},
+   {{ 16, 16,  0, 32, 16,  0,  0,  0 }},
+   {{ 0 }}
+};
+
 /**
  * BXT 2x6 validated L3 configurations.  \sa ivb_l3_configs.
  */
@@ -164,6 +178,8 @@ get_l3_configs(const struct gen_device_info *devinfo)
    case 9:
       if (devinfo->l3_banks == 1)
          return bxt_2x6_l3_configs;
+      if (devinfo->gt == 1)
+         return gen9_gt1_l3_configs;
       return chv_l3_configs;
 
    case 10:
