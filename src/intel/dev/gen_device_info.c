@@ -617,19 +617,7 @@ static const struct gen_device_info gen_device_info_skl_gt1 = {
    .num_subslices = { 2, },
    .num_eu_per_subslice = 6,
    .l3_banks = 2,
-   .urb = {
-      .size = 128,
-      .min_entries = {
-         [MESA_SHADER_VERTEX]    = 34,
-         [MESA_SHADER_TESS_EVAL] = 34,
-      },
-      .max_entries = {
-         [MESA_SHADER_VERTEX]    = 352,
-         [MESA_SHADER_TESS_CTRL] = 128,
-         [MESA_SHADER_TESS_EVAL] = 208,
-         [MESA_SHADER_GEOMETRY]  = 128,
-      },
-   },
+   .urb.size = 192,
    .simulator_id = 12,
 };
 
