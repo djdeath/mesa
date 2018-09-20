@@ -47,6 +47,9 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
    ctx->decode_cfg = decode_cfg;
    ctx->spec = spec;
    ctx->disasm = disasm;
+
+   for (unsigned i = 0; i < ARRAY_SIZE(ctx->bindings); i++)
+      ctx->bindings[i].n = ctx->samplers[i].n = -1;
 }
 
 static void
@@ -770,6 +773,40 @@ handle_3dstate(struct aub_viewer_decode_ctx *ctx,
          ctx->urb_stages[ctx->stage].wr_offset = iter.raw_value * 32;
       } else if (strstr(iter.name, "URB Entry Output Length")) {
          ctx->urb_stages[ctx->stage].wr_length = iter.raw_value * 32;
+      } else if (strcmp(iter.name, "Sampler Count") == 0) {
+         ctx->samplers[ctx->stage].n = iter.raw_value * 4;
+      } else if (strcmp(iter.name, "Binding Table Entry Count") == 0) {
+         ctx->bindings[ctx->stage].n = iter.raw_value * 4;
+      }
+   }
+}
+
+static void
+handle_binding_table(struct aub_viewer_decode_ctx *ctx,
+                     struct gen_group *inst,
+                     const uint32_t *p)
+{
+   struct gen_field_iterator iter;
+   gen_field_iterator_init(&iter, inst, p, 0, false);
+   while (gen_field_iterator_next(&iter)) {
+      if (strstr(iter.name, "Binding Table")) {
+         ctx->bindings[ctx->stage].bo =
+            ctx_get_bo(ctx, true, ctx->surface_base + iter.raw_value);
+      }
+   }
+}
+
+static void
+handle_sampler_table(struct aub_viewer_decode_ctx *ctx,
+                     struct gen_group *inst,
+                     const uint32_t *p)
+{
+   struct gen_field_iterator iter;
+   gen_field_iterator_init(&iter, inst, p, 0, false);
+   while (gen_field_iterator_next(&iter)) {
+      if (strstr(iter.name, "Sampler State")) {
+         ctx->samplers[ctx->stage].bo =
+            ctx_get_bo(ctx, true, ctx->dynamic_base + iter.raw_value);
       }
    }
 }
@@ -857,6 +894,16 @@ struct custom_decoder info_decoders[] = {
    { "3DSTATE_DS", handle_3dstate, AUB_DECODE_STAGE_DS, },
    { "3DSTATE_HS", handle_3dstate, AUB_DECODE_STAGE_HS, },
    { "3DSTATE_PS", handle_3dstate, AUB_DECODE_STAGE_PS, },
+   { "3DSTATE_BINDING_TABLE_POINTERS_VS", handle_binding_table, AUB_DECODE_STAGE_VS, },
+   { "3DSTATE_BINDING_TABLE_POINTERS_GS", handle_binding_table, AUB_DECODE_STAGE_GS, },
+   { "3DSTATE_BINDING_TABLE_POINTERS_DS", handle_binding_table, AUB_DECODE_STAGE_DS, },
+   { "3DSTATE_BINDING_TABLE_POINTERS_HS", handle_binding_table, AUB_DECODE_STAGE_HS, },
+   { "3DSTATE_BINDING_TABLE_POINTERS_PS", handle_binding_table, AUB_DECODE_STAGE_PS, },
+   { "3DSTATE_SAMPLER_TABLE_POINTERS_VS", handle_sampler_table, AUB_DECODE_STAGE_VS, },
+   { "3DSTATE_SAMPLER_STATE_POINTERS_GS", handle_sampler_table, AUB_DECODE_STAGE_GS, },
+   { "3DSTATE_SAMPLER_TABLE_POINTERS_DS", handle_sampler_table, AUB_DECODE_STAGE_DS, },
+   { "3DSTATE_SAMPLER_TABLE_POINTERS_HS", handle_sampler_table, AUB_DECODE_STAGE_HS, },
+   { "3DSTATE_SAMPLER_TABLE_POINTERS_PS", handle_sampler_table, AUB_DECODE_STAGE_PS, },
    { "3DSTATE_CONSTANT_VS", handle_urb_constant, AUB_DECODE_STAGE_VS, },
    { "3DSTATE_CONSTANT_GS", handle_urb_constant, AUB_DECODE_STAGE_GS, },
    { "3DSTATE_CONSTANT_DS", handle_urb_constant, AUB_DECODE_STAGE_DS, },

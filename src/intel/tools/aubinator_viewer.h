@@ -80,6 +80,16 @@ struct aub_viewer_decode_ctx {
    uint32_t end_urb_offset;
    struct aub_decode_urb_stage_state urb_stages[AUB_DECODE_N_STAGE];
 
+   struct {
+      struct gen_batch_decode_bo bo;
+      int n;
+   } bindings[AUB_DECODE_N_STAGE];
+
+   struct {
+      struct gen_batch_decode_bo bo;
+      int n;
+   } samplers[AUB_DECODE_N_STAGE];
+
    int n_batch_buffer_start;
 };
 
