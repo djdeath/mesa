@@ -48,8 +48,8 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
    ctx->spec = spec;
    ctx->disasm = disasm;
 
-   for (unsigned i = 0; i < ARRAY_SIZE(ctx->bindings); i++)
-      ctx->bindings[i].n = ctx->samplers[i].n = -1;
+   for (unsigned i = 0; i < ARRAY_SIZE(ctx->state.bindings); i++)
+      ctx->state.bindings[i].n = ctx->state.samplers[i].n = -1;
 }
 
 static void
@@ -140,7 +140,7 @@ static void
 ctx_disassemble_program(struct aub_viewer_decode_ctx *ctx,
                         uint32_t ksp, const char *type)
 {
-   uint64_t addr = ctx->instruction_base + ksp;
+   uint64_t addr = ctx->state.instruction_base + ksp;
    struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
    if (!bo.map) {
       ImGui::TextColored(ctx->cfg->missing_color, "Shader unavailable");
@@ -163,11 +163,11 @@ handle_state_base_address(struct aub_viewer_decode_ctx *ctx,
 
    while (gen_field_iterator_next(&iter)) {
       if (strcmp(iter.name, "Surface State Base Address") == 0) {
-         ctx->surface_base = iter.raw_value;
+         ctx->state.surface_base = iter.raw_value;
       } else if (strcmp(iter.name, "Dynamic State Base Address") == 0) {
-         ctx->dynamic_base = iter.raw_value;
+         ctx->state.dynamic_base = iter.raw_value;
       } else if (strcmp(iter.name, "Instruction Base Address") == 0) {
-         ctx->instruction_base = iter.raw_value;
+         ctx->state.instruction_base = iter.raw_value;
       }
    }
 }
@@ -191,12 +191,12 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
    }
 
    struct gen_batch_decode_bo bind_bo =
-      ctx_get_bo(ctx, true, ctx->surface_base + offset);
+      ctx_get_bo(ctx, true, ctx->state.surface_base + offset);
 
    if (bind_bo.map == NULL) {
       ImGui::TextColored(ctx->cfg->missing_color,
                          "binding table unavailable addr=0x%08" PRIx64,
-                         ctx->surface_base + offset);
+                         ctx->state.surface_base + offset);
       return;
    }
 
@@ -205,7 +205,7 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
       if (pointers[i] == 0)
          continue;
 
-      uint64_t addr = ctx->surface_base + pointers[i];
+      uint64_t addr = ctx->state.surface_base + pointers[i];
       struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
       uint32_t size = strct->dw_length * 4;
 
@@ -233,7 +233,7 @@ dump_samplers(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
    if (count < 0)
       count = update_count(ctx, offset, strct->dw_length, 4);
 
-   uint64_t state_addr = ctx->dynamic_base + offset;
+   uint64_t state_addr = ctx->state.dynamic_base + offset;
    struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
    const uint8_t *state_map = (const uint8_t *) bo.map;
 
@@ -280,7 +280,7 @@ handle_media_interface_descriptor_load(struct aub_viewer_decode_ctx *ctx,
       }
    }
 
-   uint64_t desc_addr = ctx->dynamic_base + descriptor_offset;
+   uint64_t desc_addr = ctx->state.dynamic_base + descriptor_offset;
    struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, desc_addr);
    const uint32_t *desc_map = (const uint32_t *) bo.map;
 
@@ -627,7 +627,7 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
       }
    }
 
-   uint64_t state_addr = ctx->dynamic_base + state_offset;
+   uint64_t state_addr = ctx->state.dynamic_base + state_offset;
    struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
    const uint8_t *state_map = (const uint8_t *) bo.map;
 
@@ -726,7 +726,7 @@ decode_3dprimitive(struct aub_viewer_decode_ctx *ctx,
 {
    if (ctx->display_urb) {
       if (ImGui::Button("Show URB"))
-         ctx->display_urb(ctx->user_data, ctx->urb_stages);
+         ctx->display_urb(ctx->user_data, ctx->state.urb);
    }
 }
 
@@ -739,18 +739,19 @@ handle_urb(struct aub_viewer_decode_ctx *ctx,
    gen_field_iterator_init(&iter, inst, p, 0, false);
    while (gen_field_iterator_next(&iter)) {
       if (strstr(iter.name, "URB Starting Address")) {
-         ctx->urb_stages[ctx->stage].start = iter.raw_value * 8192;
+         ctx->state.urb[ctx->stage].start = iter.raw_value * 8192;
       } else if (strstr(iter.name, "URB Entry Allocation Size")) {
-         ctx->urb_stages[ctx->stage].size = (iter.raw_value + 1) * 64;
+         ctx->state.urb[ctx->stage].size = (iter.raw_value + 1) * 64;
       } else if (strstr(iter.name, "Number of URB Entries")) {
-         ctx->urb_stages[ctx->stage].n_entries = iter.raw_value;
+         ctx->state.urb[ctx->stage].n_entries = iter.raw_value;
       }
    }
 
-   ctx->end_urb_offset = MAX2(ctx->urb_stages[ctx->stage].start +
-                              ctx->urb_stages[ctx->stage].n_entries *
-                              ctx->urb_stages[ctx->stage].size,
-                              ctx->end_urb_offset);
+   ctx->state.end_urb_offset =
+      MAX2(ctx->state.urb[ctx->stage].start +
+           ctx->state.urb[ctx->stage].n_entries *
+           ctx->state.urb[ctx->stage].size,
+           ctx->state.end_urb_offset);
 }
 
 static void
@@ -766,17 +767,17 @@ handle_3dstate(struct aub_viewer_decode_ctx *ctx,
          continue;
 
       if (strstr(iter.name, "URB Entry Read Offset")) {
-         ctx->urb_stages[ctx->stage].rd_offset = iter.raw_value * 32;
+         ctx->state.urb[ctx->stage].rd_offset = iter.raw_value * 32;
       } else if (strstr(iter.name, "URB Entry Read Length")) {
-         ctx->urb_stages[ctx->stage].rd_length = iter.raw_value * 32;
+         ctx->state.urb[ctx->stage].rd_length = iter.raw_value * 32;
       } else if (strstr(iter.name, "URB Entry Output Read Offset")) {
-         ctx->urb_stages[ctx->stage].wr_offset = iter.raw_value * 32;
+         ctx->state.urb[ctx->stage].wr_offset = iter.raw_value * 32;
       } else if (strstr(iter.name, "URB Entry Output Length")) {
-         ctx->urb_stages[ctx->stage].wr_length = iter.raw_value * 32;
+         ctx->state.urb[ctx->stage].wr_length = iter.raw_value * 32;
       } else if (strcmp(iter.name, "Sampler Count") == 0) {
-         ctx->samplers[ctx->stage].n = iter.raw_value * 4;
+         ctx->state.samplers[ctx->stage].n = iter.raw_value * 4;
       } else if (strcmp(iter.name, "Binding Table Entry Count") == 0) {
-         ctx->bindings[ctx->stage].n = iter.raw_value * 4;
+         ctx->state.bindings[ctx->stage].n = iter.raw_value * 4;
       }
    }
 }
@@ -790,8 +791,8 @@ handle_binding_table(struct aub_viewer_decode_ctx *ctx,
    gen_field_iterator_init(&iter, inst, p, 0, false);
    while (gen_field_iterator_next(&iter)) {
       if (strstr(iter.name, "Binding Table")) {
-         ctx->bindings[ctx->stage].bo =
-            ctx_get_bo(ctx, true, ctx->surface_base + iter.raw_value);
+         ctx->state.bindings[ctx->stage].bo =
+            ctx_get_bo(ctx, true, ctx->state.surface_base + iter.raw_value);
       }
    }
 }
@@ -805,8 +806,8 @@ handle_sampler_table(struct aub_viewer_decode_ctx *ctx,
    gen_field_iterator_init(&iter, inst, p, 0, false);
    while (gen_field_iterator_next(&iter)) {
       if (strstr(iter.name, "Sampler State")) {
-         ctx->samplers[ctx->stage].bo =
-            ctx_get_bo(ctx, true, ctx->dynamic_base + iter.raw_value);
+         ctx->state.samplers[ctx->stage].bo =
+            ctx_get_bo(ctx, true, ctx->state.dynamic_base + iter.raw_value);
       }
    }
 }
@@ -829,11 +830,11 @@ handle_urb_constant(struct aub_viewer_decode_ctx *ctx,
       gen_field_iterator_init(&iter, body, &outer.p[outer.start_bit / 32],
                               0, false);
 
-      ctx->urb_stages[ctx->stage].const_rd_length = 0;
+      ctx->state.urb[ctx->stage].const_rd_length = 0;
       while (gen_field_iterator_next(&iter)) {
          int idx;
          if (sscanf(iter.name, "Read Length[%d]", &idx) == 1) {
-            ctx->urb_stages[ctx->stage].const_rd_length += iter.raw_value * 32;
+            ctx->state.urb[ctx->stage].const_rd_length += iter.raw_value * 32;
          }
       }
    }

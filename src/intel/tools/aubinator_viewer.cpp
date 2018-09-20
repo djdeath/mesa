@@ -534,8 +534,8 @@ new_urb_window(struct aub_viewer_decode_ctx *decode_ctx, uint64_t address)
                destroy_urb_window,
                "URB view (0x%lx)##%p", address, window);
 
-   window->end_urb_offset = decode_ctx->end_urb_offset;
-   memcpy(window->urb_stages, decode_ctx->urb_stages, sizeof(window->urb_stages));
+   window->end_urb_offset = decode_ctx->state.end_urb_offset;
+   memcpy(window->urb_stages, decode_ctx->state.urb, sizeof(window->urb_stages));
    window->urb_view = AubinatorViewerUrb();
 
    return window;

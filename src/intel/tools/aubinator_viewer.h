@@ -55,6 +55,25 @@ struct aub_decode_urb_stage_state {
    uint32_t wr_length;
 };
 
+struct aub_viewer_state {
+   uint64_t surface_base;
+   uint64_t dynamic_base;
+   uint64_t instruction_base;
+
+   uint32_t end_urb_offset;
+   struct aub_decode_urb_stage_state urb[AUB_DECODE_N_STAGE];
+
+   struct {
+      struct gen_batch_decode_bo bo;
+      int n;
+   } bindings[AUB_DECODE_N_STAGE];
+
+   struct {
+      struct gen_batch_decode_bo bo;
+      int n;
+   } samplers[AUB_DECODE_N_STAGE];
+};
+
 struct aub_viewer_decode_ctx {
    struct gen_batch_decode_bo (*get_bo)(void *user_data, bool ppgtt, uint64_t address);
    unsigned (*get_state_size)(void *user_data,
@@ -72,25 +91,11 @@ struct aub_viewer_decode_ctx {
    struct aub_viewer_cfg *cfg;
    struct aub_viewer_decode_cfg *decode_cfg;
 
-   uint64_t surface_base;
-   uint64_t dynamic_base;
-   uint64_t instruction_base;
-
    enum aub_decode_stage stage;
-   uint32_t end_urb_offset;
-   struct aub_decode_urb_stage_state urb_stages[AUB_DECODE_N_STAGE];
-
-   struct {
-      struct gen_batch_decode_bo bo;
-      int n;
-   } bindings[AUB_DECODE_N_STAGE];
-
-   struct {
-      struct gen_batch_decode_bo bo;
-      int n;
-   } samplers[AUB_DECODE_N_STAGE];
 
    int n_batch_buffer_start;
+
+   struct aub_viewer_state state;
 };
 
 void aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
