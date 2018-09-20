@@ -751,9 +751,9 @@ handle_urb(struct aub_viewer_decode_ctx *ctx,
 }
 
 static void
-handle_urb_read(struct aub_viewer_decode_ctx *ctx,
-                struct gen_group *inst,
-                const uint32_t *p)
+handle_3dstate(struct aub_viewer_decode_ctx *ctx,
+               struct gen_group *inst,
+               const uint32_t *p)
 {
    struct gen_field_iterator iter;
    gen_field_iterator_init(&iter, inst, p, 0, false);
@@ -852,11 +852,11 @@ struct custom_decoder info_decoders[] = {
    { "3DSTATE_URB_GS", handle_urb, AUB_DECODE_STAGE_GS, },
    { "3DSTATE_URB_DS", handle_urb, AUB_DECODE_STAGE_DS, },
    { "3DSTATE_URB_HS", handle_urb, AUB_DECODE_STAGE_HS, },
-   { "3DSTATE_VS", handle_urb_read, AUB_DECODE_STAGE_VS, },
-   { "3DSTATE_GS", handle_urb_read, AUB_DECODE_STAGE_GS, },
-   { "3DSTATE_DS", handle_urb_read, AUB_DECODE_STAGE_DS, },
-   { "3DSTATE_HS", handle_urb_read, AUB_DECODE_STAGE_HS, },
-   { "3DSTATE_PS", handle_urb_read, AUB_DECODE_STAGE_PS, },
+   { "3DSTATE_VS", handle_3dstate, AUB_DECODE_STAGE_VS, },
+   { "3DSTATE_GS", handle_3dstate, AUB_DECODE_STAGE_GS, },
+   { "3DSTATE_DS", handle_3dstate, AUB_DECODE_STAGE_DS, },
+   { "3DSTATE_HS", handle_3dstate, AUB_DECODE_STAGE_HS, },
+   { "3DSTATE_PS", handle_3dstate, AUB_DECODE_STAGE_PS, },
    { "3DSTATE_CONSTANT_VS", handle_urb_constant, AUB_DECODE_STAGE_VS, },
    { "3DSTATE_CONSTANT_GS", handle_urb_constant, AUB_DECODE_STAGE_GS, },
    { "3DSTATE_CONSTANT_DS", handle_urb_constant, AUB_DECODE_STAGE_DS, },
