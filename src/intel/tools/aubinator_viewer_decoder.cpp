@@ -172,6 +172,81 @@ handle_state_base_address(struct aub_viewer_decode_ctx *ctx,
    }
 }
 
+void aub_viewer_render_bindings(struct aub_viewer_decode_ctx *ctx,
+                                struct gen_batch_decode_bo bo,
+                                uint64_t addr, int count)
+{
+   struct gen_group *strct =
+      gen_spec_find_struct(ctx->spec, "RENDER_SURFACE_STATE");
+
+   if (count < 0)
+      count = update_count(ctx, 0 /* TODO */, 1, 8);
+
+   if (bo.map == NULL) {
+      ImGui::TextColored(ctx->cfg->missing_color,
+                         "binding table unavailable addr=0x%08" PRIx64,
+                         addr);
+      return;
+   }
+
+   const uint32_t *pointers = (const uint32_t *) bo.map + (addr - bo.addr) / 4;
+   for (int i = 0; i < count; i++) {
+      if (pointers[i] == 0)
+         continue;
+
+      uint64_t addr = ctx->state.surface_base + pointers[i];
+      struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
+      uint32_t size = strct->dw_length * 4;
+
+      if (pointers[i] % 32 != 0 ||
+          addr < bo.addr || addr + size >= bo.addr + bo.size) {
+         ImGui::TextColored(ctx->cfg->missing_color,
+                            "pointer %u: %08x <not valid>", i, pointers[i]);
+         continue;
+      }
+
+      const uint8_t *state = (const uint8_t *) bo.map + (addr - bo.addr);
+      if (ImGui::TreeNodeEx(&pointers[i], ImGuiTreeNodeFlags_Framed,
+                            "pointer %u: %08x", i, pointers[i])) {
+         aub_viewer_print_group(ctx, strct, addr, state);
+         ImGui::TreePop();
+      }
+   }
+}
+
+void
+aub_viewer_render_samplers(struct aub_viewer_decode_ctx *ctx,
+                           struct gen_batch_decode_bo bo,
+                           uint64_t state_addr, int count)
+{
+   struct gen_group *strct = gen_spec_find_struct(ctx->spec, "SAMPLER_STATE");
+   const uint8_t *state_map = (const uint8_t *) bo.map + (state_addr - bo.addr);
+
+   if (count < 0)
+      count = update_count(ctx, 0, strct->dw_length, 4);
+
+   if (bo.map == NULL) {
+      ImGui::TextColored(ctx->cfg->missing_color,
+                         "samplers unavailable addr=0x%08" PRIx64, state_addr);
+      return;
+   }
+
+   if (state_addr % 32 != 0 || (state_addr - bo.addr) >= bo.size) {
+      ImGui::TextColored(ctx->cfg->missing_color, "invalid sampler state pointer");
+      return;
+   }
+
+   for (int i = 0; i < count; i++) {
+      if (ImGui::TreeNodeEx(state_map, ImGuiTreeNodeFlags_Framed,
+                            "sampler state %d", i)) {
+         aub_viewer_print_group(ctx, strct, state_addr, state_map);
+         ImGui::TreePop();
+      }
+      state_addr += 16;
+      state_map += 16;
+   }
+}
+
 static void
 dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
 {
@@ -228,35 +303,10 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
 static void
 dump_samplers(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
 {
-   struct gen_group *strct = gen_spec_find_struct(ctx->spec, "SAMPLER_STATE");
-
-   if (count < 0)
-      count = update_count(ctx, offset, strct->dw_length, 4);
-
    uint64_t state_addr = ctx->state.dynamic_base + offset;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
-   const uint8_t *state_map = (const uint8_t *) bo.map;
+   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, ctx->state.dynamic_base + offset);
 
-   if (state_map == NULL) {
-      ImGui::TextColored(ctx->cfg->missing_color,
-                         "samplers unavailable addr=0x%08" PRIx64, state_addr);
-      return;
-   }
-
-   if (offset % 32 != 0 || state_addr - bo.addr >= bo.size) {
-      ImGui::TextColored(ctx->cfg->missing_color, "invalid sampler state pointer");
-      return;
-   }
-
-   for (int i = 0; i < count; i++) {
-      if (ImGui::TreeNodeEx(state_map, ImGuiTreeNodeFlags_Framed,
-                            "sampler state %d", i)) {
-         aub_viewer_print_group(ctx, strct, state_addr, state_map);
-         ImGui::TreePop();
-      }
-      state_addr += 16;
-      state_map += 16;
-   }
+   aub_viewer_render_samplers(ctx, bo, state_addr, count);
 }
 
 static void
@@ -724,9 +774,9 @@ decode_3dprimitive(struct aub_viewer_decode_ctx *ctx,
                    struct gen_group *inst,
                    const uint32_t *p)
 {
-   if (ctx->display_urb) {
-      if (ImGui::Button("Show URB"))
-         ctx->display_urb(ctx->user_data, ctx->state.urb);
+   if (ctx->display_state) {
+      if (ImGui::Button("Show state"))
+         ctx->display_state(ctx->user_data, &ctx->state);
    }
 }
 

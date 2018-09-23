@@ -80,7 +80,7 @@ struct aub_viewer_decode_ctx {
                               uint32_t offset_from_dynamic_state_base_addr);
 
    void (*display_shader)(void *user_data, const char *shader_desc, uint64_t address);
-   void (*display_urb)(void *user_data, const struct aub_decode_urb_stage_state *stages);
+   void (*display_state)(void *user_data, const struct aub_viewer_state *state);
    void (*edit_address)(void *user_data, uint64_t address, uint32_t length);
 
    void *user_data;
@@ -110,5 +110,12 @@ void aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
 void aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                              const void *batch, uint32_t batch_size,
                              uint64_t batch_addr, bool from_ring);
+
+void aub_viewer_render_bindings(struct aub_viewer_decode_ctx *ctx,
+                                struct gen_batch_decode_bo bo,
+                                uint64_t addr, int count);
+void aub_viewer_render_samplers(struct aub_viewer_decode_ctx *ctx,
+                                struct gen_batch_decode_bo bo,
+                                uint64_t addr, int count);
 
 #endif /* AUBINATOR_VIEWER_H */

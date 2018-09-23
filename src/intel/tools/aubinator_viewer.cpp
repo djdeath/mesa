@@ -279,11 +279,10 @@ struct shader_window {
    size_t shader_size;
 };
 
-struct urb_window {
+struct state_window {
    struct window base;
 
-   uint32_t end_urb_offset;
-   struct aub_decode_urb_stage_state urb_stages[AUB_DECODE_N_STAGE];
+   struct aub_viewer_state state;
 
    AubinatorViewerUrb urb_view;
 };
@@ -492,12 +491,12 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
    return window;
 }
 
-/* URB windows */
+/* State windows */
 
 static void
-display_urb_window(struct window *win)
+display_state_window(struct window *win)
 {
-   struct urb_window *window = (struct urb_window *) win;
+   struct state_window *window = (struct state_window *) win;
    static const char *stages[] = {
       [AUB_DECODE_STAGE_VS] = "VS",
       [AUB_DECODE_STAGE_HS] = "HS",
@@ -507,35 +506,44 @@ display_urb_window(struct window *win)
       [AUB_DECODE_STAGE_CS] = "CS",
    };
 
-   ImGui::Text("URB allocation:");
-   window->urb_view.DrawAllocation("##urb",
-                                   ARRAY_SIZE(window->urb_stages),
-                                   window->end_urb_offset,
-                                   stages,
-                                   &window->urb_stages[0]);
+   if (ImGui::TreeNode("URB")) {
+      window->urb_view.DrawAllocation("##urb",
+                                      ARRAY_SIZE(window->state.urb),
+                                      window->state.end_urb_offset,
+                                      stages,
+                                      &window->state.urb[0]);
+      ImGui::TreePop();
+   }
+
+   if (ImGui::TreeNode("Bindings")) {
+      ImGui::TreePop();
+   }
+
+   if (ImGui::TreeNode("Samplers")) {
+      ImGui::TreePop();
+   }
 }
 
 static void
-destroy_urb_window(struct window *win)
+destroy_state_window(struct window *win)
 {
-   struct urb_window *window = (struct urb_window *) win;
+   struct state_window *window = (struct state_window *) win;
 
    free(window);
 }
 
-static struct urb_window *
-new_urb_window(struct aub_viewer_decode_ctx *decode_ctx, uint64_t address)
+static struct state_window *
+new_state_window(const struct aub_viewer_state *state, uint64_t address)
 {
-   struct urb_window *window = xtzalloc(*window);
+   struct state_window *window = xtzalloc(*window);
 
    init_window(&window->base,
                ImVec2(700, 300),
-               display_urb_window,
-               destroy_urb_window,
-               "URB view (0x%lx)##%p", address, window);
+               display_state_window,
+               destroy_state_window,
+               "GPU state view (0x%lx)##%p", address, window);
 
-   window->end_urb_offset = decode_ctx->state.end_urb_offset;
-   memcpy(window->urb_stages, decode_ctx->state.urb, sizeof(window->urb_stages));
+   memcpy(&window->state, state, sizeof(*state));
    window->urb_view = AubinatorViewerUrb();
 
    return window;
@@ -768,12 +776,12 @@ batch_display_shader(void *user_data, const char *shader_desc, uint64_t address)
 }
 
 static void
-batch_display_urb(void *user_data, const struct aub_decode_urb_stage_state *stages)
+batch_display_state(void *user_data, const struct aub_viewer_state *state)
 {
    struct batch_window *window = (struct batch_window *) user_data;
-   struct urb_window *urb_window = new_urb_window(&window->decode_ctx, 0);
+   struct state_window *state_window = new_state_window(state, 0);
 
-   list_add(&urb_window->base.parent_link, &window->base.children_windows);
+   list_add(&state_window->base.parent_link, &window->base.children_windows);
 }
 
 static void
@@ -941,7 +949,7 @@ new_batch_window(int exec_idx)
                               NULL,
                               window);
    window->decode_ctx.display_shader = batch_display_shader;
-   window->decode_ctx.display_urb = batch_display_urb;
+   window->decode_ctx.display_state = batch_display_state;
    window->decode_ctx.edit_address = batch_edit_address;
 
    update_batch_window(window, false, exec_idx);
