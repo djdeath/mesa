@@ -565,9 +565,65 @@ i915_perf_version(int drm_fd)
    return ret < 0 ? 0 : tmp;
 }
 
+static int
+compare_counters(const void *_c1, const void *_c2)
+{
+   const struct gen_perf_query_counter *c1 = _c1, *c2 = _c2;
+   return strcmp(c1->symbol_name, c2->symbol_name);
+}
+
+static void
+build_unique_counter_list(struct gen_perf_config *perf)
+{
+   assert(perf->n_queries < 64);
+
+   struct hash_table *counters_table =
+      _mesa_hash_table_create(perf,
+                              _mesa_hash_string,
+                              _mesa_key_string_equal);
+   struct hash_entry *entry;
+   for (int q = 0; q < perf->n_queries ; q++) {
+      struct gen_perf_query_info *query = &perf->queries[q];
+
+      for (int c = 0; c < query->n_counters; c++) {
+         struct gen_perf_query_counter *counter, *new_counter;
+
+         counter = &query->counters[c];
+         entry = _mesa_hash_table_search(counters_table, counter->symbol_name);
+
+         if (entry) {
+            new_counter = entry->data;
+            new_counter->query_mask |= BITFIELD64_BIT(q);
+            continue;
+         }
+
+         new_counter = rzalloc(perf, struct gen_perf_query_counter);
+         memcpy(new_counter, counter, sizeof(*counter));
+         new_counter->query_mask = BITFIELD64_BIT(q);
+
+         _mesa_hash_table_insert(counters_table, new_counter->symbol_name, new_counter);
+      }
+   }
+
+   perf->n_counters = _mesa_hash_table_num_entries(counters_table);
+   perf->counters = ralloc_array(perf, struct gen_perf_query_counter,
+                                 perf->n_counters);
+
+   int c = 0;
+   hash_table_foreach(counters_table, entry) {
+      struct gen_perf_query_counter *counter = entry->data;
+      perf->counters[c++] = *counter;
+   }
+
+   _mesa_hash_table_destroy(counters_table, NULL);
+
+   qsort(perf->counters, perf->n_counters, sizeof(perf->counters[0]),
+         compare_counters);
+}
+
 static bool
 load_oa_metrics(struct gen_perf_config *perf, int fd,
-                         const struct gen_device_info *devinfo)
+                const struct gen_device_info *devinfo)
 {
    perf_register_oa_queries_t oa_register = get_register_queries_function(devinfo);
    bool i915_perf_oa_available = false;
@@ -616,6 +672,8 @@ load_oa_metrics(struct gen_perf_config *perf, int fd,
       init_oa_configs(perf, fd, devinfo);
    else
       enumerate_sysfs_metrics(perf, devinfo);
+
+   build_unique_counter_list(perf);
 
    return true;
 }
