@@ -2061,6 +2061,8 @@ struct anv_cmd_state {
     */
    bool                                         hiz_enabled;
 
+   bool                                         conditional_render_enabled;
+
    /**
     * Array length is anv_cmd_state::pass::attachment_count. Array content is
     * valid only when recording a render pass instance.

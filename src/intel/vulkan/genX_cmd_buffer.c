@@ -479,8 +479,9 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
                        0, 0, 1, hiz_op);
 }
 
-#define MI_PREDICATE_SRC0  0x2400
-#define MI_PREDICATE_SRC1  0x2408
+#define MI_PREDICATE_SRC0    0x2400
+#define MI_PREDICATE_SRC1    0x2408
+#define MI_PREDICATE_RESULT  0x2418
 
 static void
 set_image_compressed_bit(struct anv_cmd_buffer *cmd_buffer,
@@ -544,6 +545,14 @@ mi_alu(uint32_t opcode, uint32_t operand1, uint32_t operand2)
 #endif
 
 #define CS_GPR(n) (0x2600 + (n) * 8)
+
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+static void
+restore_conditional_render_predicate(struct anv_cmd_buffer *cmd_buffer)
+{
+   emit_lrr(&cmd_buffer->batch, MI_PREDICATE_RESULT, CS_GPR(MI_ALU_REG15));
+}
+#endif
 
 /* This is only really practical on haswell and above because it requires
  * MI math in order to get it correct.
@@ -1144,6 +1153,12 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
       }
    }
 
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+   if (cmd_buffer->state.conditional_render_enabled) {
+      restore_conditional_render_predicate(cmd_buffer);
+   }
+#endif
+
    cmd_buffer->state.pending_pipe_bits |=
       ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
 }
@@ -1397,6 +1412,19 @@ genX(BeginCommandBuffer)(
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_RENDER_TARGETS;
    }
 
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+   if (cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
+      const VkCommandBufferInheritanceConditionalRenderingInfoEXT *conditional_rendering_info =
+         vk_find_struct_const(pBeginInfo->pInheritanceInfo->pNext, COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT);
+
+      if (conditional_rendering_info) {
+         /* We should emit commands as if conditional render is enabled. */
+         cmd_buffer->state.conditional_render_enabled =
+            conditional_rendering_info->conditionalRenderingEnable;
+      }
+   }
+#endif
+
    return result;
 }
 
@@ -1500,6 +1528,20 @@ genX(CmdExecuteCommands)(
 
       assert(secondary->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY);
       assert(!anv_batch_has_error(&secondary->batch));
+
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+      if (secondary->state.conditional_render_enabled) {
+          /* Secondary buffer is constructed as if it will be executed
+           * with conditional rendering, we should satisfy this dependency
+           * regardless of conditional rendering being enabled in primary.
+           */
+          if (!primary->state.conditional_render_enabled) {
+             emit_lri(&primary->batch, CS_GPR(MI_ALU_REG15), 1);
+             emit_lri(&primary->batch, CS_GPR(MI_ALU_REG15) + 4, 0);
+             emit_lrr(&primary->batch, MI_PREDICATE_RESULT, CS_GPR(MI_ALU_REG15));
+          }
+      }
+#endif
 
       if (secondary->usage_flags &
           VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {
@@ -2768,6 +2810,7 @@ void genX(CmdDraw)(
    instanceCount *= anv_subpass_view_count(cmd_buffer->state.subpass);
 
    anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
+      prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
       prim.VertexAccessType         = SEQUENTIAL;
       prim.PrimitiveTopologyType    = pipeline->topology;
       prim.VertexCountPerInstance   = vertexCount;
@@ -2807,6 +2850,7 @@ void genX(CmdDrawIndexed)(
    instanceCount *= anv_subpass_view_count(cmd_buffer->state.subpass);
 
    anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
+      prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
       prim.VertexAccessType         = RANDOM;
       prim.PrimitiveTopologyType    = pipeline->topology;
       prim.VertexCountPerInstance   = indexCount;
@@ -2942,6 +2986,7 @@ void genX(CmdDrawIndirect)(
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
          prim.IndirectParameterEnable  = true;
+         prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
          prim.VertexAccessType         = SEQUENTIAL;
          prim.PrimitiveTopologyType    = pipeline->topology;
       }
@@ -2981,6 +3026,7 @@ void genX(CmdDrawIndexedIndirect)(
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
          prim.IndirectParameterEnable  = true;
+         prim.PredicateEnable          = cmd_buffer->state.conditional_render_enabled;
          prim.VertexAccessType         = RANDOM;
          prim.PrimitiveTopologyType    = pipeline->topology;
       }
@@ -2991,7 +3037,8 @@ void genX(CmdDrawIndexedIndirect)(
 
 static void
 prepare_for_draw_count_predicate(struct anv_cmd_buffer *cmd_buffer,
-                                 struct anv_address count_address)
+                                 struct anv_address count_address,
+                                 const bool conditional_render_enabled)
 {
    /* From the Sky Lake PRM Vol 7, MI_PREDICATE:
     *
@@ -3006,13 +3053,22 @@ prepare_for_draw_count_predicate(struct anv_cmd_buffer *cmd_buffer,
      pc.PipeControlFlushEnable = true;
    }
 
-   /* Upload the current draw count from the draw parameters buffer to
-    * MI_PREDICATE_SRC0.
-    */
-   emit_lrm(&cmd_buffer->batch, MI_PREDICATE_SRC0, count_address);
-   emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC0 + 4, 0);
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+   if (conditional_render_enabled) {
+      emit_lrm(&cmd_buffer->batch, CS_GPR(MI_ALU_REG14), count_address);
+      emit_lri(&cmd_buffer->batch, CS_GPR(MI_ALU_REG14) + 4, 0);
+   } else {
+#else
+   {
+#endif
+      /* Upload the current draw count from the draw parameters buffer to
+       * MI_PREDICATE_SRC0.
+       */
+      emit_lrm(&cmd_buffer->batch, MI_PREDICATE_SRC0, count_address);
+      emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC0 + 4, 0);
 
-   emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC1 + 4, 0);
+      emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC1 + 4, 0);
+   }
 }
 
 static void
@@ -3044,6 +3100,41 @@ emit_draw_count_predicate(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+static void
+emit_draw_count_predicate_with_conditional_render(
+                          struct anv_cmd_buffer *cmd_buffer,
+                          uint32_t draw_index)
+{
+   const int draw_index_reg = MI_ALU_REG0;
+   const int draw_count_reg = MI_ALU_REG14;
+   const int condition_reg = MI_ALU_REG15;
+   const int tmp_result_reg = MI_ALU_REG1;
+
+   emit_lri(&cmd_buffer->batch, CS_GPR(draw_index_reg), draw_index);
+   emit_lri(&cmd_buffer->batch, CS_GPR(draw_index_reg) + 4, 0);
+
+   uint32_t *dw;
+   /* Compute (draw_index < draw_count).
+    * We do this by subtracting and storing the carry bit.
+    */
+   dw = anv_batch_emitn(&cmd_buffer->batch, 5, GENX(MI_MATH));
+   dw[1] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCA, draw_index_reg);
+   dw[2] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCB, draw_count_reg);
+   dw[3] = mi_alu(MI_ALU_SUB, 0, 0);
+   dw[4] = mi_alu(MI_ALU_STORE, tmp_result_reg, MI_ALU_CF);
+
+   /* & condition */
+   dw = anv_batch_emitn(&cmd_buffer->batch, 5, GENX(MI_MATH));
+   dw[1] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCA, tmp_result_reg);
+   dw[2] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCB, condition_reg);
+   dw[3] = mi_alu(MI_ALU_AND, 0, 0);
+   dw[4] = mi_alu(MI_ALU_STORE, tmp_result_reg, MI_ALU_ACCU);
+
+   emit_lrr(&cmd_buffer->batch, MI_PREDICATE_RESULT, CS_GPR(tmp_result_reg));
+}
+#endif
+
 void genX(CmdDrawIndirectCountKHR)(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    _buffer,
@@ -3068,12 +3159,21 @@ void genX(CmdDrawIndirectCountKHR)(
    struct anv_address count_address =
       anv_address_add(count_buffer->address, countBufferOffset);
 
-   prepare_for_draw_count_predicate(cmd_buffer, count_address);
+   prepare_for_draw_count_predicate(cmd_buffer, count_address,
+                                    cmd_state->conditional_render_enabled);
 
    for (uint32_t i = 0; i < maxDrawCount; i++) {
       struct anv_address draw = anv_address_add(buffer->address, offset);
 
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+      if (cmd_state->conditional_render_enabled) {
+         emit_draw_count_predicate_with_conditional_render(cmd_buffer, i);
+      } else {
+         emit_draw_count_predicate(cmd_buffer, i);
+      }
+#else
       emit_draw_count_predicate(cmd_buffer, i);
+#endif
 
       if (vs_prog_data->uses_firstvertex ||
           vs_prog_data->uses_baseinstance)
@@ -3092,6 +3192,12 @@ void genX(CmdDrawIndirectCountKHR)(
 
       offset += stride;
    }
+
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+   if (cmd_state->conditional_render_enabled) {
+      restore_conditional_render_predicate(cmd_buffer);
+   }
+#endif
 }
 
 void genX(CmdDrawIndexedIndirectCountKHR)(
@@ -3118,12 +3224,21 @@ void genX(CmdDrawIndexedIndirectCountKHR)(
    struct anv_address count_address =
       anv_address_add(count_buffer->address, countBufferOffset);
 
-   prepare_for_draw_count_predicate(cmd_buffer, count_address);
+   prepare_for_draw_count_predicate(cmd_buffer, count_address,
+                                    cmd_state->conditional_render_enabled);
 
    for (uint32_t i = 0; i < maxDrawCount; i++) {
       struct anv_address draw = anv_address_add(buffer->address, offset);
 
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+      if (cmd_state->conditional_render_enabled) {
+         emit_draw_count_predicate_with_conditional_render(cmd_buffer, i);
+      } else {
+         emit_draw_count_predicate(cmd_buffer, i);
+      }
+#else
       emit_draw_count_predicate(cmd_buffer, i);
+#endif
 
       /* TODO: We need to stomp base vertex to 0 somehow */
       if (vs_prog_data->uses_firstvertex ||
@@ -3143,6 +3258,12 @@ void genX(CmdDrawIndexedIndirectCountKHR)(
 
       offset += stride;
    }
+
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+   if (cmd_state->conditional_render_enabled) {
+      restore_conditional_render_predicate(cmd_buffer);
+   }
+#endif
 }
 
 static VkResult
@@ -3351,6 +3472,7 @@ void genX(CmdDispatchBase)(
    genX(cmd_buffer_flush_compute_state)(cmd_buffer);
 
    anv_batch_emit(&cmd_buffer->batch, GENX(GPGPU_WALKER), ggw) {
+      ggw.PredicateEnable              = cmd_buffer->state.conditional_render_enabled;
       ggw.SIMDSize                     = prog_data->simd_size / 16;
       ggw.ThreadDepthCounterMaximum    = 0;
       ggw.ThreadHeightCounterMaximum   = 0;
@@ -3448,7 +3570,8 @@ void genX(CmdDispatchIndirect)(
 
    anv_batch_emit(batch, GENX(GPGPU_WALKER), ggw) {
       ggw.IndirectParameterEnable      = true;
-      ggw.PredicateEnable              = GEN_GEN <= 7;
+      ggw.PredicateEnable              = GEN_GEN <= 7 ||
+                                         cmd_buffer->state.conditional_render_enabled;
       ggw.SIMDSize                     = prog_data->simd_size / 16;
       ggw.ThreadDepthCounterMaximum    = 0;
       ggw.ThreadHeightCounterMaximum   = 0;
@@ -4158,3 +4281,71 @@ void genX(CmdEndRenderPass2KHR)(
 {
    genX(CmdEndRenderPass)(commandBuffer);
 }
+
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+void genX(CmdBeginConditionalRenderingEXT)(
+	VkCommandBuffer                             commandBuffer,
+	const VkConditionalRenderingBeginInfoEXT*   pConditionalRenderingBegin)
+{
+    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+    ANV_FROM_HANDLE(anv_buffer, buffer, pConditionalRenderingBegin->buffer);
+    struct anv_cmd_state *cmd_state = &cmd_buffer->state;
+    struct anv_address value_address =
+       anv_address_add(buffer->address, pConditionalRenderingBegin->offset);
+
+    const bool inverted = pConditionalRenderingBegin->flags &
+                          VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT;
+
+    cmd_state->conditional_render_enabled = true;
+
+    /* Needed to ensure the memory is coherent for the MI_LOAD_REGISTER_MEM
+     * command when loading the values into the predicate source registers.
+     */
+    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      pc.PipeControlFlushEnable = true;
+    }
+
+    /* Section 19.4 of the Vulkan 1.1.85 spec says:
+     *
+     *    If the value of the predicate in buffer memory changes
+     *    while conditional rendering is active, the rendering commands
+     *    may be discarded in an implementation-dependent way.
+     *    Some implementations may latch the value of the predicate
+     *    upon beginning conditional rendering while others
+     *    may read it before every rendering command.
+     *
+     * So it's perfectly fine to read a value from the buffer once.
+     */
+
+    emit_lrm(&cmd_buffer->batch, MI_PREDICATE_SRC0, value_address);
+    /* Zero the top 32-bits of MI_PREDICATE_SRC0 */
+    emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC0 + 4, 0);
+    emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC1, 0);
+    emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC1 + 4, 0);
+
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_PREDICATE), mip) {
+        mip.LoadOperation    = inverted ? LOAD_LOAD : LOAD_LOADINV;
+        mip.CombineOperation = COMBINE_SET;
+        mip.CompareOperation = COMPARE_SRCS_EQUAL;
+    }
+
+    /* Calculate predicate result once and store it in MI_ALU_REG15
+     * to prevent recalculating it when interacting with
+     * VK_KHR_draw_indirect_count which also uses predicates.
+     * It is also the only way to support conditional render of
+     * secondary buffers because they are formed before we
+     * know whether conditional render is enabled.
+     */
+    emit_lrr(&cmd_buffer->batch, CS_GPR(MI_ALU_REG15), MI_PREDICATE_RESULT);
+    emit_lri(&cmd_buffer->batch, CS_GPR(MI_ALU_REG15) + 4, 0);
+}
+
+void genX(CmdEndConditionalRenderingEXT)(
+	VkCommandBuffer                             commandBuffer)
+{
+    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+    struct anv_cmd_state *cmd_state = &cmd_buffer->state;
+
+    cmd_state->conditional_render_enabled = false;
+}
+#endif

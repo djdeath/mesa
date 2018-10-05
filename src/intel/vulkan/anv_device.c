@@ -959,6 +959,18 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT: {
+         VkPhysicalDeviceConditionalRenderingFeaturesEXT *features =
+            (VkPhysicalDeviceConditionalRenderingFeaturesEXT*)ext;
+         ANV_FROM_HANDLE(anv_physical_device, pdevice, physicalDevice);
+
+         features->conditionalRendering = pdevice->info.gen >= 8 ||
+                                          pdevice->info.is_haswell;
+         features->inheritedConditionalRendering = pdevice->info.gen >= 8 ||
+                                                   pdevice->info.is_haswell;
+         break;
+      }
+
       default:
          anv_debug_ignored_stype(ext->sType);
          break;
