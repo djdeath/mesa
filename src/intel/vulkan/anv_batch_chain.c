@@ -30,6 +30,7 @@
 #include "anv_private.h"
 
 #include "genxml/gen8_pack.h"
+#include "perf/gen_perf.h"
 
 #include "util/debug.h"
 
@@ -272,9 +273,31 @@ anv_batch_emit_dwords(struct anv_batch *batch, int num_dwords)
    return p;
 }
 
+struct anv_address
+anv_batch_emit_dwords_address(struct anv_batch *batch, int num_dwords)
+{
+   if (batch->next + num_dwords * 4 > batch->end) {
+      VkResult result = batch->extend_cb(batch, batch->user_data);
+      if (result != VK_SUCCESS) {
+         anv_batch_set_error(batch, result);
+         return ANV_NULL_ADDRESS;
+      }
+   }
+
+   struct anv_address addr = {
+      .bo = batch->current_bo->bo,
+      .offset = batch->next - batch->start,
+   };
+
+   batch->next += num_dwords * 4;
+   assert(batch->next <= batch->end);
+
+   return addr;
+}
+
 uint64_t
-anv_batch_emit_reloc(struct anv_batch *batch,
-                     void *location, struct anv_bo *bo, uint32_t delta)
+anv_batch_emit_reloc(struct anv_batch *batch, void *location,
+                     struct anv_bo *bo, uint32_t delta)
 {
    uint64_t address_u64 = 0;
    VkResult result = anv_reloc_list_add(batch->relocs, batch->alloc,
@@ -1035,6 +1058,9 @@ anv_cmd_buffer_add_secondary(struct anv_cmd_buffer *primary,
       assert(!"Invalid execution mode");
    }
 
+   if (secondary->perf_query_pool)
+      primary->perf_query_pool = secondary->perf_query_pool;
+
    anv_reloc_list_append(&primary->surface_relocs, &primary->pool->alloc,
                          &secondary->surface_relocs, 0);
 }
@@ -1053,6 +1079,8 @@ struct anv_execbuf {
 
    const VkAllocationCallbacks *             alloc;
    VkSystemAllocationScope                   alloc_scope;
+
+   int                                       perf_query_pass;
 };
 
 static void
@@ -1326,6 +1354,9 @@ static bool
 relocate_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
                     struct anv_execbuf *exec)
 {
+   if (cmd_buffer->perf_query_pool)
+      return false;
+
    if (!exec->has_relocs)
       return true;
 
@@ -1377,7 +1408,8 @@ relocate_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
 
 static VkResult
 setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
-                             struct anv_cmd_buffer *cmd_buffer)
+                             struct anv_cmd_buffer *cmd_buffer,
+                             struct anv_queue_submit *submit)
 {
    struct anv_batch *batch = &cmd_buffer->batch;
    struct anv_state_pool *ss_pool =
@@ -1488,8 +1520,11 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
       first_batch_bo->bo->index = last_idx;
    }
 
-   /* If we are pinning our BOs, we shouldn't have to relocate anything */
-   if (cmd_buffer->device->physical->use_softpin)
+   /* If we are pinning our BOs, we shouldn't have to relocate anything.
+    * Unless we have perf queries.
+    */
+   if (cmd_buffer->device->physical->use_softpin &&
+       submit->perf_query_pass < 0)
       assert(!execbuf->has_relocs);
 
    /* Now we go through and fixup all of the relocation lists to point to
@@ -1623,6 +1658,7 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
    anv_execbuf_init(&execbuf);
    execbuf.alloc = submit->alloc;
    execbuf.alloc_scope = submit->alloc_scope;
+   execbuf.perf_query_pass = submit->perf_query_pass;
 
    VkResult result;
 
@@ -1637,7 +1673,7 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
    }
 
    if (submit->cmd_buffer) {
-      result = setup_execbuf_for_cmd_buffer(&execbuf, submit->cmd_buffer);
+      result = setup_execbuf_for_cmd_buffer(&execbuf, submit->cmd_buffer, submit);
    } else if (submit->simple_bo) {
       result = anv_execbuf_add_bo(device, &execbuf, submit->simple_bo, NULL, 0);
       if (result != VK_SUCCESS)
@@ -1659,10 +1695,25 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
    if (result != VK_SUCCESS)
       goto error;
 
+   const bool has_perf_query =
+      submit->perf_query_pass >= 0 &&
+      submit->cmd_buffer &&
+      submit->cmd_buffer->perf_query_pool;
+
    if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
       if (submit->cmd_buffer) {
-         struct anv_batch_bo **bo = u_vector_tail(&submit->cmd_buffer->seen_bbos);
+         if (has_perf_query) {
+            struct anv_query_pool *query_pool = submit->cmd_buffer->perf_query_pool;
+            struct anv_bo *pass_batch_bo = query_pool->bo;
+            uint64_t pass_batch_offset =
+               submit->perf_query_pass * ANV_KHR_PERF_QUERY_SIZE + 8;
 
+            gen_print_batch(&device->decoder_ctx,
+                            pass_batch_bo->map + pass_batch_offset, 64,
+                            pass_batch_bo->offset + pass_batch_offset, false);
+         }
+
+         struct anv_batch_bo **bo = u_vector_tail(&submit->cmd_buffer->seen_bbos);
          device->cmd_buffer_being_decoded = submit->cmd_buffer;
          gen_print_batch(&device->decoder_ctx, (*bo)->bo->map,
                          (*bo)->bo->size, (*bo)->bo->offset, false);
@@ -1692,6 +1743,47 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
 
    if (submit->need_out_fence)
       execbuf.execbuf.flags |= I915_EXEC_FENCE_OUT;
+
+   if (has_perf_query) {
+      struct anv_query_pool *query_pool = submit->cmd_buffer->perf_query_pool;
+      assert(submit->perf_query_pass < query_pool->n_passes);
+      struct gen_perf_query_info *query_info =
+         query_pool->pass_query[submit->perf_query_pass];
+
+      /* Some performance queries just the pipeline statistic HW, no need for
+       * OA in that case, so no need to reconfigure.
+       */
+      if (query_info->kind == GEN_PERF_QUERY_TYPE_OA ||
+          query_info->kind == GEN_PERF_QUERY_TYPE_RAW) {
+         int ret = gen_ioctl(device->perf_fd, I915_PERF_IOCTL_CONFIG,
+                             (void *)(uintptr_t) query_info->oa_metrics_set_id);
+         if (ret < 0) {
+            result = anv_device_set_lost(device,
+                                         "i915-perf config failed: %s",
+                                         strerror(ret));
+         }
+      }
+
+      struct anv_bo *pass_batch_bo = query_pool->bo;
+
+      struct drm_i915_gem_exec_object2 query_pass_object = {
+         .handle = pass_batch_bo->gem_handle,
+         .offset = pass_batch_bo->offset,
+         .flags  = pass_batch_bo->flags,
+      };
+      struct drm_i915_gem_execbuffer2 query_pass_execbuf = {
+         .buffers_ptr = (uintptr_t) &query_pass_object,
+         .buffer_count = 1,
+         .batch_start_offset = submit->perf_query_pass * ANV_KHR_PERF_QUERY_SIZE + 8,
+         .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
+         .rsvd1 = device->context_id,
+      };
+
+      int ret = queue->device->no_hw ? 0 :
+         anv_gem_execbuffer(queue->device, &query_pass_execbuf);
+      if (ret)
+         result = anv_queue_set_lost(queue, "execbuf2 failed: %m");
+   }
 
    int ret = queue->device->no_hw ? 0 :
       anv_gem_execbuffer(queue->device, &execbuf.execbuf);

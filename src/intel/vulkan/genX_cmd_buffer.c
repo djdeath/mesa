@@ -1773,6 +1773,9 @@ genX(CmdExecuteCommands)(
                                     src_state.alloc_size);
       }
 
+      if (secondary->perf_query_pool)
+         primary->perf_query_pool = secondary->perf_query_pool;
+
       anv_cmd_buffer_add_secondary(primary, secondary);
    }
 
