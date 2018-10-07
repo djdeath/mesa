@@ -762,7 +762,8 @@ display_decode_options(struct aub_viewer_decode_cfg *cfg)
    cfg->command_filter.Draw(name); ImGui::SameLine();
    snprintf(name, sizeof(name), "field filter##%p", &cfg->field_filter);
    cfg->field_filter.Draw(name); ImGui::SameLine();
-   if (ImGui::Button("Dwords")) cfg->show_dwords ^= 1;
+   if (ImGui::Button("Dwords")) { cfg->show_dwords ^= 1; } ImGui::SameLine();
+   if (ImGui::Button("Address Space")) cfg->show_address_space ^= 1;
 }
 
 static void
@@ -824,7 +825,8 @@ display_batch_ring_write(void *user_data, enum gen_engine engine,
 
    window->uses_ppgtt = false;
 
-   aub_viewer_render_batch(&window->decode_ctx, data, data_len, 0, false);
+   aub_viewer_render_batch(&window->decode_ctx, data, data_len, 0,
+                           AUB_BATCH_ORIGIN_PGGTT);
 }
 
 static void
@@ -872,7 +874,7 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
 
    aub_viewer_render_batch(&window->decode_ctx, commands,
                            MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
-                           ring_buffer_start + ring_buffer_head, true);
+                           ring_buffer_start + ring_buffer_head, AUB_BATCH_ORIGIN_RING);
 
    ImGui::EndChild();
 }

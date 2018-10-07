@@ -983,10 +983,28 @@ get_address(struct gen_spec *spec, const uint32_t *p)
    return addr;
 }
 
+static const char *
+get_batch_origin_text(struct aub_viewer_decode_cfg *cfg,
+                      enum aub_batch_origin batch_origin)
+{
+   if (!cfg->show_address_space)
+      return "";
+   switch (batch_origin) {
+   case AUB_BATCH_ORIGIN_RING:
+      return "( RING)";
+   case AUB_BATCH_ORIGIN_GGTT:
+      return "( GGTT)";
+   case AUB_BATCH_ORIGIN_PGGTT:
+      return "(PPGTT)";
+   default:
+      unreachable("invalid");
+   }
+}
+
 void
 aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                         const void *_batch, uint32_t batch_size,
-                        uint64_t batch_addr, bool from_ring)
+                        uint64_t batch_addr, enum aub_batch_origin batch_origin)
 {
    struct gen_group *inst;
    const uint32_t *p, *batch = (const uint32_t *) _batch, *end = batch + batch_size / sizeof(uint32_t);
@@ -1028,8 +1046,10 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
       if (ctx->decode_cfg->command_filter.PassFilter(inst->name) &&
           ImGui::TreeNodeEx(p,
                             ImGuiTreeNodeFlags_Framed,
-                            "0x%08" PRIx64 ":  %s",
-                            offset, inst->name)) {
+                            "0x%08" PRIx64 "%s:  %s",
+                            offset,
+                            get_batch_origin_text(ctx->decode_cfg, batch_origin),
+                            inst->name)) {
          aub_viewer_print_group(ctx, inst, offset, p);
 
          for (unsigned i = 0; i < ARRAY_SIZE(display_decoders); i++) {
@@ -1050,7 +1070,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
 
       if (strcmp(inst_name, "MI_BATCH_BUFFER_START") == 0) {
          uint64_t next_batch_addr;
-         bool ppgtt = false;
+         enum aub_batch_origin next_batch_origin = AUB_BATCH_ORIGIN_GGTT;
          bool second_level;
          struct gen_field_iterator iter;
          gen_field_iterator_init(&iter, inst, p, 0, false);
@@ -1060,11 +1080,13 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
             } else if (strcmp(iter.name, "Second Level Batch Buffer") == 0) {
                second_level = iter.raw_value;
             } else if (strcmp(iter.name, "Address Space Indicator") == 0) {
-               ppgtt = iter.raw_value;
+               next_batch_origin = iter.raw_value ?
+                  AUB_BATCH_ORIGIN_PGGTT : AUB_BATCH_ORIGIN_GGTT;
             }
          }
 
-         struct gen_batch_decode_bo next_batch = ctx_get_bo(ctx, ppgtt, next_batch_addr);
+         struct gen_batch_decode_bo next_batch =
+            ctx_get_bo(ctx, next_batch_origin == AUB_BATCH_ORIGIN_PGGTT, next_batch_addr);
 
          if (next_batch.map == NULL) {
             ImGui::TextColored(ctx->cfg->missing_color,
@@ -1072,7 +1094,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                                next_batch_addr);
          } else {
             aub_viewer_render_batch(ctx, next_batch.map, next_batch.size,
-                                    next_batch.addr, false);
+                                    next_batch.addr, next_batch_origin);
          }
          if (second_level) {
             /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" set acts
@@ -1081,7 +1103,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
              * MI_BATCH_BUFFER_END.
              */
             continue;
-         } else if (!from_ring) {
+         } else if (batch_origin != AUB_BATCH_ORIGIN_RING) {
             /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" unset acts
              * like a goto.  Nothing after it will ever get processed.  In
              * order to prevent the recursion from growing, we just reset the

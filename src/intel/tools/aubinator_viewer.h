@@ -21,16 +21,24 @@ struct aub_viewer_cfg {
     missing_color(230, 0, 230, 255) {}
 };
 
+enum aub_batch_origin {
+   AUB_BATCH_ORIGIN_RING,
+   AUB_BATCH_ORIGIN_GGTT,
+   AUB_BATCH_ORIGIN_PGGTT
+};
+
 struct aub_viewer_decode_cfg {
    struct ImGuiTextFilter command_filter;
    struct ImGuiTextFilter field_filter;
 
    bool drop_filtered;
    bool show_dwords;
+   bool show_address_space;
 
   aub_viewer_decode_cfg() :
     drop_filtered(false),
-    show_dwords(true) {}
+    show_dwords(true),
+    show_address_space(false) {}
 };
 
 enum aub_decode_stage {
@@ -109,7 +117,7 @@ void aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
 
 void aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                              const void *batch, uint32_t batch_size,
-                             uint64_t batch_addr, bool from_ring);
+                             uint64_t batch_addr, enum aub_batch_origin batch_origin);
 
 void aub_viewer_render_bindings(struct aub_viewer_decode_ctx *ctx,
                                 struct gen_batch_decode_bo bo,
