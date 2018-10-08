@@ -1001,6 +1001,14 @@ get_batch_origin_text(struct aub_viewer_decode_cfg *cfg,
    }
 }
 
+static bool
+show_instruction(struct aub_viewer_decode_cfg *cfg,
+                 struct gen_group *inst,
+                 bool is_mi_bb_start)
+{
+   return cfg->command_filter.PassFilter(inst->name) || is_mi_bb_start;
+}
+
 void
 aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                         const void *_batch, uint32_t batch_size,
@@ -1043,7 +1051,26 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
          }
       }
 
-      if (ctx->decode_cfg->command_filter.PassFilter(inst->name) &&
+      bool is_mi_bb_start = strcmp(inst_name, "MI_BATCH_BUFFER_START") == 0;
+      uint64_t next_batch_addr;
+      enum aub_batch_origin next_batch_origin = AUB_BATCH_ORIGIN_GGTT;
+      bool next_batch_second_level, fold_mi_bb_start = false;
+      if (is_mi_bb_start) {
+         struct gen_field_iterator iter;
+         gen_field_iterator_init(&iter, inst, p, 0, false);
+         while (gen_field_iterator_next(&iter)) {
+            if (strcmp(iter.name, "Batch Buffer Start Address") == 0) {
+               next_batch_addr = iter.raw_value;
+            } else if (strcmp(iter.name, "Second Level Batch Buffer") == 0) {
+               next_batch_second_level = iter.raw_value;
+            } else if (strcmp(iter.name, "Address Space Indicator") == 0) {
+               next_batch_origin = iter.raw_value ?
+                  AUB_BATCH_ORIGIN_PGGTT : AUB_BATCH_ORIGIN_GGTT;
+            }
+         }
+      }
+
+      if (show_instruction(ctx->decode_cfg, inst, is_mi_bb_start) &&
           ImGui::TreeNodeEx(p,
                             ImGuiTreeNodeFlags_Framed,
                             "0x%08" PRIx64 "%s:  %s",
@@ -1065,20 +1092,22 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                ctx->edit_address(ctx->user_data, offset, length * 4);
          }
 
-         ImGui::TreePop();
+         if (!is_mi_bb_start) {
+            ImGui::TreePop();
+         } else {
+            fold_mi_bb_start = (next_batch_second_level ||
+                                batch_origin == AUB_BATCH_ORIGIN_RING);
+         }
       }
 
-      if (strcmp(inst_name, "MI_BATCH_BUFFER_START") == 0) {
-         uint64_t next_batch_addr;
-         enum aub_batch_origin next_batch_origin = AUB_BATCH_ORIGIN_GGTT;
-         bool second_level;
+      if (is_mi_bb_start) {
          struct gen_field_iterator iter;
          gen_field_iterator_init(&iter, inst, p, 0, false);
          while (gen_field_iterator_next(&iter)) {
             if (strcmp(iter.name, "Batch Buffer Start Address") == 0) {
                next_batch_addr = iter.raw_value;
             } else if (strcmp(iter.name, "Second Level Batch Buffer") == 0) {
-               second_level = iter.raw_value;
+               next_batch_second_level = iter.raw_value;
             } else if (strcmp(iter.name, "Address Space Indicator") == 0) {
                next_batch_origin = iter.raw_value ?
                   AUB_BATCH_ORIGIN_PGGTT : AUB_BATCH_ORIGIN_GGTT;
@@ -1093,10 +1122,13 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                                "Secondary batch at 0x%08" PRIx64 " unavailable",
                                next_batch_addr);
          } else {
-            aub_viewer_render_batch(ctx, next_batch.map, next_batch.size,
-                                    next_batch.addr, next_batch_origin);
+            if (fold_mi_bb_start) {
+               aub_viewer_render_batch(ctx, next_batch.map, next_batch.size,
+                                       next_batch.addr, next_batch_origin);
+               ImGui::TreePop();
+            }
          }
-         if (second_level) {
+         if (next_batch_second_level) {
             /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" set acts
              * like a subroutine call.  Commands that come afterwards get
              * processed once the 2nd level batch buffer returns with
