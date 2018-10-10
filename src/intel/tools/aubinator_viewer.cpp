@@ -304,6 +304,8 @@ struct batch_window {
    struct pml4_window pml4_window;
 
    char edit_address[20];
+
+   bool decode_image;
 };
 
 static struct Context {
@@ -839,21 +841,6 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
    uint32_t pphwsp_addr = context_descriptor & 0xfffff000;
    struct gen_batch_decode_bo pphwsp_bo =
       aub_mem_get_ggtt_bo(&window->mem, pphwsp_addr);
-   uint32_t *context_img = (uint32_t *)((uint8_t *)pphwsp_bo.map +
-                                        (pphwsp_addr - pphwsp_bo.addr) +
-                                        pphwsp_size);
-
-   uint32_t ring_buffer_head = context_img[5];
-   uint32_t ring_buffer_tail = context_img[7];
-   uint32_t ring_buffer_start = context_img[9];
-   uint32_t ring_buffer_length = (context_img[11] & 0x1ff000) + 4096;
-
-   window->mem.pml4 = (uint64_t)context_img[49] << 32 | context_img[51];
-
-   struct gen_batch_decode_bo ring_bo =
-      aub_mem_get_ggtt_bo(&window->mem, ring_buffer_start);
-   assert(ring_bo.size > 0);
-   void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr) + ring_buffer_head;
 
    window->uses_ppgtt = true;
 
@@ -868,13 +855,36 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
          new_edit_window("HWSP image", &window->mem, false /* GGTT */,
                          pphwsp_bo.addr, pphwsp_size);
       list_add(&edit_window->base.parent_link, &window->base.children_windows);
-   }
+   } ImGui::SameLine();
+   ImGui::Checkbox("Decode image/batch", &window->decode_image);
 
    ImGui::BeginChild(ImGui::GetID("##block"));
 
-   aub_viewer_render_batch(&window->decode_ctx, commands,
-                           MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
-                           ring_buffer_start + ring_buffer_head, AUB_BATCH_ORIGIN_RING);
+
+   uint32_t *context_img = (uint32_t *)((uint8_t *)pphwsp_bo.map +
+                                        (pphwsp_addr - pphwsp_bo.addr) +
+                                        pphwsp_size);
+   window->mem.pml4 = (uint64_t)context_img[49] << 32 | context_img[51];
+
+   if (window->decode_image) {
+      aub_viewer_render_batch(&window->decode_ctx, context_img,
+                              pphwsp_bo.size - pphwsp_size,
+                              pphwsp_bo.addr + pphwsp_size,
+                              AUB_BATCH_ORIGIN_RING);
+   } else {
+      uint32_t ring_buffer_head = context_img[5];
+      uint32_t ring_buffer_tail = context_img[7];
+      uint32_t ring_buffer_start = context_img[9];
+      uint32_t ring_buffer_length = (context_img[11] & 0x1ff000) + 4096;
+
+      struct gen_batch_decode_bo ring_bo =
+         aub_mem_get_ggtt_bo(&window->mem, ring_buffer_start);
+      assert(ring_bo.size > 0);
+      void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr) + ring_buffer_head;
+      aub_viewer_render_batch(&window->decode_ctx, commands,
+                              MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
+                              ring_buffer_start + ring_buffer_head, AUB_BATCH_ORIGIN_RING);
+   }
 
    ImGui::EndChild();
 }
