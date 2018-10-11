@@ -115,6 +115,10 @@ void aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
                                 unsigned (*get_state_size)(void *, uint32_t),
                                 void *user_data);
 
+void aub_viewer_parse_batch(struct aub_viewer_decode_ctx *ctx,
+                            const void *batch, uint32_t batch_size,
+                            uint64_t batch_addr, enum aub_batch_origin batch_origin);
+
 void aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                              const void *batch, uint32_t batch_size,
                              uint64_t batch_addr, enum aub_batch_origin batch_origin);

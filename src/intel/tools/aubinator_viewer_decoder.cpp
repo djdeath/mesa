@@ -1010,6 +1010,104 @@ show_instruction(struct aub_viewer_decode_cfg *cfg,
 }
 
 void
+aub_viewer_parse_batch(struct aub_viewer_decode_ctx *ctx,
+                       const void *_batch, uint32_t batch_size,
+                       uint64_t batch_addr, enum aub_batch_origin batch_origin)
+{
+   struct gen_group *inst;
+   const uint32_t *p, *batch = (const uint32_t *) _batch, *end = batch + batch_size / sizeof(uint32_t);
+   int length;
+
+   if (ctx->n_batch_buffer_start >= 100)
+      return;
+
+   ctx->n_batch_buffer_start++;
+
+   for (p = batch; p < end; p += length) {
+      inst = gen_spec_find_instruction(ctx->spec, p);
+      length = gen_group_get_length(inst, p);
+      assert(inst == NULL || length > 0);
+      length = MAX2(1, length);
+
+      uint64_t offset = batch_addr + ((char *)p - (char *)batch);
+
+      if (inst == NULL)
+         continue;
+
+      const char *inst_name = gen_group_get_name(inst);
+
+      for (unsigned i = 0; i < ARRAY_SIZE(info_decoders); i++) {
+         if (strcmp(inst_name, info_decoders[i].cmd_name) == 0) {
+            ctx->stage = info_decoders[i].stage;
+            info_decoders[i].decode(ctx, inst, p);
+            break;
+         }
+      }
+
+      bool is_mi_bb_start = strcmp(inst_name, "MI_BATCH_BUFFER_START") == 0;
+      uint64_t next_batch_addr;
+      enum aub_batch_origin next_batch_origin = AUB_BATCH_ORIGIN_GGTT;
+      bool next_batch_second_level, fold_mi_bb_start = false;
+      if (is_mi_bb_start) {
+         struct gen_field_iterator iter;
+         gen_field_iterator_init(&iter, inst, p, 0, false);
+         while (gen_field_iterator_next(&iter)) {
+            if (strcmp(iter.name, "Batch Buffer Start Address") == 0) {
+               next_batch_addr = iter.raw_value;
+            } else if (strcmp(iter.name, "Second Level Batch Buffer") == 0) {
+               next_batch_second_level = iter.raw_value;
+            } else if (strcmp(iter.name, "Address Space Indicator") == 0) {
+               next_batch_origin = iter.raw_value ?
+                  AUB_BATCH_ORIGIN_PGGTT : AUB_BATCH_ORIGIN_GGTT;
+            }
+         }
+      }
+
+      if (is_mi_bb_start) {
+         struct gen_field_iterator iter;
+         gen_field_iterator_init(&iter, inst, p, 0, false);
+         while (gen_field_iterator_next(&iter)) {
+            if (strcmp(iter.name, "Batch Buffer Start Address") == 0) {
+               next_batch_addr = iter.raw_value;
+            } else if (strcmp(iter.name, "Second Level Batch Buffer") == 0) {
+               next_batch_second_level = iter.raw_value;
+            } else if (strcmp(iter.name, "Address Space Indicator") == 0) {
+               next_batch_origin = iter.raw_value ?
+                  AUB_BATCH_ORIGIN_PGGTT : AUB_BATCH_ORIGIN_GGTT;
+            }
+         }
+
+         struct gen_batch_decode_bo next_batch =
+            ctx_get_bo(ctx, next_batch_origin == AUB_BATCH_ORIGIN_PGGTT, next_batch_addr);
+
+         if (next_batch.map) {
+            aub_viewer_parse_batch(ctx, next_batch.map, next_batch.size,
+                                   next_batch.addr, next_batch_origin);
+         }
+         if (next_batch_second_level) {
+            /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" set acts
+             * like a subroutine call.  Commands that come afterwards get
+             * processed once the 2nd level batch buffer returns with
+             * MI_BATCH_BUFFER_END.
+             */
+            continue;
+         } else if (batch_origin != AUB_BATCH_ORIGIN_RING) {
+            /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" unset acts
+             * like a goto.  Nothing after it will ever get processed.  In
+             * order to prevent the recursion from growing, we just reset the
+             * loop and continue;
+             */
+            break;
+         }
+      } else if (strcmp(inst_name, "MI_BATCH_BUFFER_END") == 0) {
+         break;
+      }
+   }
+
+   ctx->n_batch_buffer_start--;
+}
+
+void
 aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                         const void *_batch, uint32_t batch_size,
                         uint64_t batch_addr, enum aub_batch_origin batch_origin)

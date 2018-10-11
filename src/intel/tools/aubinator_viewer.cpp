@@ -860,14 +860,16 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
 
    ImGui::BeginChild(ImGui::GetID("##block"));
 
-
    uint32_t *context_img = (uint32_t *)((uint8_t *)pphwsp_bo.map +
                                         (pphwsp_addr - pphwsp_bo.addr) +
                                         pphwsp_size);
    window->mem.pml4 = (uint64_t)context_img[49] << 32 | context_img[51];
 
+   struct aub_viewer_decode_ctx decode_ctx;
+   memcpy(&decode_ctx, &window->decode_ctx, sizeof(decode_ctx));
+
    if (window->decode_image) {
-      aub_viewer_render_batch(&window->decode_ctx, context_img,
+      aub_viewer_render_batch(&decode_ctx, context_img,
                               pphwsp_bo.size - pphwsp_size,
                               pphwsp_bo.addr + pphwsp_size,
                               AUB_BATCH_ORIGIN_RING);
@@ -881,7 +883,7 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
          aub_mem_get_ggtt_bo(&window->mem, ring_buffer_start);
       assert(ring_bo.size > 0);
       void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr) + ring_buffer_head;
-      aub_viewer_render_batch(&window->decode_ctx, commands,
+      aub_viewer_render_batch(&decode_ctx, commands,
                               MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
                               ring_buffer_start + ring_buffer_head, AUB_BATCH_ORIGIN_RING);
    }
@@ -939,6 +941,30 @@ destroy_batch_window(struct window *win)
 }
 
 static void
+parse_batch_execlist_write(void *user_data, enum gen_engine engine,
+                           uint64_t context_descriptor)
+{
+   struct batch_window *window = (struct batch_window *) user_data;
+
+   const uint32_t pphwsp_size = 4096;
+   uint32_t pphwsp_addr = context_descriptor & 0xfffff000;
+   struct gen_batch_decode_bo pphwsp_bo =
+      aub_mem_get_ggtt_bo(&window->mem, pphwsp_addr);
+
+   window->uses_ppgtt = true;
+
+   uint32_t *context_img = (uint32_t *)((uint8_t *)pphwsp_bo.map +
+                                        (pphwsp_addr - pphwsp_bo.addr) +
+                                        pphwsp_size);
+   window->mem.pml4 = (uint64_t)context_img[49] << 32 | context_img[51];
+
+   aub_viewer_parse_batch(&window->decode_ctx, context_img,
+                          pphwsp_bo.size - pphwsp_size,
+                          pphwsp_bo.addr + pphwsp_size,
+                          AUB_BATCH_ORIGIN_RING);
+}
+
+static void
 new_batch_window(int exec_idx)
 {
    struct batch_window *window = xtzalloc(*window);
@@ -965,6 +991,17 @@ new_batch_window(int exec_idx)
    window->decode_ctx.edit_address = batch_edit_address;
 
    update_batch_window(window, false, exec_idx);
+
+   struct aub_read read = {};
+   read.user_data = window;
+   read.execlist_write = parse_batch_execlist_write;
+
+   const uint8_t *iter = context.file->execs[window->exec_idx].start;
+   while (iter < context.file->execs[window->exec_idx].end) {
+      iter += aub_read_command(&read, iter,
+                               context.file->execs[window->exec_idx].end - iter);
+   }
+
 }
 
 /**/
