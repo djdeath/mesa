@@ -291,8 +291,12 @@ void anv_CmdCopyImage(
                 anv_get_layerCount(src_image, &pRegions[r].srcSubresource));
       }
 
-      VkImageAspectFlags src_mask = pRegions[r].srcSubresource.aspectMask,
-         dst_mask = pRegions[r].dstSubresource.aspectMask;
+      VkImageAspectFlags src_mask =
+         anv_image_expand_aspects(src_image,
+                                  pRegions[r].srcSubresource.aspectMask),
+         dst_mask =
+         anv_image_expand_aspects(dst_image,
+                                  pRegions[r].dstSubresource.aspectMask);
 
       assert(anv_image_aspects_compatible(src_mask, dst_mask));
 
@@ -376,7 +380,8 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
    }
 
    for (unsigned r = 0; r < regionCount; r++) {
-      const VkImageAspectFlags aspect = pRegions[r].imageSubresource.aspectMask;
+      const VkImageAspectFlags aspect =
+         anv_image_expand_aspects(anv_image, pRegions[r].imageSubresource.aspectMask);
 
       get_blorp_surf_for_anv_image(cmd_buffer->device, anv_image, aspect,
                                    image_layout, ISL_AUX_USAGE_NONE,

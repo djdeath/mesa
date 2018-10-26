@@ -137,7 +137,7 @@ add_surface(struct anv_image *image, struct anv_surface *surf, uint32_t plane)
 {
    assert(surf->isl.size_B > 0); /* isl surface must be initialized */
 
-   if (image->disjoint) {
+   if (image->disjoint || anv_format_has_aliases(image->format)) {
       surf->offset = align_u32(image->planes[plane].size,
                                surf->isl.alignment_B);
       /* Plane offset is always 0 when it's disjoint. */
@@ -260,7 +260,7 @@ add_aux_state_tracking_buffer(struct anv_image *image,
    assert((image->planes[plane].offset + image->planes[plane].size) % 4 == 0);
 
    /* This buffer should be at the very end of the plane. */
-   if (image->disjoint) {
+   if (image->disjoint || anv_format_has_aliases(image->format)) {
       assert(image->planes[plane].size ==
              (image->planes[plane].offset + image->planes[plane].size));
    } else {
@@ -301,7 +301,7 @@ make_surface(const struct anv_device *dev,
              struct anv_image *image,
              const struct anv_image_create_info *anv_info,
              isl_tiling_flags_t tiling_flags,
-             VkImageAspectFlagBits aspect)
+             uint32_t plane)
 {
    const VkImageCreateInfo *vk_info = anv_info->vk_info;
    bool ok;
@@ -315,14 +315,13 @@ make_surface(const struct anv_device *dev,
    image->extent = anv_sanitize_image_extent(vk_info->imageType,
                                              vk_info->extent);
 
-   const unsigned plane = anv_format_aspect_to_plane(image->format, aspect);
    const  struct anv_format_plane plane_format =
-      anv_get_format_plane(&dev->info, image->vk_format, aspect, image->tiling);
+      anv_get_format_nth_plane(&dev->info, image->vk_format, plane, image->tiling);
    struct anv_surface *anv_surf = &image->planes[plane].surface;
 
    const isl_surf_usage_flags_t usage =
       choose_isl_surf_usage(vk_info->flags, image->usage,
-                            anv_info->isl_extra_usage_flags, aspect);
+                            anv_info->isl_extra_usage_flags, plane_format.aspect);
 
    /* If an image is created as BLOCK_TEXEL_VIEW_COMPATIBLE, then we need to
     * fall back to linear on Broadwell and earlier because we aren't
@@ -365,7 +364,7 @@ make_surface(const struct anv_device *dev,
     * don't get garbage performance.
     */
    if (needs_shadow) {
-      assert(aspect == VK_IMAGE_ASPECT_COLOR_BIT);
+      assert(plane_format.aspect == VK_IMAGE_ASPECT_COLOR_BIT);
       assert(tiling_flags == ISL_TILING_LINEAR_BIT);
 
       ok = isl_surf_init(&dev->isl_dev, &image->planes[plane].shadow_surface.isl,
@@ -392,7 +391,7 @@ make_surface(const struct anv_device *dev,
 
    /* Add a HiZ surface to a depth buffer that will be used for rendering.
     */
-   if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
+   if (plane_format.aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
       /* We don't advertise that depth buffers could be used as storage
        * images.
        */
@@ -421,7 +420,7 @@ make_surface(const struct anv_device *dev,
          add_surface(image, &image->planes[plane].aux_surface, plane);
          image->planes[plane].aux_usage = ISL_AUX_USAGE_HIZ;
       }
-   } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && vk_info->samples == 1) {
+   } else if ((plane_format.aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && vk_info->samples == 1) {
       /* TODO: Disallow compression with :
        *
        *     1) non multiplanar images (We appear to hit a sampler bug with
@@ -478,7 +477,7 @@ make_surface(const struct anv_device *dev,
             }
          }
       }
-   } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && vk_info->samples > 1) {
+   } else if ((plane_format.aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && vk_info->samples > 1) {
       assert(!(vk_info->usage & VK_IMAGE_USAGE_STORAGE_BIT));
       assert(image->planes[plane].aux_surface.isl.size_B == 0);
       ok = isl_surf_get_mcs_surf(&dev->isl_dev,
@@ -596,19 +595,14 @@ anv_image_create(VkDevice _device,
    image->drm_format_mod = isl_mod_info ? isl_mod_info->modifier :
                                           DRM_FORMAT_MOD_INVALID;
 
-   const struct anv_format *format = anv_get_format(image->vk_format);
-   assert(format != NULL);
-
    const isl_tiling_flags_t isl_tiling_flags =
       choose_isl_tiling_flags(create_info, isl_mod_info,
                               image->needs_set_tiling);
 
-   image->n_planes = format->n_planes;
+   image->n_planes = image->format->n_planes;
 
-   uint32_t b;
-   for_each_bit(b, image->aspects) {
-      r = make_surface(device, image, create_info, isl_tiling_flags,
-                       (1 << b));
+   for (uint32_t p = 0; p < image->format->n_planes; p++) {
+      r = make_surface(device, image, create_info, isl_tiling_flags, p);
       if (r != VK_SUCCESS)
          goto fail;
    }
@@ -670,21 +664,29 @@ anv_DestroyImage(VkDevice _device, VkImage _image,
 
 static void anv_image_bind_memory_plane(struct anv_device *device,
                                         struct anv_image *image,
-                                        uint32_t plane,
+                                        VkImageAspectFlagBits aspect,
                                         struct anv_device_memory *memory,
                                         uint32_t memory_offset)
 {
-   assert(!image->planes[plane].bo_is_owned);
-
    if (!memory) {
-      image->planes[plane].address = ANV_NULL_ADDRESS;
+      for (int p = 0; p < image->format->n_planes; p++) {
+         if (image->format->planes[p].aspect & aspect) {
+            assert(!image->planes[p].bo_is_owned);
+            image->planes[p].address = ANV_NULL_ADDRESS;
+         }
+      }
       return;
    }
 
-   image->planes[plane].address = (struct anv_address) {
-      .bo = memory->bo,
-      .offset = memory_offset,
-   };
+   for (int p = 0; p < image->format->n_planes; p++) {
+      if (image->format->planes[p].aspect & aspect) {
+         assert(!image->planes[p].bo_is_owned);
+         image->planes[p].address = (struct anv_address) {
+            .bo = memory->bo,
+            .offset = memory_offset,
+         };
+      }
+   }
 }
 
 VkResult anv_BindImageMemory(
@@ -698,11 +700,8 @@ VkResult anv_BindImageMemory(
    ANV_FROM_HANDLE(anv_image, image, _image);
 
    uint32_t aspect_bit;
-   anv_foreach_image_aspect_bit(aspect_bit, image, image->aspects) {
-      uint32_t plane =
-         anv_format_aspect_to_plane(image->format, 1UL << aspect_bit);
-      anv_image_bind_memory_plane(device, image, plane, mem, memoryOffset);
-   }
+   anv_foreach_image_aspect_bit(aspect_bit, image, image->aspects)
+      anv_image_bind_memory_plane(device, image, 1UL << aspect_bit, mem, memoryOffset);
 
    return VK_SUCCESS;
 }
@@ -737,9 +736,7 @@ VkResult anv_BindImageMemory2(
 
       uint32_t aspect_bit;
       anv_foreach_image_aspect_bit(aspect_bit, image, aspects) {
-         uint32_t plane =
-            anv_format_aspect_to_plane(image->format, 1UL << aspect_bit);
-         anv_image_bind_memory_plane(device, image, plane,
+         anv_image_bind_memory_plane(device, image, 1UL << aspect_bit,
                                      mem, bind_info->memoryOffset);
       }
    }
@@ -1032,6 +1029,7 @@ remap_swizzle(VkComponentSwizzle swizzle, VkComponentSwizzle component,
 void
 anv_image_fill_surface_state(struct anv_device *device,
                              const struct anv_image *image,
+                             uint32_t plane,
                              VkImageAspectFlagBits aspect,
                              const struct isl_view *view_in,
                              isl_surf_usage_flags_t view_usage,
@@ -1041,8 +1039,6 @@ anv_image_fill_surface_state(struct anv_device *device,
                              struct anv_surface_state *state_inout,
                              struct brw_image_param *image_param_out)
 {
-   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
-
    const struct anv_surface *surface = &image->planes[plane].surface,
       *aux_surface = &image->planes[plane].aux_surface;
 
@@ -1224,42 +1220,120 @@ anv_image_fill_surface_state(struct anv_device *device,
    }
 }
 
-static VkImageAspectFlags
-remap_aspect_flags(VkImageAspectFlags view_aspects)
+static void
+fill_image_view_plane(struct anv_device *device,
+                      struct anv_image_view *iview,
+                      const VkImageViewCreateInfo *pCreateInfo,
+                      uint32_t vplane,
+                      struct anv_format_plane vformat,
+                      uint32_t iplane)
 {
-   if (view_aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) {
-      if (util_bitcount(view_aspects) == 1)
-         return VK_IMAGE_ASPECT_COLOR_BIT;
+   const VkImageSubresourceRange *range = &pCreateInfo->subresourceRange;
+   const VkImageViewUsageCreateInfo *usage_info =
+      vk_find_struct_const(pCreateInfo, IMAGE_VIEW_USAGE_CREATE_INFO);
+   VkImageUsageFlags view_usage = usage_info ? usage_info->usage : iview->image->usage;
+   /* View usage should be a subset of image usage */
+   assert((view_usage & ~iview->image->usage) == 0);
+   assert(view_usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
+                        VK_IMAGE_USAGE_STORAGE_BIT |
+                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
 
-      VkImageAspectFlags color_aspects = 0;
-      for (uint32_t i = 0; i < util_bitcount(view_aspects); i++)
-         color_aspects |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
-      return color_aspects;
+   iview->planes[vplane].isl = (struct isl_view) {
+      .format = vformat.isl_format,
+      .base_level = range->baseMipLevel,
+      .levels = anv_get_levelCount(iview->image, range),
+      .base_array_layer = range->baseArrayLayer,
+      .array_len = anv_get_layerCount(iview->image, range),
+      .swizzle = {
+         .r = remap_swizzle(pCreateInfo->components.r,
+                            VK_COMPONENT_SWIZZLE_R, vformat.swizzle),
+         .g = remap_swizzle(pCreateInfo->components.g,
+                            VK_COMPONENT_SWIZZLE_G, vformat.swizzle),
+         .b = remap_swizzle(pCreateInfo->components.b,
+                            VK_COMPONENT_SWIZZLE_B, vformat.swizzle),
+         .a = remap_swizzle(pCreateInfo->components.a,
+                            VK_COMPONENT_SWIZZLE_A, vformat.swizzle),
+      },
+   };
+
+   if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D) {
+      iview->planes[vplane].isl.base_array_layer = 0;
+      iview->planes[vplane].isl.array_len = iview->extent.depth;
    }
-   /* No special remapping needed for depth & stencil aspects. */
-   return view_aspects;
+
+   if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE ||
+       pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY) {
+      iview->planes[vplane].isl.usage = ISL_SURF_USAGE_CUBE_BIT;
+   } else {
+      iview->planes[vplane].isl.usage = 0;
+   }
+
+   if (view_usage & VK_IMAGE_USAGE_SAMPLED_BIT ||
+       (view_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT &&
+        !(iview->aspect_mask & VK_IMAGE_ASPECT_COLOR_BIT))) {
+      iview->planes[vplane].optimal_sampler_surface_state.state = alloc_surface_state(device);
+      iview->planes[vplane].general_sampler_surface_state.state = alloc_surface_state(device);
+
+      enum isl_aux_usage general_aux_usage =
+         anv_layout_to_aux_usage(&device->info, iview->image, iplane, VK_IMAGE_LAYOUT_GENERAL);
+      enum isl_aux_usage optimal_aux_usage =
+         anv_layout_to_aux_usage(&device->info, iview->image, iplane,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+      anv_image_fill_surface_state(device, iview->image, iplane, vformat.aspect,
+                                   &iview->planes[vplane].isl,
+                                   ISL_SURF_USAGE_TEXTURE_BIT,
+                                   optimal_aux_usage, NULL,
+                                   ANV_IMAGE_VIEW_STATE_TEXTURE_OPTIMAL,
+                                   &iview->planes[vplane].optimal_sampler_surface_state,
+                                   NULL);
+
+      anv_image_fill_surface_state(device, iview->image, iplane, vformat.aspect,
+                                   &iview->planes[vplane].isl,
+                                   ISL_SURF_USAGE_TEXTURE_BIT,
+                                   general_aux_usage, NULL,
+                                   0,
+                                   &iview->planes[vplane].general_sampler_surface_state,
+                                   NULL);
+   }
+
+   /* NOTE: This one needs to go last since it may stomp isl_view.format */
+   if (view_usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+      iview->planes[vplane].storage_surface_state.state = alloc_surface_state(device);
+      iview->planes[vplane].writeonly_storage_surface_state.state = alloc_surface_state(device);
+
+      anv_image_fill_surface_state(device, iview->image, iplane, vformat.aspect,
+                                   &iview->planes[vplane].isl,
+                                   ISL_SURF_USAGE_STORAGE_BIT,
+                                   ISL_AUX_USAGE_NONE, NULL,
+                                   0,
+                                   &iview->planes[vplane].storage_surface_state,
+                                   &iview->planes[vplane].storage_image_param);
+
+      anv_image_fill_surface_state(device, iview->image, iplane, vformat.aspect,
+                                   &iview->planes[vplane].isl,
+                                   ISL_SURF_USAGE_STORAGE_BIT,
+                                   ISL_AUX_USAGE_NONE, NULL,
+                                   ANV_IMAGE_VIEW_STATE_STORAGE_WRITE_ONLY,
+                                   &iview->planes[vplane].writeonly_storage_surface_state,
+                                   NULL);
+   }
 }
 
-static uint32_t
-anv_image_aspect_get_planes(VkImageAspectFlags aspect_mask)
+static VkImageAspectFlags
+remap_aspect_flags(VkFormat view_format, VkImageAspectFlags image_aspects)
 {
-   uint32_t planes = 0;
+   /* No remapping needed for depth & stencil aspects. */
+   if ((image_aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0)
+      return image_aspects;
 
-   if (aspect_mask & (VK_IMAGE_ASPECT_COLOR_BIT |
-                      VK_IMAGE_ASPECT_DEPTH_BIT |
-                      VK_IMAGE_ASPECT_STENCIL_BIT |
-                      VK_IMAGE_ASPECT_PLANE_0_BIT))
-      planes++;
-   if (aspect_mask & VK_IMAGE_ASPECT_PLANE_1_BIT)
-      planes++;
-   if (aspect_mask & VK_IMAGE_ASPECT_PLANE_2_BIT)
-      planes++;
+   VkImageAspectFlags view_aspects = vk_format_aspects(view_format);
+   if ((view_aspects & image_aspects) == 0)
+      return view_aspects;
 
-   if ((aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0 &&
-       (aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0)
-      planes++;
-
-   return planes;
+   return view_aspects & image_aspects;
 }
 
 VkResult
@@ -1281,17 +1355,6 @@ anv_CreateImageView(VkDevice _device,
 
    assert(range->layerCount > 0);
    assert(range->baseMipLevel < image->levels);
-
-   const VkImageViewUsageCreateInfo *usage_info =
-      vk_find_struct_const(pCreateInfo, IMAGE_VIEW_USAGE_CREATE_INFO);
-   VkImageUsageFlags view_usage = usage_info ? usage_info->usage : image->usage;
-   /* View usage should be a subset of image usage */
-   assert((view_usage & ~image->usage) == 0);
-   assert(view_usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
-                        VK_IMAGE_USAGE_STORAGE_BIT |
-                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
 
    switch (image->type) {
    default:
@@ -1322,114 +1385,46 @@ anv_CreateImageView(VkDevice _device,
     * convert it to VK_IMAGE_ASPECT_COLOR_BIT since from the point of view of
     * the image view, it only has a single plane.
     */
-   iview->aspect_mask = remap_aspect_flags(expanded_aspects);
-   iview->n_planes = anv_image_aspect_get_planes(iview->aspect_mask);
+   iview->aspect_mask = remap_aspect_flags(pCreateInfo->format, expanded_aspects);
    iview->vk_format = pCreateInfo->format;
-
    iview->extent = (VkExtent3D) {
       .width  = anv_minify(image->extent.width , range->baseMipLevel),
       .height = anv_minify(image->extent.height, range->baseMipLevel),
       .depth  = anv_minify(image->extent.depth , range->baseMipLevel),
    };
 
-   /* Now go through the underlying image selected planes (computed in
-    * expanded_aspects) and map them to planes in the image view.
+   /* Now go through the underlying image planes and add the planes selected
+    * in expanded_aspects to the image view.
     */
-   uint32_t iaspect_bit, vplane = 0;
-   anv_foreach_image_aspect_bit(iaspect_bit, image, expanded_aspects) {
-      uint32_t iplane =
-         anv_format_aspect_to_plane(image->format, 1UL << iaspect_bit);
-      VkImageAspectFlags vplane_aspect =
-         anv_plane_to_aspect(iview->aspect_mask, vplane);
-      struct anv_format_plane format =
-         anv_get_format_plane(&device->info, pCreateInfo->format,
-                              vplane_aspect, image->tiling);
+   const struct anv_format *vformat =
+      anv_get_format(iview->vk_format);
+   bool iplane_bound[3] = { false, };
+   for (uint32_t vfplane = 0; vfplane < vformat->n_planes; vfplane++) {
+      if ((iview->aspect_mask & vformat->planes[vfplane].aspect) == 0)
+         continue;
 
-      iview->planes[vplane].image_plane = iplane;
+      for (uint32_t ifplane = 0; ifplane < iview->image->format->n_planes; ifplane++) {
+         if ((expanded_aspects & iview->image->format->planes[ifplane].aspect) == 0)
+            continue;
 
-      iview->planes[vplane].isl = (struct isl_view) {
-         .format = format.isl_format,
-         .base_level = range->baseMipLevel,
-         .levels = anv_get_levelCount(image, range),
-         .base_array_layer = range->baseArrayLayer,
-         .array_len = anv_get_layerCount(image, range),
-         .swizzle = {
-            .r = remap_swizzle(pCreateInfo->components.r,
-                               VK_COMPONENT_SWIZZLE_R, format.swizzle),
-            .g = remap_swizzle(pCreateInfo->components.g,
-                               VK_COMPONENT_SWIZZLE_G, format.swizzle),
-            .b = remap_swizzle(pCreateInfo->components.b,
-                               VK_COMPONENT_SWIZZLE_B, format.swizzle),
-            .a = remap_swizzle(pCreateInfo->components.a,
-                               VK_COMPONENT_SWIZZLE_A, format.swizzle),
-         },
-      };
+         if (iplane_bound[ifplane])
+            continue;
 
-      if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D) {
-         iview->planes[vplane].isl.base_array_layer = 0;
-         iview->planes[vplane].isl.array_len = iview->extent.depth;
+         iplane_bound[ifplane] = true;
+
+         struct anv_format_plane vplane_format =
+            anv_get_format_nth_plane(&device->info, iview->vk_format,
+                                     vfplane, iview->image->tiling);
+         fill_image_view_plane(device, iview, pCreateInfo, iview->n_planes++,
+                               vplane_format, ifplane);
+
+         /* There is a 1-1 mapping view to image planes, so once bound, just
+          * stop there.
+          */
+         break;
       }
-
-      if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE ||
-          pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_CUBE_ARRAY) {
-         iview->planes[vplane].isl.usage = ISL_SURF_USAGE_CUBE_BIT;
-      } else {
-         iview->planes[vplane].isl.usage = 0;
-      }
-
-      if (view_usage & VK_IMAGE_USAGE_SAMPLED_BIT ||
-          (view_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT &&
-           !(iview->aspect_mask & VK_IMAGE_ASPECT_COLOR_BIT))) {
-         iview->planes[vplane].optimal_sampler_surface_state.state = alloc_surface_state(device);
-         iview->planes[vplane].general_sampler_surface_state.state = alloc_surface_state(device);
-
-         enum isl_aux_usage general_aux_usage =
-            anv_layout_to_aux_usage(&device->info, image, iplane, VK_IMAGE_LAYOUT_GENERAL);
-         enum isl_aux_usage optimal_aux_usage =
-            anv_layout_to_aux_usage(&device->info, image, iplane,
-                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-         anv_image_fill_surface_state(device, image, 1ULL << iaspect_bit,
-                                      &iview->planes[vplane].isl,
-                                      ISL_SURF_USAGE_TEXTURE_BIT,
-                                      optimal_aux_usage, NULL,
-                                      ANV_IMAGE_VIEW_STATE_TEXTURE_OPTIMAL,
-                                      &iview->planes[vplane].optimal_sampler_surface_state,
-                                      NULL);
-
-         anv_image_fill_surface_state(device, image, 1ULL << iaspect_bit,
-                                      &iview->planes[vplane].isl,
-                                      ISL_SURF_USAGE_TEXTURE_BIT,
-                                      general_aux_usage, NULL,
-                                      0,
-                                      &iview->planes[vplane].general_sampler_surface_state,
-                                      NULL);
-      }
-
-      /* NOTE: This one needs to go last since it may stomp isl_view.format */
-      if (view_usage & VK_IMAGE_USAGE_STORAGE_BIT) {
-         iview->planes[vplane].storage_surface_state.state = alloc_surface_state(device);
-         iview->planes[vplane].writeonly_storage_surface_state.state = alloc_surface_state(device);
-
-         anv_image_fill_surface_state(device, image, 1ULL << iaspect_bit,
-                                      &iview->planes[vplane].isl,
-                                      ISL_SURF_USAGE_STORAGE_BIT,
-                                      ISL_AUX_USAGE_NONE, NULL,
-                                      0,
-                                      &iview->planes[vplane].storage_surface_state,
-                                      &iview->planes[vplane].storage_image_param);
-
-         anv_image_fill_surface_state(device, image, 1ULL << iaspect_bit,
-                                      &iview->planes[vplane].isl,
-                                      ISL_SURF_USAGE_STORAGE_BIT,
-                                      ISL_AUX_USAGE_NONE, NULL,
-                                      ANV_IMAGE_VIEW_STATE_STORAGE_WRITE_ONLY,
-                                      &iview->planes[vplane].writeonly_storage_surface_state,
-                                      NULL);
-      }
-
-      vplane++;
    }
+   assert(iview->n_planes > 0);
 
    *pView = anv_image_view_to_handle(iview);
 
@@ -1567,63 +1562,4 @@ anv_DestroyBufferView(VkDevice _device, VkBufferView bufferView,
                           view->writeonly_storage_surface_state);
 
    vk_free2(&device->alloc, pAllocator, view);
-}
-
-const struct anv_surface *
-anv_image_get_surface_for_aspect_mask(const struct anv_image *image,
-                                      VkImageAspectFlags aspect_mask)
-{
-   VkImageAspectFlags sanitized_mask;
-
-   switch (aspect_mask) {
-   case VK_IMAGE_ASPECT_COLOR_BIT:
-      assert(image->aspects == VK_IMAGE_ASPECT_COLOR_BIT);
-      sanitized_mask = VK_IMAGE_ASPECT_COLOR_BIT;
-      break;
-   case VK_IMAGE_ASPECT_DEPTH_BIT:
-      assert(image->aspects & VK_IMAGE_ASPECT_DEPTH_BIT);
-      sanitized_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
-      break;
-   case VK_IMAGE_ASPECT_STENCIL_BIT:
-      assert(image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT);
-      sanitized_mask = VK_IMAGE_ASPECT_STENCIL_BIT;
-      break;
-   case VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT:
-      /* FINISHME: The Vulkan spec (git a511ba2) requires support for
-       * combined depth stencil formats. Specifically, it states:
-       *
-       *    At least one of ename:VK_FORMAT_D24_UNORM_S8_UINT or
-       *    ename:VK_FORMAT_D32_SFLOAT_S8_UINT must be supported.
-       *
-       * Image views with both depth and stencil aspects are only valid for
-       * render target attachments, in which case
-       * cmd_buffer_emit_depth_stencil() will pick out both the depth and
-       * stencil surfaces from the underlying surface.
-       */
-      if (image->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
-         sanitized_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
-      } else {
-         assert(image->aspects == VK_IMAGE_ASPECT_STENCIL_BIT);
-         sanitized_mask = VK_IMAGE_ASPECT_STENCIL_BIT;
-      }
-      break;
-   case VK_IMAGE_ASPECT_PLANE_0_BIT:
-      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
-      sanitized_mask = VK_IMAGE_ASPECT_PLANE_0_BIT;
-      break;
-   case VK_IMAGE_ASPECT_PLANE_1_BIT:
-      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
-      sanitized_mask = VK_IMAGE_ASPECT_PLANE_1_BIT;
-      break;
-   case VK_IMAGE_ASPECT_PLANE_2_BIT:
-      assert((image->aspects & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
-      sanitized_mask = VK_IMAGE_ASPECT_PLANE_2_BIT;
-      break;
-   default:
-       unreachable("image does not have aspect");
-       return NULL;
-   }
-
-   uint32_t plane = anv_format_aspect_to_plane(image->format, sanitized_mask);
-   return &image->planes[plane].surface;
 }

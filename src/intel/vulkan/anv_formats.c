@@ -430,12 +430,9 @@ anv_get_format(VkFormat vk_format)
    return format;
 }
 
-/**
- * Exactly one bit must be set in \a aspect.
- */
 struct anv_format_plane
-anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
-                     VkImageAspectFlagBits aspect, VkImageTiling tiling)
+anv_get_format_nth_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
+                         uint32_t plane, VkImageTiling tiling)
 {
    const struct anv_format *format = anv_get_format(vk_format);
    const struct anv_format_plane unsupported = {
@@ -445,18 +442,17 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
    if (format == NULL)
       return unsupported;
 
-   uint32_t plane = anv_format_aspect_to_plane(format, aspect);
    struct anv_format_plane plane_format = format->planes[plane];
    if (plane_format.isl_format == ISL_FORMAT_UNSUPPORTED)
       return unsupported;
 
-   if (aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
+   if (plane_format.aspect & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
       assert(vk_format_aspects(vk_format) &
              (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT));
       return plane_format;
    }
 
-   assert((aspect & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
+   assert((plane_format.aspect & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
 
    const struct isl_format_layout *isl_layout =
       isl_format_get_layout(plane_format.isl_format);
@@ -488,6 +484,18 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
    }
 
    return plane_format;
+}
+
+/**
+ * Exactly one bit must be set in \a aspect.
+ */
+struct anv_format_plane
+anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
+                     VkImageAspectFlagBits aspect, VkImageTiling tiling)
+{
+   uint32_t plane =
+      anv_format_aspect_to_plane(anv_get_format(vk_format), aspect);
+   return anv_get_format_nth_plane(devinfo, vk_format, plane, tiling);
 }
 
 uint32_t

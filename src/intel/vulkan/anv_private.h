@@ -2564,6 +2564,18 @@ struct anv_format {
 uint32_t
 anv_format_aspect_to_plane(const struct anv_format *format, VkImageAspectFlags aspect);
 
+static inline bool anv_format_has_aliases(const struct anv_format *format)
+{
+   VkImageAspectFlags aspects = 0;
+
+   for (uint32_t p = 0; p < format->n_planes; p++) {
+      if ((aspects & format->planes[p].aspect) != 0)
+         return true;
+      aspects |= format->planes[p].aspect;
+   }
+   return false;
+}
+
 static inline VkImageAspectFlags
 anv_plane_to_aspect(VkImageAspectFlags image_aspects,
                     uint32_t plane)
@@ -2585,13 +2597,9 @@ anv_plane_to_aspect(VkImageAspectFlags image_aspects,
 const struct anv_format *
 anv_get_format(VkFormat format);
 
-static inline uint32_t
-anv_get_format_planes(VkFormat vk_format)
-{
-   const struct anv_format *format = anv_get_format(vk_format);
-
-   return format != NULL ? format->n_planes : 0;
-}
+struct anv_format_plane
+anv_get_format_nth_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
+                         uint32_t plane, VkImageTiling tiling);
 
 struct anv_format_plane
 anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
@@ -3001,8 +3009,6 @@ struct anv_image_view {
 
    unsigned n_planes;
    struct {
-      uint32_t image_plane;
-
       struct isl_view isl;
 
       /**
@@ -3037,7 +3043,8 @@ enum anv_image_view_state_flags {
 
 void anv_image_fill_surface_state(struct anv_device *device,
                                   const struct anv_image *image,
-                                  VkImageAspectFlagBits aspect,
+                                  uint32_t plane,
+                                  VkImageAspectFlags aspect,
                                   const struct isl_view *view,
                                   isl_surf_usage_flags_t view_usage,
                                   enum isl_aux_usage aux_usage,
@@ -3070,10 +3077,6 @@ VkResult anv_image_from_gralloc(VkDevice device_h,
                                 const VkAllocationCallbacks *alloc,
                                 VkImage *pImage);
 #endif
-
-const struct anv_surface *
-anv_image_get_surface_for_aspect_mask(const struct anv_image *image,
-                                      VkImageAspectFlags aspect_mask);
 
 enum isl_format
 anv_isl_format_for_descriptor_type(VkDescriptorType type);

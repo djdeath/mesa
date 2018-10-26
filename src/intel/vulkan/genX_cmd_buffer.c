@@ -1270,8 +1270,7 @@ genX(cmd_buffer_setup_attachments)(struct anv_cmd_buffer *cmd_buffer,
                                                &clear_color);
 
             anv_image_fill_surface_state(cmd_buffer->device,
-                                         iview->image,
-                                         VK_IMAGE_ASPECT_COLOR_BIT,
+                                         iview->image, 0, att_aspects,
                                          &iview->planes[0].isl,
                                          ISL_SURF_USAGE_RENDER_TARGET_BIT,
                                          state->attachments[i].aux_usage,
@@ -1289,8 +1288,7 @@ genX(cmd_buffer_setup_attachments)(struct anv_cmd_buffer *cmd_buffer,
 
          if (need_input_attachment_state(&pass->attachments[i])) {
             anv_image_fill_surface_state(cmd_buffer->device,
-                                         iview->image,
-                                         VK_IMAGE_ASPECT_COLOR_BIT,
+                                         iview->image, 0, att_aspects,
                                          &iview->planes[0].isl,
                                          ISL_SURF_USAGE_TEXTURE_BIT,
                                          state->attachments[i].input_aux_usage,
