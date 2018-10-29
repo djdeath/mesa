@@ -46,89 +46,96 @@
 #define BGRA _ISL_SWIZZLE(BLUE, GREEN, RED, ALPHA)
 #define RGB1 _ISL_SWIZZLE(RED, GREEN, BLUE, ONE)
 
-#define swiz_fmt1(__vk_fmt, __hw_fmt, __swizzle) \
-   [VK_ENUM_OFFSET(__vk_fmt)] = { \
-      .planes = { \
-         { .isl_format = __hw_fmt, .swizzle = __swizzle, \
-           .denominator_scales = { 1, 1, }, \
-           .aspect = VK_IMAGE_ASPECT_COLOR_BIT, \
-         }, \
-      }, \
-      .n_planes = 1, \
+#define swiz_fmt1(__hw_fmt, __swizzle)                          \
+   {                                                            \
+      .planes = {                                               \
+         { .isl_format = __hw_fmt, .swizzle = __swizzle,        \
+           .denominator_scales =  { 1, 1, },                    \
+           .aspect = VK_IMAGE_ASPECT_COLOR_BIT,                 \
+         },                                                     \
+      },                                                        \
+      .n_planes = 1,                                            \
    }
 
-#define fmt1(__vk_fmt, __hw_fmt) \
-   swiz_fmt1(__vk_fmt, __hw_fmt, RGBA)
+#define fmt1(__hw_fmt) \
+   swiz_fmt1(__hw_fmt, RGBA)
 
-#define d_fmt(__vk_fmt, __hw_fmt) \
-   [VK_ENUM_OFFSET(__vk_fmt)] = { \
-      .planes = { \
-         { .isl_format = __hw_fmt, .swizzle = RGBA, \
-           .denominator_scales = { 1, 1, }, \
-           .aspect = VK_IMAGE_ASPECT_DEPTH_BIT, \
-         }, \
-      }, \
-      .n_planes = 1, \
+#define d_fmt(__hw_fmt) \
+   {                                                         \
+      .planes = {                                            \
+         { .isl_format = __hw_fmt, .swizzle = RGBA,          \
+           .denominator_scales = { 1, 1, },                  \
+           .aspect = VK_IMAGE_ASPECT_DEPTH_BIT,              \
+         },                                                  \
+      },                                                     \
+      .n_planes = 1,                                         \
    }
 
-#define s_fmt(__vk_fmt, __hw_fmt) \
-   [VK_ENUM_OFFSET(__vk_fmt)] = { \
-      .planes = { \
-         { .isl_format = __hw_fmt, .swizzle = RGBA, \
-           .denominator_scales = { 1, 1, }, \
-           .aspect = VK_IMAGE_ASPECT_STENCIL_BIT, \
-         }, \
-      }, \
-      .n_planes = 1, \
+#define s_fmt(__hw_fmt)                                      \
+   {                                                         \
+      .planes = {                                            \
+         { .isl_format = __hw_fmt, .swizzle = RGBA,          \
+           .denominator_scales = { 1, 1, },                  \
+           .aspect = VK_IMAGE_ASPECT_STENCIL_BIT,            \
+         },                                                  \
+      },                                                     \
+      .n_planes = 1,                                         \
    }
 
-#define ds_fmt2(__vk_fmt, __fmt1, __fmt2) \
-   [VK_ENUM_OFFSET(__vk_fmt)] = { \
-      .planes = { \
-         { .isl_format = __fmt1, .swizzle = RGBA, \
-           .denominator_scales = { 1, 1, }, \
-           .aspect = VK_IMAGE_ASPECT_DEPTH_BIT, \
-         }, \
-         { .isl_format = __fmt2, .swizzle = RGBA, \
-           .denominator_scales = { 1, 1, }, \
-           .aspect = VK_IMAGE_ASPECT_STENCIL_BIT, \
-         }, \
-      }, \
-      .n_planes = 2, \
+#define ds_fmt(__fmt1, __fmt2)                               \
+   {                                                         \
+      .planes = {                                            \
+         { .isl_format = __fmt1, .swizzle = RGBA,            \
+           .denominator_scales = { 1, 1, },                  \
+           .aspect = VK_IMAGE_ASPECT_DEPTH_BIT,              \
+         },                                                  \
+         { .isl_format = __fmt2, .swizzle = RGBA,            \
+           .denominator_scales = { 1, 1, },                  \
+           .aspect = VK_IMAGE_ASPECT_STENCIL_BIT,            \
+         },                                                  \
+      },                                                     \
+      .n_planes = 2,                                         \
    }
 
-#define fmt_unsupported(__vk_fmt) \
-   [VK_ENUM_OFFSET(__vk_fmt)] = { \
-      .planes = { \
+#define fmt_unsupported                             \
+   {                                                \
+      .planes = {                                   \
          { .isl_format = ISL_FORMAT_UNSUPPORTED, }, \
-      }, \
+      },                                            \
+      .n_planes = 0,                                \
    }
 
-#define y_plane(__plane, __hw_fmt, __swizzle, __ycbcr_swizzle, dhs, dvs) \
-   { .isl_format = __hw_fmt, \
-     .swizzle = __swizzle, \
-     .ycbcr_swizzle = __ycbcr_swizzle, \
-     .denominator_scales = { dhs, dvs, }, \
-     .has_chroma = false, \
-     .aspect = VK_IMAGE_ASPECT_PLANE_0_BIT, /* Y plane is always plane 0 */ \
+#define y_plane(__hw_fmt, __swizzle, __ycbcr_swizzle)                   \
+   {                                                                    \
+      .isl_format = __hw_fmt,                                           \
+      .swizzle = __swizzle,                                             \
+      .ycbcr_swizzle = __ycbcr_swizzle,                                 \
+      .denominator_scales = { 1, 1, }, /* Y plane is always 1:1 */      \
+      .aspect = VK_IMAGE_ASPECT_PLANE_0_BIT, /* Y plane is always plane 0 */ \
    }
 
 #define chroma_plane(__plane, __hw_fmt, __swizzle, __ycbcr_swizzle, dhs, dvs) \
-   { .isl_format = __hw_fmt, \
-     .swizzle = __swizzle, \
-     .ycbcr_swizzle = __ycbcr_swizzle, \
-     .denominator_scales = { dhs, dvs, }, \
-     .has_chroma = true, \
-     .aspect = VK_IMAGE_ASPECT_PLANE_ ## __plane ## _BIT, \
+   { .isl_format = __hw_fmt,                                            \
+     .swizzle = __swizzle,                                              \
+     .ycbcr_swizzle = __ycbcr_swizzle,                                  \
+     .denominator_scales = { dhs, dvs, },                               \
+     .has_chroma = true,                                                \
+     .aspect = VK_IMAGE_ASPECT_PLANE_ ## __plane ## _BIT,               \
    }
 
-#define ycbcr_fmt(__vk_fmt, __n_planes, ...) \
-   [VK_ENUM_OFFSET(__vk_fmt)] = { \
-      .planes = { \
-         __VA_ARGS__, \
-      }, \
-      .n_planes = __n_planes, \
-      .can_ycbcr = true, \
+#define ycbcr_fmt(__n_planes, ...)           \
+   {                                         \
+      .planes = {                            \
+         __VA_ARGS__,                        \
+      },                                     \
+      .n_planes = __n_planes,                \
+      .can_ycbcr = true,                     \
+   }
+
+#define fmt_list(__vk_fmt, ...)                                 \
+   [VK_ENUM_OFFSET(__vk_fmt)] = (struct anv_format []) {        \
+      __VA_ARGS__,                                              \
+      fmt_unsupported,                                          \
    }
 
 /* HINT: For array formats, the ISL name should match the VK name.  For
@@ -136,274 +143,290 @@
  * other.  The reason for this is that, for packed formats, the ISL (and
  * bspec) names are in LSB -> MSB order while VK formats are MSB -> LSB.
  */
-static const struct anv_format main_formats[] = {
-   fmt_unsupported(VK_FORMAT_UNDEFINED),
-   fmt_unsupported(VK_FORMAT_R4G4_UNORM_PACK8),
-   fmt1(VK_FORMAT_R4G4B4A4_UNORM_PACK16,             ISL_FORMAT_A4B4G4R4_UNORM),
-   swiz_fmt1(VK_FORMAT_B4G4R4A4_UNORM_PACK16,        ISL_FORMAT_A4B4G4R4_UNORM,  BGRA),
-   fmt1(VK_FORMAT_R5G6B5_UNORM_PACK16,               ISL_FORMAT_B5G6R5_UNORM),
-   swiz_fmt1(VK_FORMAT_B5G6R5_UNORM_PACK16,          ISL_FORMAT_B5G6R5_UNORM, BGRA),
-   fmt1(VK_FORMAT_R5G5B5A1_UNORM_PACK16,             ISL_FORMAT_A1B5G5R5_UNORM),
-   fmt_unsupported(VK_FORMAT_B5G5R5A1_UNORM_PACK16),
-   fmt1(VK_FORMAT_A1R5G5B5_UNORM_PACK16,             ISL_FORMAT_B5G5R5A1_UNORM),
-   fmt1(VK_FORMAT_R8_UNORM,                          ISL_FORMAT_R8_UNORM),
-   fmt1(VK_FORMAT_R8_SNORM,                          ISL_FORMAT_R8_SNORM),
-   fmt1(VK_FORMAT_R8_USCALED,                        ISL_FORMAT_R8_USCALED),
-   fmt1(VK_FORMAT_R8_SSCALED,                        ISL_FORMAT_R8_SSCALED),
-   fmt1(VK_FORMAT_R8_UINT,                           ISL_FORMAT_R8_UINT),
-   fmt1(VK_FORMAT_R8_SINT,                           ISL_FORMAT_R8_SINT),
-   swiz_fmt1(VK_FORMAT_R8_SRGB,                      ISL_FORMAT_L8_UNORM_SRGB,
-                                                     _ISL_SWIZZLE(RED, ZERO, ZERO, ONE)),
-   fmt1(VK_FORMAT_R8G8_UNORM,                        ISL_FORMAT_R8G8_UNORM),
-   fmt1(VK_FORMAT_R8G8_SNORM,                        ISL_FORMAT_R8G8_SNORM),
-   fmt1(VK_FORMAT_R8G8_USCALED,                      ISL_FORMAT_R8G8_USCALED),
-   fmt1(VK_FORMAT_R8G8_SSCALED,                      ISL_FORMAT_R8G8_SSCALED),
-   fmt1(VK_FORMAT_R8G8_UINT,                         ISL_FORMAT_R8G8_UINT),
-   fmt1(VK_FORMAT_R8G8_SINT,                         ISL_FORMAT_R8G8_SINT),
-   fmt_unsupported(VK_FORMAT_R8G8_SRGB),             /* L8A8_UNORM_SRGB */
-   fmt1(VK_FORMAT_R8G8B8_UNORM,                      ISL_FORMAT_R8G8B8_UNORM),
-   fmt1(VK_FORMAT_R8G8B8_SNORM,                      ISL_FORMAT_R8G8B8_SNORM),
-   fmt1(VK_FORMAT_R8G8B8_USCALED,                    ISL_FORMAT_R8G8B8_USCALED),
-   fmt1(VK_FORMAT_R8G8B8_SSCALED,                    ISL_FORMAT_R8G8B8_SSCALED),
-   fmt1(VK_FORMAT_R8G8B8_UINT,                       ISL_FORMAT_R8G8B8_UINT),
-   fmt1(VK_FORMAT_R8G8B8_SINT,                       ISL_FORMAT_R8G8B8_SINT),
-   fmt1(VK_FORMAT_R8G8B8_SRGB,                       ISL_FORMAT_R8G8B8_UNORM_SRGB),
-   fmt1(VK_FORMAT_R8G8B8A8_UNORM,                    ISL_FORMAT_R8G8B8A8_UNORM),
-   fmt1(VK_FORMAT_R8G8B8A8_SNORM,                    ISL_FORMAT_R8G8B8A8_SNORM),
-   fmt1(VK_FORMAT_R8G8B8A8_USCALED,                  ISL_FORMAT_R8G8B8A8_USCALED),
-   fmt1(VK_FORMAT_R8G8B8A8_SSCALED,                  ISL_FORMAT_R8G8B8A8_SSCALED),
-   fmt1(VK_FORMAT_R8G8B8A8_UINT,                     ISL_FORMAT_R8G8B8A8_UINT),
-   fmt1(VK_FORMAT_R8G8B8A8_SINT,                     ISL_FORMAT_R8G8B8A8_SINT),
-   fmt1(VK_FORMAT_R8G8B8A8_SRGB,                     ISL_FORMAT_R8G8B8A8_UNORM_SRGB),
-   fmt1(VK_FORMAT_A8B8G8R8_UNORM_PACK32,             ISL_FORMAT_R8G8B8A8_UNORM),
-   fmt1(VK_FORMAT_A8B8G8R8_SNORM_PACK32,             ISL_FORMAT_R8G8B8A8_SNORM),
-   fmt1(VK_FORMAT_A8B8G8R8_USCALED_PACK32,           ISL_FORMAT_R8G8B8A8_USCALED),
-   fmt1(VK_FORMAT_A8B8G8R8_SSCALED_PACK32,           ISL_FORMAT_R8G8B8A8_SSCALED),
-   fmt1(VK_FORMAT_A8B8G8R8_UINT_PACK32,              ISL_FORMAT_R8G8B8A8_UINT),
-   fmt1(VK_FORMAT_A8B8G8R8_SINT_PACK32,              ISL_FORMAT_R8G8B8A8_SINT),
-   fmt1(VK_FORMAT_A8B8G8R8_SRGB_PACK32,              ISL_FORMAT_R8G8B8A8_UNORM_SRGB),
-   fmt1(VK_FORMAT_A2R10G10B10_UNORM_PACK32,          ISL_FORMAT_B10G10R10A2_UNORM),
-   fmt1(VK_FORMAT_A2R10G10B10_SNORM_PACK32,          ISL_FORMAT_B10G10R10A2_SNORM),
-   fmt1(VK_FORMAT_A2R10G10B10_USCALED_PACK32,        ISL_FORMAT_B10G10R10A2_USCALED),
-   fmt1(VK_FORMAT_A2R10G10B10_SSCALED_PACK32,        ISL_FORMAT_B10G10R10A2_SSCALED),
-   fmt1(VK_FORMAT_A2R10G10B10_UINT_PACK32,           ISL_FORMAT_B10G10R10A2_UINT),
-   fmt1(VK_FORMAT_A2R10G10B10_SINT_PACK32,           ISL_FORMAT_B10G10R10A2_SINT),
-   fmt1(VK_FORMAT_A2B10G10R10_UNORM_PACK32,          ISL_FORMAT_R10G10B10A2_UNORM),
-   fmt1(VK_FORMAT_A2B10G10R10_SNORM_PACK32,          ISL_FORMAT_R10G10B10A2_SNORM),
-   fmt1(VK_FORMAT_A2B10G10R10_USCALED_PACK32,        ISL_FORMAT_R10G10B10A2_USCALED),
-   fmt1(VK_FORMAT_A2B10G10R10_SSCALED_PACK32,        ISL_FORMAT_R10G10B10A2_SSCALED),
-   fmt1(VK_FORMAT_A2B10G10R10_UINT_PACK32,           ISL_FORMAT_R10G10B10A2_UINT),
-   fmt1(VK_FORMAT_A2B10G10R10_SINT_PACK32,           ISL_FORMAT_R10G10B10A2_SINT),
-   fmt1(VK_FORMAT_R16_UNORM,                         ISL_FORMAT_R16_UNORM),
-   fmt1(VK_FORMAT_R16_SNORM,                         ISL_FORMAT_R16_SNORM),
-   fmt1(VK_FORMAT_R16_USCALED,                       ISL_FORMAT_R16_USCALED),
-   fmt1(VK_FORMAT_R16_SSCALED,                       ISL_FORMAT_R16_SSCALED),
-   fmt1(VK_FORMAT_R16_UINT,                          ISL_FORMAT_R16_UINT),
-   fmt1(VK_FORMAT_R16_SINT,                          ISL_FORMAT_R16_SINT),
-   fmt1(VK_FORMAT_R16_SFLOAT,                        ISL_FORMAT_R16_FLOAT),
-   fmt1(VK_FORMAT_R16G16_UNORM,                      ISL_FORMAT_R16G16_UNORM),
-   fmt1(VK_FORMAT_R16G16_SNORM,                      ISL_FORMAT_R16G16_SNORM),
-   fmt1(VK_FORMAT_R16G16_USCALED,                    ISL_FORMAT_R16G16_USCALED),
-   fmt1(VK_FORMAT_R16G16_SSCALED,                    ISL_FORMAT_R16G16_SSCALED),
-   fmt1(VK_FORMAT_R16G16_UINT,                       ISL_FORMAT_R16G16_UINT),
-   fmt1(VK_FORMAT_R16G16_SINT,                       ISL_FORMAT_R16G16_SINT),
-   fmt1(VK_FORMAT_R16G16_SFLOAT,                     ISL_FORMAT_R16G16_FLOAT),
-   fmt1(VK_FORMAT_R16G16B16_UNORM,                   ISL_FORMAT_R16G16B16_UNORM),
-   fmt1(VK_FORMAT_R16G16B16_SNORM,                   ISL_FORMAT_R16G16B16_SNORM),
-   fmt1(VK_FORMAT_R16G16B16_USCALED,                 ISL_FORMAT_R16G16B16_USCALED),
-   fmt1(VK_FORMAT_R16G16B16_SSCALED,                 ISL_FORMAT_R16G16B16_SSCALED),
-   fmt1(VK_FORMAT_R16G16B16_UINT,                    ISL_FORMAT_R16G16B16_UINT),
-   fmt1(VK_FORMAT_R16G16B16_SINT,                    ISL_FORMAT_R16G16B16_SINT),
-   fmt1(VK_FORMAT_R16G16B16_SFLOAT,                  ISL_FORMAT_R16G16B16_FLOAT),
-   fmt1(VK_FORMAT_R16G16B16A16_UNORM,                ISL_FORMAT_R16G16B16A16_UNORM),
-   fmt1(VK_FORMAT_R16G16B16A16_SNORM,                ISL_FORMAT_R16G16B16A16_SNORM),
-   fmt1(VK_FORMAT_R16G16B16A16_USCALED,              ISL_FORMAT_R16G16B16A16_USCALED),
-   fmt1(VK_FORMAT_R16G16B16A16_SSCALED,              ISL_FORMAT_R16G16B16A16_SSCALED),
-   fmt1(VK_FORMAT_R16G16B16A16_UINT,                 ISL_FORMAT_R16G16B16A16_UINT),
-   fmt1(VK_FORMAT_R16G16B16A16_SINT,                 ISL_FORMAT_R16G16B16A16_SINT),
-   fmt1(VK_FORMAT_R16G16B16A16_SFLOAT,               ISL_FORMAT_R16G16B16A16_FLOAT),
-   fmt1(VK_FORMAT_R32_UINT,                          ISL_FORMAT_R32_UINT),
-   fmt1(VK_FORMAT_R32_SINT,                          ISL_FORMAT_R32_SINT),
-   fmt1(VK_FORMAT_R32_SFLOAT,                        ISL_FORMAT_R32_FLOAT),
-   fmt1(VK_FORMAT_R32G32_UINT,                       ISL_FORMAT_R32G32_UINT),
-   fmt1(VK_FORMAT_R32G32_SINT,                       ISL_FORMAT_R32G32_SINT),
-   fmt1(VK_FORMAT_R32G32_SFLOAT,                     ISL_FORMAT_R32G32_FLOAT),
-   fmt1(VK_FORMAT_R32G32B32_UINT,                    ISL_FORMAT_R32G32B32_UINT),
-   fmt1(VK_FORMAT_R32G32B32_SINT,                    ISL_FORMAT_R32G32B32_SINT),
-   fmt1(VK_FORMAT_R32G32B32_SFLOAT,                  ISL_FORMAT_R32G32B32_FLOAT),
-   fmt1(VK_FORMAT_R32G32B32A32_UINT,                 ISL_FORMAT_R32G32B32A32_UINT),
-   fmt1(VK_FORMAT_R32G32B32A32_SINT,                 ISL_FORMAT_R32G32B32A32_SINT),
-   fmt1(VK_FORMAT_R32G32B32A32_SFLOAT,               ISL_FORMAT_R32G32B32A32_FLOAT),
-   fmt1(VK_FORMAT_R64_UINT,                          ISL_FORMAT_R64_PASSTHRU),
-   fmt1(VK_FORMAT_R64_SINT,                          ISL_FORMAT_R64_PASSTHRU),
-   fmt1(VK_FORMAT_R64_SFLOAT,                        ISL_FORMAT_R64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64_UINT,                       ISL_FORMAT_R64G64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64_SINT,                       ISL_FORMAT_R64G64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64_SFLOAT,                     ISL_FORMAT_R64G64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64B64_UINT,                    ISL_FORMAT_R64G64B64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64B64_SINT,                    ISL_FORMAT_R64G64B64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64B64_SFLOAT,                  ISL_FORMAT_R64G64B64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64B64A64_UINT,                 ISL_FORMAT_R64G64B64A64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64B64A64_SINT,                 ISL_FORMAT_R64G64B64A64_PASSTHRU),
-   fmt1(VK_FORMAT_R64G64B64A64_SFLOAT,               ISL_FORMAT_R64G64B64A64_PASSTHRU),
-   fmt1(VK_FORMAT_B10G11R11_UFLOAT_PACK32,           ISL_FORMAT_R11G11B10_FLOAT),
-   fmt1(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,            ISL_FORMAT_R9G9B9E5_SHAREDEXP),
+static const struct anv_format *main_formats[] = {
+   fmt_list(VK_FORMAT_UNDEFINED,                         fmt_unsupported),
+   fmt_list(VK_FORMAT_R4G4_UNORM_PACK8,                  fmt_unsupported),
+   fmt_list(VK_FORMAT_R4G4B4A4_UNORM_PACK16,             fmt1(ISL_FORMAT_A4B4G4R4_UNORM)),
+   fmt_list(VK_FORMAT_B4G4R4A4_UNORM_PACK16,        swiz_fmt1(ISL_FORMAT_A4B4G4R4_UNORM,  BGRA)),
+   fmt_list(VK_FORMAT_R5G6B5_UNORM_PACK16,               fmt1(ISL_FORMAT_B5G6R5_UNORM)),
+   fmt_list(VK_FORMAT_B5G6R5_UNORM_PACK16,          swiz_fmt1(ISL_FORMAT_B5G6R5_UNORM, BGRA)),
+   fmt_list(VK_FORMAT_R5G5B5A1_UNORM_PACK16,             fmt1(ISL_FORMAT_A1B5G5R5_UNORM)),
+   fmt_list(VK_FORMAT_B5G5R5A1_UNORM_PACK16,             fmt_unsupported),
+   fmt_list(VK_FORMAT_A1R5G5B5_UNORM_PACK16,             fmt1(ISL_FORMAT_B5G5R5A1_UNORM)),
+   fmt_list(VK_FORMAT_R8_UNORM,                          fmt1(ISL_FORMAT_R8_UNORM)),
+   fmt_list(VK_FORMAT_R8_SNORM,                          fmt1(ISL_FORMAT_R8_SNORM)),
+   fmt_list(VK_FORMAT_R8_USCALED,                        fmt1(ISL_FORMAT_R8_USCALED)),
+   fmt_list(VK_FORMAT_R8_SSCALED,                        fmt1(ISL_FORMAT_R8_SSCALED)),
+   fmt_list(VK_FORMAT_R8_UINT,                           fmt1(ISL_FORMAT_R8_UINT)),
+   fmt_list(VK_FORMAT_R8_SINT,                           fmt1(ISL_FORMAT_R8_SINT)),
+   fmt_list(VK_FORMAT_R8_SRGB,                      swiz_fmt1(ISL_FORMAT_L8_UNORM_SRGB,
+                                                              _ISL_SWIZZLE(RED, ZERO, ZERO, ONE))),
+   fmt_list(VK_FORMAT_R8G8_UNORM,                        fmt1(ISL_FORMAT_R8G8_UNORM)),
+   fmt_list(VK_FORMAT_R8G8_SNORM,                        fmt1(ISL_FORMAT_R8G8_SNORM)),
+   fmt_list(VK_FORMAT_R8G8_USCALED,                      fmt1(ISL_FORMAT_R8G8_USCALED)),
+   fmt_list(VK_FORMAT_R8G8_SSCALED,                      fmt1(ISL_FORMAT_R8G8_SSCALED)),
+   fmt_list(VK_FORMAT_R8G8_UINT,                         fmt1(ISL_FORMAT_R8G8_UINT)),
+   fmt_list(VK_FORMAT_R8G8_SINT,                         fmt1(ISL_FORMAT_R8G8_SINT)),
+   fmt_list(VK_FORMAT_R8G8_SRGB,                         fmt_unsupported), /* L8A8_UNORM_SRGB */
+   fmt_list(VK_FORMAT_R8G8B8_UNORM,                      fmt1(ISL_FORMAT_R8G8B8_UNORM)),
+   fmt_list(VK_FORMAT_R8G8B8_SNORM,                      fmt1(ISL_FORMAT_R8G8B8_SNORM)),
+   fmt_list(VK_FORMAT_R8G8B8_USCALED,                    fmt1(ISL_FORMAT_R8G8B8_USCALED)),
+   fmt_list(VK_FORMAT_R8G8B8_SSCALED,                    fmt1(ISL_FORMAT_R8G8B8_SSCALED)),
+   fmt_list(VK_FORMAT_R8G8B8_UINT,                       fmt1(ISL_FORMAT_R8G8B8_UINT)),
+   fmt_list(VK_FORMAT_R8G8B8_SINT,                       fmt1(ISL_FORMAT_R8G8B8_SINT)),
+   fmt_list(VK_FORMAT_R8G8B8_SRGB,                       fmt1(ISL_FORMAT_R8G8B8_UNORM_SRGB)),
+   fmt_list(VK_FORMAT_R8G8B8A8_UNORM,                    fmt1(ISL_FORMAT_R8G8B8A8_UNORM)),
+   fmt_list(VK_FORMAT_R8G8B8A8_SNORM,                    fmt1(ISL_FORMAT_R8G8B8A8_SNORM)),
+   fmt_list(VK_FORMAT_R8G8B8A8_USCALED,                  fmt1(ISL_FORMAT_R8G8B8A8_USCALED)),
+   fmt_list(VK_FORMAT_R8G8B8A8_SSCALED,                  fmt1(ISL_FORMAT_R8G8B8A8_SSCALED)),
+   fmt_list(VK_FORMAT_R8G8B8A8_UINT,                     fmt1(ISL_FORMAT_R8G8B8A8_UINT)),
+   fmt_list(VK_FORMAT_R8G8B8A8_SINT,                     fmt1(ISL_FORMAT_R8G8B8A8_SINT)),
+   fmt_list(VK_FORMAT_R8G8B8A8_SRGB,                     fmt1(ISL_FORMAT_R8G8B8A8_UNORM_SRGB)),
+   fmt_list(VK_FORMAT_A8B8G8R8_UNORM_PACK32,             fmt1(ISL_FORMAT_R8G8B8A8_UNORM)),
+   fmt_list(VK_FORMAT_A8B8G8R8_SNORM_PACK32,             fmt1(ISL_FORMAT_R8G8B8A8_SNORM)),
+   fmt_list(VK_FORMAT_A8B8G8R8_USCALED_PACK32,           fmt1(ISL_FORMAT_R8G8B8A8_USCALED)),
+   fmt_list(VK_FORMAT_A8B8G8R8_SSCALED_PACK32,           fmt1(ISL_FORMAT_R8G8B8A8_SSCALED)),
+   fmt_list(VK_FORMAT_A8B8G8R8_UINT_PACK32,              fmt1(ISL_FORMAT_R8G8B8A8_UINT)),
+   fmt_list(VK_FORMAT_A8B8G8R8_SINT_PACK32,              fmt1(ISL_FORMAT_R8G8B8A8_SINT)),
+   fmt_list(VK_FORMAT_A8B8G8R8_SRGB_PACK32,              fmt1(ISL_FORMAT_R8G8B8A8_UNORM_SRGB)),
+   fmt_list(VK_FORMAT_A2R10G10B10_UNORM_PACK32,          fmt1(ISL_FORMAT_B10G10R10A2_UNORM)),
+   fmt_list(VK_FORMAT_A2R10G10B10_SNORM_PACK32,          fmt1(ISL_FORMAT_B10G10R10A2_SNORM)),
+   fmt_list(VK_FORMAT_A2R10G10B10_USCALED_PACK32,        fmt1(ISL_FORMAT_B10G10R10A2_USCALED)),
+   fmt_list(VK_FORMAT_A2R10G10B10_SSCALED_PACK32,        fmt1(ISL_FORMAT_B10G10R10A2_SSCALED)),
+   fmt_list(VK_FORMAT_A2R10G10B10_UINT_PACK32,           fmt1(ISL_FORMAT_B10G10R10A2_UINT)),
+   fmt_list(VK_FORMAT_A2R10G10B10_SINT_PACK32,           fmt1(ISL_FORMAT_B10G10R10A2_SINT)),
+   fmt_list(VK_FORMAT_A2B10G10R10_UNORM_PACK32,          fmt1(ISL_FORMAT_R10G10B10A2_UNORM)),
+   fmt_list(VK_FORMAT_A2B10G10R10_SNORM_PACK32,          fmt1(ISL_FORMAT_R10G10B10A2_SNORM)),
+   fmt_list(VK_FORMAT_A2B10G10R10_USCALED_PACK32,        fmt1(ISL_FORMAT_R10G10B10A2_USCALED)),
+   fmt_list(VK_FORMAT_A2B10G10R10_SSCALED_PACK32,        fmt1(ISL_FORMAT_R10G10B10A2_SSCALED)),
+   fmt_list(VK_FORMAT_A2B10G10R10_UINT_PACK32,           fmt1(ISL_FORMAT_R10G10B10A2_UINT)),
+   fmt_list(VK_FORMAT_A2B10G10R10_SINT_PACK32,           fmt1(ISL_FORMAT_R10G10B10A2_SINT)),
+   fmt_list(VK_FORMAT_R16_UNORM,                         fmt1(ISL_FORMAT_R16_UNORM)),
+   fmt_list(VK_FORMAT_R16_SNORM,                         fmt1(ISL_FORMAT_R16_SNORM)),
+   fmt_list(VK_FORMAT_R16_USCALED,                       fmt1(ISL_FORMAT_R16_USCALED)),
+   fmt_list(VK_FORMAT_R16_SSCALED,                       fmt1(ISL_FORMAT_R16_SSCALED)),
+   fmt_list(VK_FORMAT_R16_UINT,                          fmt1(ISL_FORMAT_R16_UINT)),
+   fmt_list(VK_FORMAT_R16_SINT,                          fmt1(ISL_FORMAT_R16_SINT)),
+   fmt_list(VK_FORMAT_R16_SFLOAT,                        fmt1(ISL_FORMAT_R16_FLOAT)),
+   fmt_list(VK_FORMAT_R16G16_UNORM,                      fmt1(ISL_FORMAT_R16G16_UNORM)),
+   fmt_list(VK_FORMAT_R16G16_SNORM,                      fmt1(ISL_FORMAT_R16G16_SNORM)),
+   fmt_list(VK_FORMAT_R16G16_USCALED,                    fmt1(ISL_FORMAT_R16G16_USCALED)),
+   fmt_list(VK_FORMAT_R16G16_SSCALED,                    fmt1(ISL_FORMAT_R16G16_SSCALED)),
+   fmt_list(VK_FORMAT_R16G16_UINT,                       fmt1(ISL_FORMAT_R16G16_UINT)),
+   fmt_list(VK_FORMAT_R16G16_SINT,                       fmt1(ISL_FORMAT_R16G16_SINT)),
+   fmt_list(VK_FORMAT_R16G16_SFLOAT,                     fmt1(ISL_FORMAT_R16G16_FLOAT)),
+   fmt_list(VK_FORMAT_R16G16B16_UNORM,                   fmt1(ISL_FORMAT_R16G16B16_UNORM)),
+   fmt_list(VK_FORMAT_R16G16B16_SNORM,                   fmt1(ISL_FORMAT_R16G16B16_SNORM)),
+   fmt_list(VK_FORMAT_R16G16B16_USCALED,                 fmt1(ISL_FORMAT_R16G16B16_USCALED)),
+   fmt_list(VK_FORMAT_R16G16B16_SSCALED,                 fmt1(ISL_FORMAT_R16G16B16_SSCALED)),
+   fmt_list(VK_FORMAT_R16G16B16_UINT,                    fmt1(ISL_FORMAT_R16G16B16_UINT)),
+   fmt_list(VK_FORMAT_R16G16B16_SINT,                    fmt1(ISL_FORMAT_R16G16B16_SINT)),
+   fmt_list(VK_FORMAT_R16G16B16_SFLOAT,                  fmt1(ISL_FORMAT_R16G16B16_FLOAT)),
+   fmt_list(VK_FORMAT_R16G16B16A16_UNORM,                fmt1(ISL_FORMAT_R16G16B16A16_UNORM)),
+   fmt_list(VK_FORMAT_R16G16B16A16_SNORM,                fmt1(ISL_FORMAT_R16G16B16A16_SNORM)),
+   fmt_list(VK_FORMAT_R16G16B16A16_USCALED,              fmt1(ISL_FORMAT_R16G16B16A16_USCALED)),
+   fmt_list(VK_FORMAT_R16G16B16A16_SSCALED,              fmt1(ISL_FORMAT_R16G16B16A16_SSCALED)),
+   fmt_list(VK_FORMAT_R16G16B16A16_UINT,                 fmt1(ISL_FORMAT_R16G16B16A16_UINT)),
+   fmt_list(VK_FORMAT_R16G16B16A16_SINT,                 fmt1(ISL_FORMAT_R16G16B16A16_SINT)),
+   fmt_list(VK_FORMAT_R16G16B16A16_SFLOAT,               fmt1(ISL_FORMAT_R16G16B16A16_FLOAT)),
+   fmt_list(VK_FORMAT_R32_UINT,                          fmt1(ISL_FORMAT_R32_UINT)),
+   fmt_list(VK_FORMAT_R32_SINT,                          fmt1(ISL_FORMAT_R32_SINT)),
+   fmt_list(VK_FORMAT_R32_SFLOAT,                        fmt1(ISL_FORMAT_R32_FLOAT)),
+   fmt_list(VK_FORMAT_R32G32_UINT,                       fmt1(ISL_FORMAT_R32G32_UINT)),
+   fmt_list(VK_FORMAT_R32G32_SINT,                       fmt1(ISL_FORMAT_R32G32_SINT)),
+   fmt_list(VK_FORMAT_R32G32_SFLOAT,                     fmt1(ISL_FORMAT_R32G32_FLOAT)),
+   fmt_list(VK_FORMAT_R32G32B32_UINT,                    fmt1(ISL_FORMAT_R32G32B32_UINT)),
+   fmt_list(VK_FORMAT_R32G32B32_SINT,                    fmt1(ISL_FORMAT_R32G32B32_SINT)),
+   fmt_list(VK_FORMAT_R32G32B32_SFLOAT,                  fmt1(ISL_FORMAT_R32G32B32_FLOAT)),
+   fmt_list(VK_FORMAT_R32G32B32A32_UINT,                 fmt1(ISL_FORMAT_R32G32B32A32_UINT)),
+   fmt_list(VK_FORMAT_R32G32B32A32_SINT,                 fmt1(ISL_FORMAT_R32G32B32A32_SINT)),
+   fmt_list(VK_FORMAT_R32G32B32A32_SFLOAT,               fmt1(ISL_FORMAT_R32G32B32A32_FLOAT)),
+   fmt_list(VK_FORMAT_R64_UINT,                          fmt1(ISL_FORMAT_R64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64_SINT,                          fmt1(ISL_FORMAT_R64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64_SFLOAT,                        fmt1(ISL_FORMAT_R64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64_UINT,                       fmt1(ISL_FORMAT_R64G64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64_SINT,                       fmt1(ISL_FORMAT_R64G64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64_SFLOAT,                     fmt1(ISL_FORMAT_R64G64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64B64_UINT,                    fmt1(ISL_FORMAT_R64G64B64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64B64_SINT,                    fmt1(ISL_FORMAT_R64G64B64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64B64_SFLOAT,                  fmt1(ISL_FORMAT_R64G64B64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64B64A64_UINT,                 fmt1(ISL_FORMAT_R64G64B64A64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64B64A64_SINT,                 fmt1(ISL_FORMAT_R64G64B64A64_PASSTHRU)),
+   fmt_list(VK_FORMAT_R64G64B64A64_SFLOAT,               fmt1(ISL_FORMAT_R64G64B64A64_PASSTHRU)),
+   fmt_list(VK_FORMAT_B10G11R11_UFLOAT_PACK32,           fmt1(ISL_FORMAT_R11G11B10_FLOAT)),
+   fmt_list(VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,            fmt1(ISL_FORMAT_R9G9B9E5_SHAREDEXP)),
 
-   d_fmt(VK_FORMAT_D16_UNORM,                        ISL_FORMAT_R16_UNORM),
-   d_fmt(VK_FORMAT_X8_D24_UNORM_PACK32,              ISL_FORMAT_R24_UNORM_X8_TYPELESS),
-   d_fmt(VK_FORMAT_D32_SFLOAT,                       ISL_FORMAT_R32_FLOAT),
-   s_fmt(VK_FORMAT_S8_UINT,                          ISL_FORMAT_R8_UINT),
-   fmt_unsupported(VK_FORMAT_D16_UNORM_S8_UINT),
-   ds_fmt2(VK_FORMAT_D24_UNORM_S8_UINT,              ISL_FORMAT_R24_UNORM_X8_TYPELESS, ISL_FORMAT_R8_UINT),
-   ds_fmt2(VK_FORMAT_D32_SFLOAT_S8_UINT,             ISL_FORMAT_R32_FLOAT, ISL_FORMAT_R8_UINT),
+   fmt_list(VK_FORMAT_D16_UNORM,                        d_fmt(ISL_FORMAT_R16_UNORM)),
+   fmt_list(VK_FORMAT_X8_D24_UNORM_PACK32,              d_fmt(ISL_FORMAT_R24_UNORM_X8_TYPELESS)),
+   fmt_list(VK_FORMAT_D32_SFLOAT,                       d_fmt(ISL_FORMAT_R32_FLOAT)),
+   fmt_list(VK_FORMAT_S8_UINT,                          s_fmt(ISL_FORMAT_R8_UINT)),
+   fmt_list(VK_FORMAT_D16_UNORM_S8_UINT,                 fmt_unsupported),
+   fmt_list(VK_FORMAT_D24_UNORM_S8_UINT,               ds_fmt(ISL_FORMAT_R24_UNORM_X8_TYPELESS, ISL_FORMAT_R8_UINT)),
+   fmt_list(VK_FORMAT_D32_SFLOAT_S8_UINT,              ds_fmt(ISL_FORMAT_R32_FLOAT, ISL_FORMAT_R8_UINT)),
 
-   swiz_fmt1(VK_FORMAT_BC1_RGB_UNORM_BLOCK,          ISL_FORMAT_BC1_UNORM, RGB1),
-   swiz_fmt1(VK_FORMAT_BC1_RGB_SRGB_BLOCK,           ISL_FORMAT_BC1_UNORM_SRGB, RGB1),
-   fmt1(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,              ISL_FORMAT_BC1_UNORM),
-   fmt1(VK_FORMAT_BC1_RGBA_SRGB_BLOCK,               ISL_FORMAT_BC1_UNORM_SRGB),
-   fmt1(VK_FORMAT_BC2_UNORM_BLOCK,                   ISL_FORMAT_BC2_UNORM),
-   fmt1(VK_FORMAT_BC2_SRGB_BLOCK,                    ISL_FORMAT_BC2_UNORM_SRGB),
-   fmt1(VK_FORMAT_BC3_UNORM_BLOCK,                   ISL_FORMAT_BC3_UNORM),
-   fmt1(VK_FORMAT_BC3_SRGB_BLOCK,                    ISL_FORMAT_BC3_UNORM_SRGB),
-   fmt1(VK_FORMAT_BC4_UNORM_BLOCK,                   ISL_FORMAT_BC4_UNORM),
-   fmt1(VK_FORMAT_BC4_SNORM_BLOCK,                   ISL_FORMAT_BC4_SNORM),
-   fmt1(VK_FORMAT_BC5_UNORM_BLOCK,                   ISL_FORMAT_BC5_UNORM),
-   fmt1(VK_FORMAT_BC5_SNORM_BLOCK,                   ISL_FORMAT_BC5_SNORM),
-   fmt1(VK_FORMAT_BC6H_UFLOAT_BLOCK,                 ISL_FORMAT_BC6H_UF16),
-   fmt1(VK_FORMAT_BC6H_SFLOAT_BLOCK,                 ISL_FORMAT_BC6H_SF16),
-   fmt1(VK_FORMAT_BC7_UNORM_BLOCK,                   ISL_FORMAT_BC7_UNORM),
-   fmt1(VK_FORMAT_BC7_SRGB_BLOCK,                    ISL_FORMAT_BC7_UNORM_SRGB),
-   fmt1(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,           ISL_FORMAT_ETC2_RGB8),
-   fmt1(VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,            ISL_FORMAT_ETC2_SRGB8),
-   fmt1(VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK,         ISL_FORMAT_ETC2_RGB8_PTA),
-   fmt1(VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK,          ISL_FORMAT_ETC2_SRGB8_PTA),
-   fmt1(VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK,         ISL_FORMAT_ETC2_EAC_RGBA8),
-   fmt1(VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK,          ISL_FORMAT_ETC2_EAC_SRGB8_A8),
-   fmt1(VK_FORMAT_EAC_R11_UNORM_BLOCK,               ISL_FORMAT_EAC_R11),
-   fmt1(VK_FORMAT_EAC_R11_SNORM_BLOCK,               ISL_FORMAT_EAC_SIGNED_R11),
-   fmt1(VK_FORMAT_EAC_R11G11_UNORM_BLOCK,            ISL_FORMAT_EAC_RG11),
-   fmt1(VK_FORMAT_EAC_R11G11_SNORM_BLOCK,            ISL_FORMAT_EAC_SIGNED_RG11),
-   fmt1(VK_FORMAT_ASTC_4x4_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_4X4_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_5x4_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_5X4_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_5x5_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_5X5_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_6x5_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_6X5_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_6x6_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_6X6_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_8x5_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_8X5_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_8x6_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_8X6_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_8x8_SRGB_BLOCK,               ISL_FORMAT_ASTC_LDR_2D_8X8_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_10x5_SRGB_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_10X5_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_10x6_SRGB_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_10X6_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_10x8_SRGB_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_10X8_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_10x10_SRGB_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X10_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_12x10_SRGB_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_12x12_SRGB_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB),
-   fmt1(VK_FORMAT_ASTC_4x4_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_4X4_FLT16),
-   fmt1(VK_FORMAT_ASTC_5x4_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_5X4_FLT16),
-   fmt1(VK_FORMAT_ASTC_5x5_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_5X5_FLT16),
-   fmt1(VK_FORMAT_ASTC_6x5_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_6X5_FLT16),
-   fmt1(VK_FORMAT_ASTC_6x6_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_6X6_FLT16),
-   fmt1(VK_FORMAT_ASTC_8x5_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_8X5_FLT16),
-   fmt1(VK_FORMAT_ASTC_8x6_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_8X6_FLT16),
-   fmt1(VK_FORMAT_ASTC_8x8_UNORM_BLOCK,              ISL_FORMAT_ASTC_LDR_2D_8X8_FLT16),
-   fmt1(VK_FORMAT_ASTC_10x5_UNORM_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X5_FLT16),
-   fmt1(VK_FORMAT_ASTC_10x6_UNORM_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X6_FLT16),
-   fmt1(VK_FORMAT_ASTC_10x8_UNORM_BLOCK,             ISL_FORMAT_ASTC_LDR_2D_10X8_FLT16),
-   fmt1(VK_FORMAT_ASTC_10x10_UNORM_BLOCK,            ISL_FORMAT_ASTC_LDR_2D_10X10_FLT16),
-   fmt1(VK_FORMAT_ASTC_12x10_UNORM_BLOCK,            ISL_FORMAT_ASTC_LDR_2D_12X10_FLT16),
-   fmt1(VK_FORMAT_ASTC_12x12_UNORM_BLOCK,            ISL_FORMAT_ASTC_LDR_2D_12X12_FLT16),
-   fmt_unsupported(VK_FORMAT_B8G8R8_UNORM),
-   fmt_unsupported(VK_FORMAT_B8G8R8_SNORM),
-   fmt_unsupported(VK_FORMAT_B8G8R8_USCALED),
-   fmt_unsupported(VK_FORMAT_B8G8R8_SSCALED),
-   fmt_unsupported(VK_FORMAT_B8G8R8_UINT),
-   fmt_unsupported(VK_FORMAT_B8G8R8_SINT),
-   fmt_unsupported(VK_FORMAT_B8G8R8_SRGB),
-   fmt1(VK_FORMAT_B8G8R8A8_UNORM,                    ISL_FORMAT_B8G8R8A8_UNORM),
-   fmt_unsupported(VK_FORMAT_B8G8R8A8_SNORM),
-   fmt_unsupported(VK_FORMAT_B8G8R8A8_USCALED),
-   fmt_unsupported(VK_FORMAT_B8G8R8A8_SSCALED),
-   fmt_unsupported(VK_FORMAT_B8G8R8A8_UINT),
-   fmt_unsupported(VK_FORMAT_B8G8R8A8_SINT),
-   fmt1(VK_FORMAT_B8G8R8A8_SRGB,                     ISL_FORMAT_B8G8R8A8_UNORM_SRGB),
+   fmt_list(VK_FORMAT_BC1_RGB_UNORM_BLOCK,          swiz_fmt1(ISL_FORMAT_BC1_UNORM, RGB1)),
+   fmt_list(VK_FORMAT_BC1_RGB_SRGB_BLOCK,           swiz_fmt1(ISL_FORMAT_BC1_UNORM_SRGB, RGB1)),
+   fmt_list(VK_FORMAT_BC1_RGBA_UNORM_BLOCK,              fmt1(ISL_FORMAT_BC1_UNORM)),
+   fmt_list(VK_FORMAT_BC1_RGBA_SRGB_BLOCK,               fmt1(ISL_FORMAT_BC1_UNORM_SRGB)),
+   fmt_list(VK_FORMAT_BC2_UNORM_BLOCK,                   fmt1(ISL_FORMAT_BC2_UNORM)),
+   fmt_list(VK_FORMAT_BC2_SRGB_BLOCK,                    fmt1(ISL_FORMAT_BC2_UNORM_SRGB)),
+   fmt_list(VK_FORMAT_BC3_UNORM_BLOCK,                   fmt1(ISL_FORMAT_BC3_UNORM)),
+   fmt_list(VK_FORMAT_BC3_SRGB_BLOCK,                    fmt1(ISL_FORMAT_BC3_UNORM_SRGB)),
+   fmt_list(VK_FORMAT_BC4_UNORM_BLOCK,                   fmt1(ISL_FORMAT_BC4_UNORM)),
+   fmt_list(VK_FORMAT_BC4_SNORM_BLOCK,                   fmt1(ISL_FORMAT_BC4_SNORM)),
+   fmt_list(VK_FORMAT_BC5_UNORM_BLOCK,                   fmt1(ISL_FORMAT_BC5_UNORM)),
+   fmt_list(VK_FORMAT_BC5_SNORM_BLOCK,                   fmt1(ISL_FORMAT_BC5_SNORM)),
+   fmt_list(VK_FORMAT_BC6H_UFLOAT_BLOCK,                 fmt1(ISL_FORMAT_BC6H_UF16)),
+   fmt_list(VK_FORMAT_BC6H_SFLOAT_BLOCK,                 fmt1(ISL_FORMAT_BC6H_SF16)),
+   fmt_list(VK_FORMAT_BC7_UNORM_BLOCK,                   fmt1(ISL_FORMAT_BC7_UNORM)),
+   fmt_list(VK_FORMAT_BC7_SRGB_BLOCK,                    fmt1(ISL_FORMAT_BC7_UNORM_SRGB)),
+   fmt_list(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,           fmt1(ISL_FORMAT_ETC2_RGB8)),
+   fmt_list(VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,            fmt1(ISL_FORMAT_ETC2_SRGB8)),
+   fmt_list(VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK,         fmt1(ISL_FORMAT_ETC2_RGB8_PTA)),
+   fmt_list(VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK,          fmt1(ISL_FORMAT_ETC2_SRGB8_PTA)),
+   fmt_list(VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK,         fmt1(ISL_FORMAT_ETC2_EAC_RGBA8)),
+   fmt_list(VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK,          fmt1(ISL_FORMAT_ETC2_EAC_SRGB8_A8)),
+   fmt_list(VK_FORMAT_EAC_R11_UNORM_BLOCK,               fmt1(ISL_FORMAT_EAC_R11)),
+   fmt_list(VK_FORMAT_EAC_R11_SNORM_BLOCK,               fmt1(ISL_FORMAT_EAC_SIGNED_R11)),
+   fmt_list(VK_FORMAT_EAC_R11G11_UNORM_BLOCK,            fmt1(ISL_FORMAT_EAC_RG11)),
+   fmt_list(VK_FORMAT_EAC_R11G11_SNORM_BLOCK,            fmt1(ISL_FORMAT_EAC_SIGNED_RG11)),
+   fmt_list(VK_FORMAT_ASTC_4x4_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_4X4_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_5x4_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_5X4_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_5x5_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_5X5_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_6x5_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_6X5_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_6x6_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_6X6_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_8x5_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_8X5_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_8x6_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_8X6_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_8x8_SRGB_BLOCK,               fmt1(ISL_FORMAT_ASTC_LDR_2D_8X8_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_10x5_SRGB_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_10X5_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_10x6_SRGB_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_10X6_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_10x8_SRGB_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_10X8_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_10x10_SRGB_BLOCK,             fmt1(ISL_FORMAT_ASTC_LDR_2D_10X10_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_12x10_SRGB_BLOCK,             fmt1(ISL_FORMAT_ASTC_LDR_2D_12X10_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_12x12_SRGB_BLOCK,             fmt1(ISL_FORMAT_ASTC_LDR_2D_12X12_U8SRGB)),
+   fmt_list(VK_FORMAT_ASTC_4x4_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_4X4_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_5x4_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_5X4_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_5x5_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_5X5_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_6x5_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_6X5_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_6x6_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_6X6_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_8x5_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_8X5_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_8x6_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_8X6_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_8x8_UNORM_BLOCK,              fmt1(ISL_FORMAT_ASTC_LDR_2D_8X8_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_10x5_UNORM_BLOCK,             fmt1(ISL_FORMAT_ASTC_LDR_2D_10X5_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_10x6_UNORM_BLOCK,             fmt1(ISL_FORMAT_ASTC_LDR_2D_10X6_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_10x8_UNORM_BLOCK,             fmt1(ISL_FORMAT_ASTC_LDR_2D_10X8_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_10x10_UNORM_BLOCK,            fmt1(ISL_FORMAT_ASTC_LDR_2D_10X10_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_12x10_UNORM_BLOCK,            fmt1(ISL_FORMAT_ASTC_LDR_2D_12X10_FLT16)),
+   fmt_list(VK_FORMAT_ASTC_12x12_UNORM_BLOCK,            fmt1(ISL_FORMAT_ASTC_LDR_2D_12X12_FLT16)),
+   fmt_list(VK_FORMAT_B8G8R8_UNORM,                      fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8_SNORM,                      fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8_USCALED,                    fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8_SSCALED,                    fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8_UINT,                       fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8_SINT,                       fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8_SRGB,                       fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8A8_UNORM,                    fmt1(ISL_FORMAT_B8G8R8A8_UNORM)),
+   fmt_list(VK_FORMAT_B8G8R8A8_SNORM,                    fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8A8_USCALED,                  fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8A8_SSCALED,                  fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8A8_UINT,                     fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8A8_SINT,                     fmt_unsupported),
+   fmt_list(VK_FORMAT_B8G8R8A8_SRGB,                     fmt1(ISL_FORMAT_B8G8R8A8_UNORM_SRGB)),
 };
 
-static const struct anv_format ycbcr_formats[] = {
-   ycbcr_fmt(VK_FORMAT_G8B8G8R8_422_UNORM, 1,
-             y_plane(0, ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO), 1, 1)),
-   ycbcr_fmt(VK_FORMAT_B8G8R8G8_422_UNORM, 1,
-             y_plane(0, ISL_FORMAT_YCRCB_SWAPUVY, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO), 1, 1)),
-   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM, 3,
-             y_plane(0, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
-             chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2)),
-   ycbcr_fmt(VK_FORMAT_G8_B8R8_2PLANE_420_UNORM, 2,
-             y_plane(0, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2)),
-   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM, 3,
-             y_plane(0, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
-             chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1)),
-   ycbcr_fmt(VK_FORMAT_G8_B8R8_2PLANE_422_UNORM, 2,
-             y_plane(0, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1)),
-   ycbcr_fmt(VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM, 3,
-             y_plane(0, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1)),
+static const struct anv_format *ycbcr_formats[] = {
+   fmt_list(VK_FORMAT_G8B8G8R8_422_UNORM,
+            ycbcr_fmt(1,
+                      y_plane(ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
+   fmt_list(VK_FORMAT_B8G8R8G8_422_UNORM,
+            ycbcr_fmt(1,
+                      y_plane(ISL_FORMAT_YCRCB_SWAPUVY, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
+   fmt_list(VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
+            ycbcr_fmt(3,
+                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
+                      chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2))),
+   fmt_list(VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
+            ycbcr_fmt(2,
+                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2))),
+   fmt_list(VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM,
+            ycbcr_fmt(3,
+                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
+                      chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1))),
+   fmt_list(VK_FORMAT_G8_B8R8_2PLANE_422_UNORM,
+            ycbcr_fmt(2,
+                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1))),
+   fmt_list(VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM,
+            ycbcr_fmt(3,
+                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
+                      chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1))),
 
-   fmt_unsupported(VK_FORMAT_R10X6_UNORM_PACK16),
-   fmt_unsupported(VK_FORMAT_R10X6G10X6_UNORM_2PACK16),
-   fmt_unsupported(VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16),
-   fmt_unsupported(VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16),
-   fmt_unsupported(VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16),
-   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_R12X4_UNORM_PACK16),
-   fmt_unsupported(VK_FORMAT_R12X4G12X4_UNORM_2PACK16),
-   fmt_unsupported(VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16),
-   fmt_unsupported(VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16),
-   fmt_unsupported(VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16),
-   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16),
-   fmt_unsupported(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16),
+   fmt_list(VK_FORMAT_R10X6_UNORM_PACK16,                         fmt_unsupported),
+   fmt_list(VK_FORMAT_R10X6G10X6_UNORM_2PACK16,                   fmt_unsupported),
+   fmt_list(VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16,         fmt_unsupported),
+   fmt_list(VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16,     fmt_unsupported),
+   fmt_list(VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16,     fmt_unsupported),
+   fmt_list(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, fmt_unsupported),
+   fmt_list(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16,  fmt_unsupported),
+   fmt_list(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16, fmt_unsupported),
+   fmt_list(VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16,  fmt_unsupported),
+   fmt_list(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16, fmt_unsupported),
+   fmt_list(VK_FORMAT_R12X4_UNORM_PACK16,                         fmt_unsupported),
+   fmt_list(VK_FORMAT_R12X4G12X4_UNORM_2PACK16,                   fmt_unsupported),
+   fmt_list(VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16,         fmt_unsupported),
+   fmt_list(VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16,     fmt_unsupported),
+   fmt_list(VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16,     fmt_unsupported),
+   fmt_list(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16, fmt_unsupported),
+   fmt_list(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16,  fmt_unsupported),
+   fmt_list(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16, fmt_unsupported),
+   fmt_list(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16,  fmt_unsupported),
+   fmt_list(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16, fmt_unsupported),
    /* TODO: it is possible to enable the following 2 formats, but that
     * requires further refactoring of how we handle multiplanar formats.
     */
-   fmt_unsupported(VK_FORMAT_G16B16G16R16_422_UNORM),
-   fmt_unsupported(VK_FORMAT_B16G16R16G16_422_UNORM),
+   fmt_list(VK_FORMAT_G16B16G16R16_422_UNORM, fmt_unsupported),
+   fmt_list(VK_FORMAT_B16G16R16G16_422_UNORM, fmt_unsupported),
 
-   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, 3,
-             y_plane(0, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
-             chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2)),
-   ycbcr_fmt(VK_FORMAT_G16_B16R16_2PLANE_420_UNORM, 2,
-             y_plane(0, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2)),
-   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM, 3,
-             y_plane(0, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
-             chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1)),
-   ycbcr_fmt(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, 2,
-             y_plane(0, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1)),
-   ycbcr_fmt(VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM, 3,
-             y_plane(0, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
-             chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1)),
+   fmt_list(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM,
+            ycbcr_fmt(3,
+                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
+                      chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2))),
+   fmt_list(VK_FORMAT_G16_B16R16_2PLANE_420_UNORM,
+            ycbcr_fmt(2,
+                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2))),
+   fmt_list(VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM,
+            ycbcr_fmt(3,
+                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
+                      chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1))),
+   fmt_list(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM,
+            ycbcr_fmt(2,
+                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1))),
+   fmt_list(VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM,
+            ycbcr_fmt(3,
+                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
+                      chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1))),
 };
 
 #undef _fmt
 #undef swiz_fmt1
 #undef fmt1
 #undef fmt
+#undef ds_fmt
+#undef d_fmt
+#undef s_fmt
+#undef fmt_list
 
 static const struct {
-   const struct anv_format *formats;
+   const struct anv_format **formats;
    uint32_t n_formats;
 } anv_formats[] = {
    [0]                                       = { .formats = main_formats,
@@ -423,11 +446,14 @@ anv_get_format(VkFormat vk_format)
       return NULL;
 
    const struct anv_format *format =
-      &anv_formats[ext_number].formats[enum_offset];
-   if (format->planes[0].isl_format == ISL_FORMAT_UNSUPPORTED)
+      anv_formats[ext_number].formats[enum_offset];
+   if (!format)
       return NULL;
 
-   return format;
+   if (format[0].n_planes == 0)
+      return NULL;
+
+   return &format[0];
 }
 
 struct anv_format_plane
