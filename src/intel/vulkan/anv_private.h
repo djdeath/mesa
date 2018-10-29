@@ -2559,6 +2559,8 @@ struct anv_format {
    struct anv_format_plane planes[3];
    uint8_t n_planes;
    bool can_ycbcr;
+
+   bool (*compatible)(const struct gen_device_info *devinfo);
 };
 
 uint32_t
@@ -2595,7 +2597,7 @@ anv_plane_to_aspect(VkImageAspectFlags image_aspects,
    for_each_bit(b, anv_image_expand_aspects(image, aspects))
 
 const struct anv_format *
-anv_get_format(VkFormat format);
+anv_get_format(const struct gen_device_info *devinfo, VkFormat format);
 
 struct anv_format_plane
 anv_get_format_nth_plane(const struct gen_device_info *devinfo, VkFormat vk_format,

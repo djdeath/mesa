@@ -30,7 +30,7 @@
 static inline VkImageAspectFlags
 vk_format_aspects(VkFormat vk_format)
 {
-   const struct anv_format *format = anv_get_format(vk_format);
+   const struct anv_format *format = anv_get_format(NULL, vk_format);
    VkImageAspectFlags aspects = 0;
    for (int p = 0; p < format->n_planes; p++)
       aspects |= format->planes[p].aspect;

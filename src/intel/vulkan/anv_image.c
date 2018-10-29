@@ -583,7 +583,7 @@ anv_image_create(VkDevice _device,
    image->type = pCreateInfo->imageType;
    image->extent = pCreateInfo->extent;
    image->vk_format = pCreateInfo->format;
-   image->format = anv_get_format(pCreateInfo->format);
+   image->format = anv_get_format(&device->info, pCreateInfo->format);
    image->aspects = vk_format_aspects(image->vk_format);
    image->levels = pCreateInfo->mipLevels;
    image->array_size = pCreateInfo->arrayLayers;
@@ -1397,7 +1397,7 @@ anv_CreateImageView(VkDevice _device,
     * in expanded_aspects to the image view.
     */
    const struct anv_format *vformat =
-      anv_get_format(iview->vk_format);
+      anv_get_format(&device->info, iview->vk_format);
    bool iplane_bound[3] = { false, };
    for (uint32_t vfplane = 0; vfplane < vformat->n_planes; vfplane++) {
       if ((iview->aspect_mask & vformat->planes[vfplane].aspect) == 0)

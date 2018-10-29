@@ -42,6 +42,16 @@
       ISL_CHANNEL_SELECT_##a, \
 }
 
+static bool all_gens_compatible(const struct gen_device_info *devinfo)
+{
+   return true;
+}
+
+static bool gen11_compatible(const struct gen_device_info *devinfo)
+{
+   return devinfo->gen >= 11;
+}
+
 #define RGBA _ISL_SWIZZLE(RED, GREEN, BLUE, ALPHA)
 #define BGRA _ISL_SWIZZLE(BLUE, GREEN, RED, ALPHA)
 #define RGB1 _ISL_SWIZZLE(RED, GREEN, BLUE, ONE)
@@ -55,6 +65,7 @@
          },                                                     \
       },                                                        \
       .n_planes = 1,                                            \
+      .compatible = all_gens_compatible,                        \
    }
 
 #define fmt1(__hw_fmt) \
@@ -69,6 +80,7 @@
          },                                                  \
       },                                                     \
       .n_planes = 1,                                         \
+      .compatible = all_gens_compatible,                     \
    }
 
 #define s_fmt(__hw_fmt)                                      \
@@ -80,6 +92,7 @@
          },                                                  \
       },                                                     \
       .n_planes = 1,                                         \
+      .compatible = all_gens_compatible,                     \
    }
 
 #define ds_fmt(__fmt1, __fmt2)                               \
@@ -95,6 +108,7 @@
          },                                                  \
       },                                                     \
       .n_planes = 2,                                         \
+      .compatible = all_gens_compatible,                     \
    }
 
 #define fmt_unsupported                             \
@@ -130,6 +144,17 @@
       },                                     \
       .n_planes = __n_planes,                \
       .can_ycbcr = true,                     \
+      .compatible = all_gens_compatible,     \
+   }
+
+#define ycbcr_gen_fmt(__n_planes, __compatible, ...)    \
+   {                                                    \
+      .planes = {                                       \
+         __VA_ARGS__,                                   \
+      },                                                \
+      .n_planes = __n_planes,                           \
+      .can_ycbcr = true,                                \
+      .compatible = __compatible,                       \
    }
 
 #define fmt_list(__vk_fmt, ...)                                 \
@@ -335,12 +360,22 @@ static const struct anv_format *main_formats[] = {
 };
 
 static const struct anv_format *ycbcr_formats[] = {
+   /**
+    * On Gen10 and below, the HW sampler won't allow us to have 2 different
+    * view of a same buffer. This was changed on Gen11, so we can now make the
+    * 2 format below use 2 planes. This gives more flexibility in terms of how
+    * we want to same chroma components.
+    */
    fmt_list(VK_FORMAT_G8B8G8R8_422_UNORM,
-            ycbcr_fmt(1,
-                      y_plane(ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
+            ycbcr_gen_fmt(2, gen11_compatible,
+                          y_plane(ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R8G8B8A8_UNORM, RGBA, _ISL_SWIZZLE(ZERO, BLUE, ZERO, RED), 2, 1)),
+            ycbcr_fmt(1, y_plane(ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
    fmt_list(VK_FORMAT_B8G8R8G8_422_UNORM,
-            ycbcr_fmt(1,
-                      y_plane(ISL_FORMAT_YCRCB_SWAPUVY, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
+            ycbcr_gen_fmt(2, gen11_compatible,
+                          y_plane(ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(ZERO, GREEN, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R8G8B8A8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, RED, ZERO), 2, 1)),
+            ycbcr_fmt(1, y_plane(ISL_FORMAT_YCRCB_SWAPUVY, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
    fmt_list(VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
             ycbcr_fmt(3,
                       y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
@@ -436,7 +471,7 @@ static const struct {
 };
 
 const struct anv_format *
-anv_get_format(VkFormat vk_format)
+anv_get_format(const struct gen_device_info *devinfo, VkFormat vk_format)
 {
    uint32_t enum_offset = VK_ENUM_OFFSET(vk_format);
    uint32_t ext_number = VK_ENUM_EXTENSION(vk_format);
@@ -450,17 +485,19 @@ anv_get_format(VkFormat vk_format)
    if (!format)
       return NULL;
 
-   if (format[0].n_planes == 0)
-      return NULL;
+   for (int i = 0; format[i].n_planes != 0; i++) {
+      if (!devinfo || format[i].compatible(devinfo))
+         return &format[i];
+   }
 
-   return &format[0];
+   return NULL;
 }
 
 struct anv_format_plane
 anv_get_format_nth_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
                          uint32_t plane, VkImageTiling tiling)
 {
-   const struct anv_format *format = anv_get_format(vk_format);
+   const struct anv_format *format = anv_get_format(devinfo, vk_format);
    const struct anv_format_plane unsupported = {
       .isl_format = ISL_FORMAT_UNSUPPORTED,
    };
@@ -520,7 +557,7 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
                      VkImageAspectFlagBits aspect, VkImageTiling tiling)
 {
    uint32_t plane =
-      anv_format_aspect_to_plane(anv_get_format(vk_format), aspect);
+      anv_format_aspect_to_plane(anv_get_format(devinfo, vk_format), aspect);
    return anv_get_format_nth_plane(devinfo, vk_format, plane, tiling);
 }
 
@@ -746,7 +783,7 @@ get_wsi_format_modifier_properties_list(const struct anv_physical_device *physic
                                         VkFormat vk_format,
                                         struct wsi_format_modifier_properties_list *list)
 {
-   const struct anv_format *anv_format = anv_get_format(vk_format);
+   const struct anv_format *anv_format = anv_get_format(&physical_device->info, vk_format);
 
    VK_OUTARRAY_MAKE(out, list->modifier_properties, &list->modifier_count);
 
@@ -789,7 +826,7 @@ void anv_GetPhysicalDeviceFormatProperties(
 {
    ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
    const struct gen_device_info *devinfo = &physical_device->info;
-   const struct anv_format *anv_format = anv_get_format(vk_format);
+   const struct anv_format *anv_format = anv_get_format(devinfo, vk_format);
 
    *pFormatProperties = (VkFormatProperties) {
       .linearTilingFeatures =
@@ -839,7 +876,7 @@ anv_get_image_format_properties(
    uint32_t maxArraySize;
    VkSampleCountFlags sampleCounts = VK_SAMPLE_COUNT_1_BIT;
    const struct gen_device_info *devinfo = &physical_device->info;
-   const struct anv_format *format = anv_get_format(info->format);
+   const struct anv_format *format = anv_get_format(devinfo, info->format);
 
    if (format == NULL)
       goto unsupported;
@@ -1188,7 +1225,7 @@ VkResult anv_CreateSamplerYcbcrConversion(
 
    memset(conversion, 0, sizeof(*conversion));
 
-   conversion->format = anv_get_format(pCreateInfo->format);
+   conversion->format = anv_get_format(&device->info, pCreateInfo->format);
    conversion->ycbcr_model = pCreateInfo->ycbcrModel;
    conversion->ycbcr_range = pCreateInfo->ycbcrRange;
    conversion->mapping[0] = pCreateInfo->components.r;
