@@ -803,7 +803,7 @@ void anv_GetImageSubresourceLayout(
 enum isl_aux_usage
 anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
                         const struct anv_image * const image,
-                        const VkImageAspectFlagBits aspect,
+                        const uint32_t plane,
                         const VkImageLayout layout)
 {
    /* Validate the inputs. */
@@ -813,13 +813,6 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
 
    /* The layout of a NULL image is not properly defined. */
    assert(image != NULL);
-
-   /* The aspect must be exactly one of the image aspects. */
-   assert(util_bitcount(aspect) == 1 && (aspect & image->aspects));
-
-   /* Determine the optimal buffer. */
-
-   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    /* If there is no auxiliary surface allocated, we must use the one and only
     * main buffer.
@@ -831,7 +824,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
    assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
 
    /* Stencil has no aux */
-   assert(aspect != VK_IMAGE_ASPECT_STENCIL_BIT);
+   assert(image->format->planes[plane].aspect != VK_IMAGE_ASPECT_STENCIL_BIT);
 
    switch (layout) {
 
@@ -856,7 +849,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
    case VK_IMAGE_LAYOUT_GENERAL:
    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-      if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
+      if (image->format->planes[plane].aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
          /* This buffer could be a depth buffer used in a transfer operation.
           * BLORP currently doesn't use HiZ for transfer operations so we must
           * use the main buffer for this layout. TODO: Enable HiZ in BLORP.
@@ -875,7 +868,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
       assert((image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
       /* Fall-through */
    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-      if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
+      if (image->format->planes[plane].aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
          if (anv_can_sample_with_hiz(devinfo, image))
             return ISL_AUX_USAGE_HIZ;
          else
@@ -903,7 +896,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
 
    /* Rendering Layouts */
    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-      assert(aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
+      assert(image->format->planes[plane].aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
       if (image->planes[plane].aux_usage == ISL_AUX_USAGE_NONE) {
          assert(image->samples == 1);
          return ISL_AUX_USAGE_CCS_D;
@@ -914,7 +907,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
 
    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
    case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
-      assert(aspect == VK_IMAGE_ASPECT_DEPTH_BIT);
+      assert(image->format->planes[plane].aspect == VK_IMAGE_ASPECT_DEPTH_BIT);
       return ISL_AUX_USAGE_HIZ;
 
    case VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR:
@@ -966,7 +959,7 @@ anv_layout_to_fast_clear_type(const struct gen_device_info * const devinfo,
        * default depth value.
        */
       enum isl_aux_usage aux_usage =
-         anv_layout_to_aux_usage(devinfo, image, aspect, layout);
+         anv_layout_to_aux_usage(devinfo, image, plane, layout);
       return aux_usage == ISL_AUX_USAGE_HIZ ?
              ANV_FAST_CLEAR_DEFAULT_VALUE : ANV_FAST_CLEAR_NONE;
    }
@@ -1391,10 +1384,9 @@ anv_CreateImageView(VkDevice _device,
          iview->planes[vplane].general_sampler_surface_state.state = alloc_surface_state(device);
 
          enum isl_aux_usage general_aux_usage =
-            anv_layout_to_aux_usage(&device->info, image, 1UL << iaspect_bit,
-                                    VK_IMAGE_LAYOUT_GENERAL);
+            anv_layout_to_aux_usage(&device->info, image, iplane, VK_IMAGE_LAYOUT_GENERAL);
          enum isl_aux_usage optimal_aux_usage =
-            anv_layout_to_aux_usage(&device->info, image, 1UL << iaspect_bit,
+            anv_layout_to_aux_usage(&device->info, image, iplane,
                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
          anv_image_fill_surface_state(device, image, 1ULL << iaspect_bit,

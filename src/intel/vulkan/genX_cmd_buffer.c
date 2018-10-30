@@ -249,8 +249,7 @@ color_attachment_compute_aux_usage(struct anv_device * device,
    }
 
    att_state->aux_usage =
-      anv_layout_to_aux_usage(&device->info, iview->image,
-                              VK_IMAGE_ASPECT_COLOR_BIT,
+      anv_layout_to_aux_usage(&device->info, iview->image, 0,
                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
    /* If we don't have aux, then we should have returned early in the layer
@@ -400,8 +399,7 @@ depth_stencil_attachment_compute_aux_usage(struct anv_device *device,
       return;
 
    const enum isl_aux_usage first_subpass_aux_usage =
-      anv_layout_to_aux_usage(&device->info, iview->image,
-                              VK_IMAGE_ASPECT_DEPTH_BIT,
+      anv_layout_to_aux_usage(&device->info, iview->image, 0,
                               pass_att->first_subpass_layout);
    if (first_subpass_aux_usage != ISL_AUX_USAGE_HIZ)
       return;
@@ -457,11 +455,9 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
                         VkImageLayout final_layout)
 {
    const bool hiz_enabled = ISL_AUX_USAGE_HIZ ==
-      anv_layout_to_aux_usage(&cmd_buffer->device->info, image,
-                              VK_IMAGE_ASPECT_DEPTH_BIT, initial_layout);
+      anv_layout_to_aux_usage(&cmd_buffer->device->info, image, 0, initial_layout);
    const bool enable_hiz = ISL_AUX_USAGE_HIZ ==
-      anv_layout_to_aux_usage(&cmd_buffer->device->info, image,
-                              VK_IMAGE_ASPECT_DEPTH_BIT, final_layout);
+      anv_layout_to_aux_usage(&cmd_buffer->device->info, image, 0, final_layout);
 
    enum isl_aux_op hiz_op;
    if (hiz_enabled && !enable_hiz) {
@@ -1063,9 +1059,9 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    }
 
    const enum isl_aux_usage initial_aux_usage =
-      anv_layout_to_aux_usage(devinfo, image, aspect, initial_layout);
+      anv_layout_to_aux_usage(devinfo, image, plane, initial_layout);
    const enum isl_aux_usage final_aux_usage =
-      anv_layout_to_aux_usage(devinfo, image, aspect, final_layout);
+      anv_layout_to_aux_usage(devinfo, image, plane, final_layout);
 
    /* The current code assumes that there is no mixing of CCS_E and CCS_D.
     * We can handle transitions between CCS_D/E to and from NONE.  What we
@@ -1388,7 +1384,7 @@ genX(BeginCommandBuffer)(
 
             enum isl_aux_usage aux_usage =
                anv_layout_to_aux_usage(&cmd_buffer->device->info, iview->image,
-                                       VK_IMAGE_ASPECT_DEPTH_BIT, layout);
+                                       0, layout);
 
             cmd_buffer->state.hiz_enabled = aux_usage == ISL_AUX_USAGE_HIZ;
          }
@@ -3628,8 +3624,7 @@ cmd_buffer_begin_subpass(struct anv_cmd_buffer *cmd_buffer,
          transition_depth_buffer(cmd_buffer, image,
                                  att_state->current_layout, target_layout);
          att_state->aux_usage =
-            anv_layout_to_aux_usage(&cmd_buffer->device->info, image,
-                                    VK_IMAGE_ASPECT_DEPTH_BIT, target_layout);
+            anv_layout_to_aux_usage(&cmd_buffer->device->info, image, 0, target_layout);
       }
       att_state->current_layout = target_layout;
 

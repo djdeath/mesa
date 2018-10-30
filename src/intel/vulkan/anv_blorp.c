@@ -200,7 +200,7 @@ get_blorp_surf_for_anv_image(const struct anv_device *device,
    uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    if (layout != ANV_IMAGE_LAYOUT_EXPLICIT_AUX)
-      aux_usage = anv_layout_to_aux_usage(&device->info, image, aspect, layout);
+      aux_usage = anv_layout_to_aux_usage(&device->info, image, plane, layout);
 
    const struct anv_surface *surface = &image->planes[plane].surface;
    *blorp_surf = (struct blorp_surf) {
