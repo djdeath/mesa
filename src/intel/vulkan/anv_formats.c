@@ -420,12 +420,15 @@ static const struct anv_format *ycbcr_formats[] = {
    fmt_list(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16, fmt_unsupported),
    fmt_list(VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16,  fmt_unsupported),
    fmt_list(VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16, fmt_unsupported),
-   /* TODO: it is possible to enable the following 2 formats, but that
-    * requires further refactoring of how we handle multiplanar formats.
-    */
-   fmt_list(VK_FORMAT_G16B16G16R16_422_UNORM, fmt_unsupported),
-   fmt_list(VK_FORMAT_B16G16R16G16_422_UNORM, fmt_unsupported),
-
+   /* TODO: it is possible to enable the following 2 formats on Gen9. */
+   fmt_list(VK_FORMAT_G16B16G16R16_422_UNORM,
+            ycbcr_gen_fmt(2, gen11_compatible,
+                          y_plane(ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R16G16B16A16_UNORM, RGBA, _ISL_SWIZZLE(ZERO, BLUE, ZERO, RED), 2, 1))),
+   fmt_list(VK_FORMAT_B16G16R16G16_422_UNORM,
+            ycbcr_gen_fmt(2, gen11_compatible,
+                          y_plane(ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(ZERO, GREEN, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R16G16B16A16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, RED, ZERO), 2, 1))),
    fmt_list(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM,
             ycbcr_fmt(3,
                       y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
