@@ -119,18 +119,18 @@ static bool gen11_compatible(const struct gen_device_info *devinfo)
       .n_planes = 0,                                \
    }
 
-#define y_plane(__hw_fmt, __swizzle, __ycbcr_swizzle)                   \
+#define y_plane(__hw_fmt, __ycbcr_swizzle)                              \
    {                                                                    \
       .isl_format = __hw_fmt,                                           \
-      .swizzle = __swizzle,                                             \
+      .swizzle = RGBA,                                                  \
       .ycbcr_swizzle = __ycbcr_swizzle,                                 \
       .denominator_scales = { 1, 1, }, /* Y plane is always 1:1 */      \
       .aspect = VK_IMAGE_ASPECT_PLANE_0_BIT, /* Y plane is always plane 0 */ \
    }
 
-#define chroma_plane(__plane, __hw_fmt, __swizzle, __ycbcr_swizzle, dhs, dvs) \
+#define chroma_plane(__plane, __hw_fmt, __ycbcr_swizzle, dhs, dvs, ...) \
    { .isl_format = __hw_fmt,                                            \
-     .swizzle = __swizzle,                                              \
+     .swizzle = RGBA,                                                   \
      .ycbcr_swizzle = __ycbcr_swizzle,                                  \
      .denominator_scales = { dhs, dvs, },                               \
      .has_chroma = true,                                                \
@@ -368,37 +368,37 @@ static const struct anv_format *ycbcr_formats[] = {
     */
    fmt_list(VK_FORMAT_G8B8G8R8_422_UNORM,
             ycbcr_gen_fmt(2, gen11_compatible,
-                          y_plane(ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                          chroma_plane(0, ISL_FORMAT_R8G8B8A8_UNORM, RGBA, _ISL_SWIZZLE(ZERO, BLUE, ZERO, RED), 2, 1)),
-            ycbcr_fmt(1, y_plane(ISL_FORMAT_YCRCB_SWAPUV, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
+                          y_plane(ISL_FORMAT_R8G8_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R8G8B8A8_UNORM, _ISL_SWIZZLE(ZERO, BLUE, ZERO, RED), 2, 1)),
+            ycbcr_fmt(1, y_plane(ISL_FORMAT_YCRCB_SWAPUV, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
    fmt_list(VK_FORMAT_B8G8R8G8_422_UNORM,
             ycbcr_gen_fmt(2, gen11_compatible,
-                          y_plane(ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(ZERO, GREEN, ZERO, ZERO)),
-                          chroma_plane(0, ISL_FORMAT_R8G8B8A8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, RED, ZERO), 2, 1)),
-            ycbcr_fmt(1, y_plane(ISL_FORMAT_YCRCB_SWAPUVY, RGBA, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
+                          y_plane(ISL_FORMAT_R8G8_UNORM, _ISL_SWIZZLE(ZERO, GREEN, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R8G8B8A8_UNORM, _ISL_SWIZZLE(BLUE, ZERO, RED, ZERO), 2, 1)),
+            ycbcr_fmt(1, y_plane(ISL_FORMAT_YCRCB_SWAPUVY, _ISL_SWIZZLE(BLUE, GREEN, RED, ZERO)))),
    fmt_list(VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM,
             ycbcr_fmt(3,
-                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
-                      chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2))),
+                      y_plane(ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
+                      chroma_plane(2, ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2))),
    fmt_list(VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
             ycbcr_fmt(2,
-                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2))),
+                      y_plane(ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8G8_UNORM, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2))),
    fmt_list(VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM,
             ycbcr_fmt(3,
-                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
-                      chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1))),
+                      y_plane(ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
+                      chroma_plane(2, ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1))),
    fmt_list(VK_FORMAT_G8_B8R8_2PLANE_422_UNORM,
             ycbcr_fmt(2,
-                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R8G8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1))),
+                      y_plane(ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8G8_UNORM, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1))),
    fmt_list(VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM,
             ycbcr_fmt(3,
-                      y_plane(ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
-                      chroma_plane(2, ISL_FORMAT_R8_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1))),
+                      y_plane(ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
+                      chroma_plane(2, ISL_FORMAT_R8_UNORM, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1))),
 
    fmt_list(VK_FORMAT_R10X6_UNORM_PACK16,                         fmt_unsupported),
    fmt_list(VK_FORMAT_R10X6G10X6_UNORM_2PACK16,                   fmt_unsupported),
@@ -423,35 +423,35 @@ static const struct anv_format *ycbcr_formats[] = {
    /* TODO: it is possible to enable the following 2 formats on Gen9. */
    fmt_list(VK_FORMAT_G16B16G16R16_422_UNORM,
             ycbcr_gen_fmt(2, gen11_compatible,
-                          y_plane(ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                          chroma_plane(0, ISL_FORMAT_R16G16B16A16_UNORM, RGBA, _ISL_SWIZZLE(ZERO, BLUE, ZERO, RED), 2, 1))),
+                          y_plane(ISL_FORMAT_R16G16_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R16G16B16A16_UNORM, _ISL_SWIZZLE(ZERO, BLUE, ZERO, RED), 2, 1))),
    fmt_list(VK_FORMAT_B16G16R16G16_422_UNORM,
             ycbcr_gen_fmt(2, gen11_compatible,
-                          y_plane(ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(ZERO, GREEN, ZERO, ZERO)),
-                          chroma_plane(0, ISL_FORMAT_R16G16B16A16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, RED, ZERO), 2, 1))),
+                          y_plane(ISL_FORMAT_R16G16_UNORM, _ISL_SWIZZLE(ZERO, GREEN, ZERO, ZERO)),
+                          chroma_plane(0, ISL_FORMAT_R16G16B16A16_UNORM, _ISL_SWIZZLE(BLUE, ZERO, RED, ZERO), 2, 1))),
    fmt_list(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM,
             ycbcr_fmt(3,
-                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
-                      chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2))),
+                      y_plane(ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 2),
+                      chroma_plane(2, ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 2))),
    fmt_list(VK_FORMAT_G16_B16R16_2PLANE_420_UNORM,
             ycbcr_fmt(2,
-                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2))),
+                      y_plane(ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16G16_UNORM, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 2))),
    fmt_list(VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM,
             ycbcr_fmt(3,
-                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
-                      chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1))),
+                      y_plane(ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 2, 1),
+                      chroma_plane(2, ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 2, 1))),
    fmt_list(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM,
             ycbcr_fmt(2,
-                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R16G16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1))),
+                      y_plane(ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16G16_UNORM, _ISL_SWIZZLE(BLUE, RED, ZERO, ZERO), 2, 1))),
    fmt_list(VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM,
             ycbcr_fmt(3,
-                      y_plane(ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
-                      chroma_plane(1, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
-                      chroma_plane(2, ISL_FORMAT_R16_UNORM, RGBA, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1))),
+                      y_plane(ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(GREEN, ZERO, ZERO, ZERO)),
+                      chroma_plane(1, ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(BLUE, ZERO, ZERO, ZERO), 1, 1),
+                      chroma_plane(2, ISL_FORMAT_R16_UNORM, _ISL_SWIZZLE(RED, ZERO, ZERO, ZERO), 1, 1))),
 };
 
 #undef _fmt
