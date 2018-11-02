@@ -128,7 +128,7 @@ choose_isl_tiling_flags(const struct anv_image_create_info *anv_info,
 static struct anv_surface *
 get_surface(struct anv_image *image, VkImageAspectFlagBits aspect)
 {
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
    return &image->planes[plane].surface;
 }
 
@@ -315,7 +315,7 @@ make_surface(const struct anv_device *dev,
    image->extent = anv_sanitize_image_extent(vk_info->imageType,
                                              vk_info->extent);
 
-   const unsigned plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   const unsigned plane = anv_format_aspect_to_plane(image->format, aspect);
    const  struct anv_format_plane plane_format =
       anv_get_format_plane(&dev->info, image->vk_format, aspect, image->tiling);
    struct anv_surface *anv_surf = &image->planes[plane].surface;
@@ -700,7 +700,7 @@ VkResult anv_BindImageMemory(
    uint32_t aspect_bit;
    anv_foreach_image_aspect_bit(aspect_bit, image, image->aspects) {
       uint32_t plane =
-         anv_image_aspect_to_plane(image->aspects, 1UL << aspect_bit);
+         anv_format_aspect_to_plane(image->format, 1UL << aspect_bit);
       anv_image_bind_memory_plane(device, image, plane, mem, memoryOffset);
    }
 
@@ -738,7 +738,7 @@ VkResult anv_BindImageMemory2(
       uint32_t aspect_bit;
       anv_foreach_image_aspect_bit(aspect_bit, image, aspects) {
          uint32_t plane =
-            anv_image_aspect_to_plane(image->aspects, 1UL << aspect_bit);
+            anv_format_aspect_to_plane(image->format, 1UL << aspect_bit);
          anv_image_bind_memory_plane(device, image, plane,
                                      mem, bind_info->memoryOffset);
       }
@@ -819,7 +819,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
 
    /* Determine the optimal buffer. */
 
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    /* If there is no auxiliary surface allocated, we must use the one and only
     * main buffer.
@@ -948,7 +948,7 @@ anv_layout_to_fast_clear_type(const struct gen_device_info * const devinfo,
    /* The aspect must be exactly one of the image aspects. */
    assert(util_bitcount(aspect) == 1 && (aspect & image->aspects));
 
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    /* If there is no auxiliary surface allocated, there are no fast-clears */
    if (image->planes[plane].aux_surface.isl.size_B == 0)
@@ -1048,7 +1048,7 @@ anv_image_fill_surface_state(struct anv_device *device,
                              struct anv_surface_state *state_inout,
                              struct brw_image_param *image_param_out)
 {
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    const struct anv_surface *surface = &image->planes[plane].surface,
       *aux_surface = &image->planes[plane].aux_surface;
@@ -1345,7 +1345,7 @@ anv_CreateImageView(VkDevice _device,
    uint32_t iaspect_bit, vplane = 0;
    anv_foreach_image_aspect_bit(iaspect_bit, image, expanded_aspects) {
       uint32_t iplane =
-         anv_image_aspect_to_plane(image->aspects, 1UL << iaspect_bit);
+         anv_format_aspect_to_plane(image->format, 1UL << iaspect_bit);
       VkImageAspectFlags vplane_aspect =
          anv_plane_to_aspect(iview->aspect_mask, vplane);
       struct anv_format_plane format =
@@ -1632,6 +1632,6 @@ anv_image_get_surface_for_aspect_mask(const struct anv_image *image,
        return NULL;
    }
 
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, sanitized_mask);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, sanitized_mask);
    return &image->planes[plane].surface;
 }

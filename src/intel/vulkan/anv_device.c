@@ -2682,8 +2682,8 @@ void anv_GetImageMemoryRequirements2(
          struct anv_physical_device *pdevice = &device->instance->physicalDevice;
          const VkImagePlaneMemoryRequirementsInfoKHR *plane_reqs =
             (const VkImagePlaneMemoryRequirementsInfoKHR *) ext;
-         uint32_t plane = anv_image_aspect_to_plane(image->aspects,
-                                                    plane_reqs->planeAspect);
+         uint32_t plane = anv_format_aspect_to_plane(image->format,
+                                                     plane_reqs->planeAspect);
 
          assert(image->planes[plane].offset == 0);
 

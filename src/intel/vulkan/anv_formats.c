@@ -445,7 +445,7 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
    if (format == NULL)
       return unsupported;
 
-   uint32_t plane = anv_image_aspect_to_plane(vk_format_aspects(vk_format), aspect);
+   uint32_t plane = anv_format_aspect_to_plane(format, aspect);
    struct anv_format_plane plane_format = format->planes[plane];
    if (plane_format.isl_format == ISL_FORMAT_UNSUPPORTED)
       return unsupported;
@@ -488,6 +488,22 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
    }
 
    return plane_format;
+}
+
+uint32_t
+anv_format_aspect_to_plane(const struct anv_format *format, VkImageAspectFlags _aspect)
+{
+   VkImageAspectFlags aspects = 0;
+   for (uint32_t p = 0; p < format->n_planes; p++)
+      aspects |= format->planes[p].aspect;
+
+   VkImageAspectFlags aspect = anv_expand_aspects(aspects, _aspect);
+   for (uint32_t p = 0; p < format->n_planes; p++) {
+      if (format->planes[p].aspect & aspect)
+         return p;
+   }
+
+   unreachable("invalid format/aspect");
 }
 
 // Format capabilities

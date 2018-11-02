@@ -439,7 +439,7 @@ anv_dump_add_framebuffer(struct anv_cmd_buffer *cmd_buffer,
          char *filename = ralloc_asprintf(dump_ctx, "framebuffer%04d-%d%s.ppm",
                                           dump_idx, i, suffix);
 
-         unsigned plane = anv_image_aspect_to_plane(iview->image->aspects, aspect);
+         unsigned plane = anv_format_aspect_to_plane(iview->image->format, aspect);
          dump_add_image(cmd_buffer, (struct anv_image *)iview->image, aspect,
                         iview->planes[plane].isl.base_level,
                         iview->planes[plane].isl.base_array_layer,

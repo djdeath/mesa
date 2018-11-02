@@ -2561,28 +2561,8 @@ struct anv_format {
    bool can_ycbcr;
 };
 
-static inline uint32_t
-anv_image_aspect_to_plane(VkImageAspectFlags image_aspects,
-                          VkImageAspectFlags aspect_mask)
-{
-   switch (aspect_mask) {
-   case VK_IMAGE_ASPECT_COLOR_BIT:
-   case VK_IMAGE_ASPECT_DEPTH_BIT:
-   case VK_IMAGE_ASPECT_PLANE_0_BIT:
-      return 0;
-   case VK_IMAGE_ASPECT_STENCIL_BIT:
-      if ((image_aspects & VK_IMAGE_ASPECT_DEPTH_BIT) == 0)
-         return 0;
-      /* Fall-through */
-   case VK_IMAGE_ASPECT_PLANE_1_BIT:
-      return 1;
-   case VK_IMAGE_ASPECT_PLANE_2_BIT:
-      return 2;
-   default:
-      /* Purposefully assert with depth/stencil aspects. */
-      unreachable("invalid image aspect");
-   }
-}
+uint32_t
+anv_format_aspect_to_plane(const struct anv_format *format, VkImageAspectFlags aspect);
 
 static inline VkImageAspectFlags
 anv_plane_to_aspect(VkImageAspectFlags image_aspects,
@@ -2699,7 +2679,7 @@ struct anv_image {
     * Image subsurfaces
     *
     * For each foo, anv_image::planes[x].surface is valid if and only if
-    * anv_image::aspects has a x aspect. Refer to anv_image_aspect_to_plane()
+    * anv_image::aspects has a x aspect. Refer to anv_format_aspect_to_plane()
     * to figure the number associated with a given aspect.
     *
     * The hardware requires that the depth buffer and stencil buffer be
@@ -2794,7 +2774,7 @@ static inline uint8_t
 anv_image_aux_levels(const struct anv_image * const image,
                      VkImageAspectFlagBits aspect)
 {
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
    return image->planes[plane].aux_surface.isl.size_B > 0 ?
           image->planes[plane].aux_surface.isl.levels : 0;
 }
@@ -2816,7 +2796,7 @@ anv_image_aux_layers(const struct anv_image * const image,
        */
       return 0;
    } else {
-      uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+      uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
       return MAX2(image->planes[plane].aux_surface.isl.logical_level0_px.array_len,
                   image->planes[plane].aux_surface.isl.logical_level0_px.depth >> miplevel);
    }
@@ -2829,7 +2809,7 @@ anv_image_get_clear_color_addr(const struct anv_device *device,
 {
    assert(image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
 
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
    return anv_address_add(image->planes[plane].address,
                           image->planes[plane].fast_clear_state_offset);
 }
@@ -2856,7 +2836,7 @@ anv_image_get_compression_state_addr(const struct anv_device *device,
 {
    assert(level < anv_image_aux_levels(image, aspect));
    assert(array_layer < anv_image_aux_layers(image, aspect, level));
-   UNUSED uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   UNUSED uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
    assert(image->planes[plane].aux_usage == ISL_AUX_USAGE_CCS_E);
 
    struct anv_address addr =
@@ -2976,17 +2956,24 @@ anv_get_levelCount(const struct anv_image *image,
 }
 
 static inline VkImageAspectFlags
-anv_image_expand_aspects(const struct anv_image *image,
-                         VkImageAspectFlags aspects)
+anv_expand_aspects(VkImageAspectFlags image_aspects,
+                   VkImageAspectFlags selected_aspects)
 {
    /* If the underlying image has color plane aspects and
     * VK_IMAGE_ASPECT_COLOR_BIT has been requested, then return the aspects of
     * the underlying image. */
-   if ((image->aspects & VK_IMAGE_ASPECT_PLANES_BITS_ANV) != 0 &&
-       aspects == VK_IMAGE_ASPECT_COLOR_BIT)
-      return image->aspects;
+   if ((image_aspects & VK_IMAGE_ASPECT_PLANES_BITS_ANV) != 0 &&
+       selected_aspects == VK_IMAGE_ASPECT_COLOR_BIT)
+      return image_aspects;
 
-   return aspects;
+   return selected_aspects;
+}
+
+static inline VkImageAspectFlags
+anv_image_expand_aspects(const struct anv_image *image,
+                         VkImageAspectFlags aspects)
+{
+   return anv_expand_aspects(image->aspects, aspects);
 }
 
 static inline bool

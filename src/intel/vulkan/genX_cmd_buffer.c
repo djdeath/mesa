@@ -490,7 +490,7 @@ set_image_compressed_bit(struct anv_cmd_buffer *cmd_buffer,
                          uint32_t base_layer, uint32_t layer_count,
                          bool compressed)
 {
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    /* We only have compression tracking for CCS_E */
    if (image->planes[plane].aux_usage != ISL_AUX_USAGE_CCS_E)
@@ -742,7 +742,7 @@ anv_cmd_predicated_ccs_resolve(struct anv_cmd_buffer *cmd_buffer,
                                enum isl_aux_op resolve_op,
                                enum anv_fast_clear_type fast_clear_supported)
 {
-   const uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   const uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
 #if GEN_GEN >= 9
    anv_cmd_compute_resolve_predicate(cmd_buffer, image,
@@ -958,7 +958,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    if (initial_layout == final_layout)
       return;
 
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    if (image->planes[plane].shadow_surface.isl.size_B > 0 &&
        final_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
@@ -3447,7 +3447,7 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
 
    if (image && (image->aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
       uint32_t depth_plane =
-         anv_image_aspect_to_plane(image->aspects, VK_IMAGE_ASPECT_DEPTH_BIT);
+         anv_format_aspect_to_plane(image->format, VK_IMAGE_ASPECT_DEPTH_BIT);
       const struct anv_surface *surface = &image->planes[depth_plane].surface;
 
       info.depth_surf = &surface->isl;
@@ -3480,7 +3480,7 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
 
    if (image && (image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT)) {
       uint32_t stencil_plane =
-         anv_image_aspect_to_plane(image->aspects, VK_IMAGE_ASPECT_STENCIL_BIT);
+         anv_format_aspect_to_plane(image->format, VK_IMAGE_ASPECT_STENCIL_BIT);
       const struct anv_surface *surface = &image->planes[stencil_plane].surface;
 
       info.stencil_surf = &surface->isl;

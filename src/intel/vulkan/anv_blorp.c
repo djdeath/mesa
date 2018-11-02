@@ -197,7 +197,7 @@ get_blorp_surf_for_anv_image(const struct anv_device *device,
                              enum isl_aux_usage aux_usage,
                              struct blorp_surf *blorp_surf)
 {
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
 
    if (layout != ANV_IMAGE_LAYOUT_EXPLICIT_AUX)
       aux_usage = anv_layout_to_aux_usage(&device->info, image, aspect, layout);
@@ -1296,7 +1296,7 @@ static enum isl_aux_usage
 fast_clear_aux_usage(const struct anv_image *image,
                      VkImageAspectFlagBits aspect)
 {
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
    if (image->planes[plane].aux_usage == ISL_AUX_USAGE_NONE)
       return ISL_AUX_USAGE_CCS_D;
    else
@@ -1554,8 +1554,7 @@ anv_image_hiz_op(struct anv_cmd_buffer *cmd_buffer,
 {
    assert(aspect == VK_IMAGE_ASPECT_DEPTH_BIT);
    assert(base_layer + layer_count <= anv_image_aux_layers(image, aspect, level));
-   assert(anv_image_aspect_to_plane(image->aspects,
-                                    VK_IMAGE_ASPECT_DEPTH_BIT) == 0);
+   assert(anv_format_aspect_to_plane(image->format, VK_IMAGE_ASPECT_DEPTH_BIT) == 0);
 
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer, 0);
@@ -1749,7 +1748,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
    assert(base_layer + layer_count <=
           anv_image_aux_layers(image, aspect, level));
 
-   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   uint32_t plane = anv_format_aspect_to_plane(image->format, aspect);
    uint32_t width_div = image->format->planes[plane].denominator_scales[0];
    uint32_t height_div = image->format->planes[plane].denominator_scales[1];
    uint32_t level_width = anv_minify(image->extent.width, level) / width_div;
