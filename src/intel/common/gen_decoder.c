@@ -149,7 +149,6 @@ get_group_offset_count(const char **atts, uint32_t *offset, uint32_t *count,
 
 static struct gen_group *
 create_group(struct parser_context *ctx,
-             const char *name,
              const char **atts,
              struct gen_group *parent,
              bool fixed_length)
@@ -157,9 +156,8 @@ create_group(struct parser_context *ctx,
    struct gen_group *group;
 
    group = rzalloc(ctx->spec, struct gen_group);
-   if (name)
-      group->name = ralloc_strdup(group, name);
 
+   group->name = "";
    group->spec = ctx->spec;
    group->variable = false;
    group->fixed_length = fixed_length;
@@ -172,7 +170,9 @@ create_group(struct parser_context *ctx,
 
    for (int i = 0; atts[i]; i += 2) {
       char *p;
-      if (strcmp(atts[i], "length") == 0) {
+      if (strcmp(atts[i], "name") == 0) {
+         group->name = ralloc_strdup(group, atts[i + 1]);
+      } else if (strcmp(atts[i], "length") == 0) {
          group->dw_length = strtoul(atts[i + 1], &p, 0);
       } else if (strcmp(atts[i], "bias") == 0) {
          group->bias = strtoul(atts[i + 1], &p, 0);
@@ -191,7 +191,7 @@ create_group(struct parser_context *ctx,
             } else if (strcmp(tok, "blitter") == 0) {
                group->engine_mask |= I915_ENGINE_CLASS_TO_MASK(I915_ENGINE_CLASS_COPY);
             } else {
-               fprintf(stderr, "unknown engine class defined for instruction \"%s\": %s\n", name, atts[i + 1]);
+               fprintf(stderr, "unknown engine class defined for instruction \"%s\": %s\n", group->name, atts[i + 1]);
             }
 
             tok = strtok_r(NULL, "|", &save_ptr);
@@ -214,13 +214,15 @@ create_group(struct parser_context *ctx,
 }
 
 static struct gen_enum *
-create_enum(struct parser_context *ctx, const char *name, const char **atts)
+create_enum(struct parser_context *ctx, const char **atts)
 {
    struct gen_enum *e;
 
    e = rzalloc(ctx->spec, struct gen_enum);
-   if (name)
-      e->name = ralloc_strdup(e, name);
+   for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "name") == 0)
+         e->name = ralloc_strdup(e, atts[i + 1]);
+   }
 
    return e;
 }
@@ -379,21 +381,17 @@ static void
 start_element(void *data, const char *element_name, const char **atts)
 {
    struct parser_context *ctx = data;
-   const char *name = NULL;
-   const char *gen = NULL;
 
    ctx->loc.line_number = XML_GetCurrentLineNumber(ctx->parser);
 
-   for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "name") == 0)
-         name = atts[i + 1];
-      else if (strcmp(atts[i], "gen") == 0)
-         gen = atts[i + 1];
-   }
-
    if (strcmp(element_name, "genxml") == 0) {
-      if (name == NULL)
-         fail(&ctx->loc, "no platform name given");
+      const char *gen = NULL;
+
+      for (int i = 0; atts[i]; i += 2) {
+         if (strcmp(atts[i], "gen") == 0)
+            gen = atts[i + 1];
+      }
+
       if (gen == NULL)
          fail(&ctx->loc, "no gen given");
 
@@ -406,24 +404,24 @@ start_element(void *data, const char *element_name, const char **atts)
 
       ctx->spec->gen = gen_make_gen(major, minor);
    } else if (strcmp(element_name, "instruction") == 0) {
-      ctx->group = create_group(ctx, name, atts, NULL, false);
+      ctx->group = create_group(ctx, atts, NULL, false);
    } else if (strcmp(element_name, "struct") == 0) {
-      ctx->group = create_group(ctx, name, atts, NULL, true);
+      ctx->group = create_group(ctx, atts, NULL, true);
    } else if (strcmp(element_name, "register") == 0) {
-      ctx->group = create_group(ctx, name, atts, NULL, true);
+      ctx->group = create_group(ctx, atts, NULL, true);
       get_register_offset(atts, &ctx->group->register_offset);
    } else if (strcmp(element_name, "group") == 0) {
       struct gen_group *previous_group = ctx->group;
       while (previous_group->next)
          previous_group = previous_group->next;
 
-      struct gen_group *group = create_group(ctx, "", atts, ctx->group, false);
+      struct gen_group *group = create_group(ctx, atts, ctx->group, false);
       previous_group->next = group;
       ctx->group = group;
    } else if (strcmp(element_name, "field") == 0) {
       ctx->last_field = create_and_append_field(ctx, atts);
    } else if (strcmp(element_name, "enum") == 0) {
-      ctx->enoom = create_enum(ctx, name, atts);
+      ctx->enoom = create_enum(ctx, atts);
    } else if (strcmp(element_name, "value") == 0) {
       if (ctx->n_values >= ctx->n_allocated_values) {
          ctx->n_allocated_values = MAX2(2, ctx->n_allocated_values * 2);
