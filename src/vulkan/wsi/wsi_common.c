@@ -175,6 +175,29 @@ wsi_swapchain_init(const struct wsi_device *wsi,
    chain->alloc = *pAllocator;
    chain->use_prime_blit = false;
 
+   if (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR)
+   {
+      const VkImageFormatListCreateInfoKHR *imageformatlist =
+         vk_find_struct_const(pCreateInfo->pNext, IMAGE_FORMAT_LIST_CREATE_INFO_KHR);
+
+      assume(imageformatlist && imageformatlist->viewFormatCount > 0);
+
+      chain->accepted_formats_count = imageformatlist->viewFormatCount;
+      chain->accepted_formats =
+         vk_zalloc(pAllocator, sizeof(VkFormat) * chain->accepted_formats_count,
+                   8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      memcpy(chain->accepted_formats, imageformatlist->pViewFormats,
+             sizeof(VkFormat) * chain->accepted_formats_count);
+
+#ifndef NDEBUG
+      MAYBE_UNUSED bool format_found = false;
+      for (int i = 0; i < imageformatlist->viewFormatCount; i++)
+         if (pCreateInfo->imageFormat == imageformatlist->pViewFormats[i])
+            format_found = true;
+      assert(format_found);
+#endif
+   }
+
    chain->cmd_pools =
       vk_zalloc(pAllocator, sizeof(VkCommandPool) * wsi->queue_family_count, 8,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
@@ -212,6 +235,7 @@ wsi_swapchain_finish(struct wsi_swapchain *chain)
                                      &chain->alloc);
    }
    vk_free(&chain->alloc, chain->cmd_pools);
+   vk_free(&chain->alloc, chain->accepted_formats);
 }
 
 static uint32_t
@@ -333,6 +357,11 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
        */
       modifier_prop_count = 0;
       for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
+         VkImageFormatListCreateInfoKHR format_list_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR,
+            .viewFormatCount = chain->accepted_formats_count,
+            .pViewFormats = chain->accepted_formats,
+         };
          VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
             .pNext = NULL,
@@ -341,6 +370,8 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
             .queueFamilyIndexCount = pCreateInfo->queueFamilyIndexCount,
             .pQueueFamilyIndices = pCreateInfo->pQueueFamilyIndices,
          };
+         if (chain->accepted_formats_count)
+            mod_info.pNext = &format_list_info;
          VkPhysicalDeviceImageFormatInfo2 format_info = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
             .pNext = &mod_info,
@@ -409,6 +440,9 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
          goto fail;
       }
    }
+
+   if (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR)
+      image_info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR;
 
    result = wsi->CreateImage(chain->device, &image_info,
                              &chain->alloc, &image->image);

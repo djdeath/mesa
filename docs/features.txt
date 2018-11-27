@@ -461,6 +461,7 @@ Khronos extensions that are not part of any Vulkan version:
   VK_KHR_shared_presentable_image                       not started
   VK_KHR_surface                                        DONE (anv, radv)
   VK_KHR_swapchain                                      DONE (anv, radv)
+  VK_KHR_swapchain_mutable_format                       DONE (anv)
   VK_KHR_wayland_surface                                DONE (anv, radv)
   VK_KHR_win32_keyed_mutex                              not started
   VK_KHR_win32_surface                                  not started

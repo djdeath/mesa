@@ -1002,6 +1002,33 @@ static const VkExternalMemoryProperties android_image_props = {
       VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,
 };
 
+static bool
+format_supports_modifier(const struct anv_physical_device *physical_device,
+                         VkFormat format, uint64_t modifier)
+{
+   VkDrmFormatModifierPropertiesListEXT mod_list = {};
+   get_wsi_format_modifier_properties_list(physical_device,
+                                           format, &mod_list);
+
+   size_t sizeof_mod_props = mod_list.drmFormatModifierCount *
+                             sizeof(*mod_list.pDrmFormatModifierProperties);
+   mod_list.pDrmFormatModifierProperties = malloc(sizeof_mod_props);
+   get_wsi_format_modifier_properties_list(physical_device,
+                                           format, &mod_list);
+
+   for (int i = 0; i < mod_list.drmFormatModifierCount; i++) {
+      VkDrmFormatModifierPropertiesEXT *mod_props =
+         mod_list.pDrmFormatModifierProperties;
+      if (modifier == mod_props[i].drmFormatModifier) {
+         free(mod_list.pDrmFormatModifierProperties);
+         return true;
+      }
+   }
+
+   free(mod_list.pDrmFormatModifierProperties);
+   return false;
+}
+
 VkResult anv_GetPhysicalDeviceImageFormatProperties2(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceImageFormatInfo2*     base_info,
@@ -1009,6 +1036,8 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
 {
    ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
    const VkPhysicalDeviceExternalImageFormatInfo *external_info = NULL;
+   const VkPhysicalDeviceImageDrmFormatModifierInfoEXT *mod_info = NULL;
+   const VkImageFormatListCreateInfoKHR *imageformatlist = NULL;
    VkExternalImageFormatProperties *external_props = NULL;
    VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
    struct VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
@@ -1019,6 +1048,12 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
       switch (s->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
          external_info = (const void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
+         mod_info = (const void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR:
+         imageformatlist = (const void *) s;
          break;
       default:
          anv_debug_ignored_stype(s->sType);
@@ -1043,6 +1078,20 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
          break;
       }
    }
+
+   /* If we have multiple formats and a modifier, we need to make sure all
+    * formats support this modifier */
+   if (imageformatlist && mod_info)
+      for (int i = 0; i < imageformatlist->viewFormatCount; i++) {
+         VkFormat format = imageformatlist->pViewFormats[i];
+         uint64_t modifier = mod_info->drmFormatModifier;
+         if (!format_supports_modifier(physical_device, format, modifier)) {
+            result = VK_ERROR_FORMAT_NOT_SUPPORTED;
+            goto fail;
+         }
+      }
+   else if (imageformatlist || mod_info)
+      assert(!"is this even valid?"); //TODO
 
    result = anv_get_image_format_properties(physical_device, base_info,
                &base_props->imageFormatProperties, ycbcr_props);

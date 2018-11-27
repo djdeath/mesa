@@ -54,6 +54,9 @@ struct wsi_swapchain {
 
    bool use_prime_blit;
 
+   VkFormat *accepted_formats;
+   uint32_t accepted_formats_count;
+
    /* Command pools, one per queue family */
    VkCommandPool *cmd_pools;
 
