@@ -27,6 +27,7 @@ subdir('genxml')
 subdir('isl')
 subdir('common')
 subdir('compiler')
+subdir('igs')
 if with_tools.contains('intel') or with_tools.contains('intel-ui')
   subdir('tools')
 endif

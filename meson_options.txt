@@ -168,6 +168,12 @@ option(
   description : 'Location relative to prefix to put vulkan icds on install. Default: $datadir/vulkan/icd.d'
 )
 option(
+  'systemd-unit-dir',
+  type : 'string',
+  value : '',
+  description : 'Installation directory for systemd unit files'
+)
+option(
   'shared-glapi',
   type : 'boolean',
   value : true,
@@ -303,6 +309,12 @@ option(
   value : [],
   choices : ['etnaviv', 'freedreno', 'glsl', 'intel', 'intel-ui', 'nir', 'nouveau', 'xvmc', 'all'],
   description : 'List of tools to build. (Note: `intel-ui` selects `intel`)',
+)
+option(
+  'intel-service',
+  type : 'boolean',
+  value : false,
+  description : 'Whether to build the Intel GPU Service',
 )
 option(
   'power8',

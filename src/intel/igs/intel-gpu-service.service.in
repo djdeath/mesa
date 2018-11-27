@@ -1,0 +1,7 @@
+[Unit]
+Description=Intel GPU Service
+
+[Service]
+Type=dbus
+BusName=com.intel.GPU
+ExecStart=@install_libexecdir@/intel-gpu-service

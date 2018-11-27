@@ -1,5 +1,4 @@
-# Copyright © 2016 Intel Corporation
-# Copyright © 2016 Mauro Rossi <issor.oruam@gmail.com>
+# Copyright © 2019 Intel Corporation
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -18,18 +17,24 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-#
 
-LOCAL_PATH := $(call my-dir)
+# ---------------------------------------
+# Build libmesa_igs
+# ---------------------------------------
 
-# Import variables
-include $(LOCAL_PATH)/Makefile.sources
+include $(CLEAR_VARS)
 
-include $(LOCAL_PATH)/Android.blorp.mk
-include $(LOCAL_PATH)/Android.common.mk
-include $(LOCAL_PATH)/Android.compiler.mk
-include $(LOCAL_PATH)/Android.dev.mk
-include $(LOCAL_PATH)/Android.genxml.mk
-include $(LOCAL_PATH)/Android.isl.mk
-include $(LOCAL_PATH)/Android.igs.mk
-include $(LOCAL_PATH)/Android.vulkan.mk
+LOCAL_MODULE := libmesa_igs
+
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+
+LOCAL_SHARED_LIBRARIES := libdrm
+
+LOCAL_SRC_FILES := $(IGS_FILES)
+
+LOCAL_C_INCLUDES := \
+	$(MESA_TOP)/include/drm-uapi \
+	$(MESA_TOP)/src/intel
+
+include $(MESA_COMMON_MK)
+include $(BUILD_STATIC_LIBRARY)

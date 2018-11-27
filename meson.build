@@ -393,6 +393,11 @@ endif
 
 prog_pkgconfig = find_program('pkg-config')
 
+systemd_unit_dir = get_option('systemd-unit-dir')
+if systemd_unit_dir == ''
+  systemd_unit_dir = run_command(prog_pkgconfig, ['--variable=systemdsystemunitdir', 'systemd'])
+endif
+
 _vdpau = get_option('gallium-vdpau')
 if not system_has_kms_drm
   if _vdpau == 'true'

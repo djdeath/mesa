@@ -228,6 +228,10 @@ ISL_TILED_MEMCPY_SSE41_FILES = \
 ISL_TILED_MEMCPY_DEP_FILES = \
         isl/isl_tiled_memcpy.c
 
+IGS_FILES = \
+        igs/igs_client.h \
+        igs/igs_ioctl_client.h
+
 VULKAN_FILES := \
 	vulkan/anv_allocator.c \
 	vulkan/anv_android.h \

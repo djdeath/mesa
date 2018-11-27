@@ -1,0 +1,145 @@
+<!DOCTYPE node PUBLIC
+"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="/" xmlns:doc="http://www.freedesktop.org/dbus/1.0/doc.dtd">
+
+  <!-- ********************************************************************** -->
+  <!--
+      com.intel.GPU.Service:
+      @short_description: GPU services singleton
+
+      Interface for top-level manager singleton object located at the
+      object path <literal>/com/intel/GPU</literal>.
+  -->
+  <interface name="com.intel.GPU">
+
+    <!--
+        AcquireFrequencyOverride:
+
+        Acquires access to set the global frequency of a device. Only
+        one application is allowed to override frequency settings at a
+        time for a given device. A path to the object is returned to
+        access the object implementing the com.intel.GPU.Frequency
+        interface.
+    -->
+    <method name="AcquireFrequencyOverride">
+      <arg name="device" type="u" direction="in"/>
+
+      <arg name="path" type="s" direction="out"/>
+    </method>
+
+    <!--
+        AcquirePerformanceDeviceForContext:
+
+        Acquires the performance device for a particular context. A
+        device and a context must be given as input.
+    -->
+    <method name="AcquirePerformanceDeviceForContext">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="1"/>
+      <arg name="drm_fd" type="h" direction="in"/>
+      <arg name="context" type="u" direction="in"/>
+      <arg name="sample_oa" type="b" direction="in"/>
+      <arg name="metric_set" type="i" direction="in"/>
+      <arg name="oa_format" type="i" direction="in"/>
+      <arg name="oa_exponent" type="i" direction="in"/>
+
+      <arg name="perf_fd" type="h" direction="out"/>
+    </method>
+
+    <!--
+        AcquirePerformanceDevice:
+
+        Acquires the performance device for the entire system. A
+        device must be given as input.
+    -->
+    <method name="AcquirePerformanceDevice">
+      <annotation name="org.gtk.GDBus.C.UnixFD" value="1"/>
+      <arg name="drm_fd" type="h" direction="in"/>
+      <arg name="sample_oa" type="b" direction="in"/>
+      <arg name="metric_set" type="i" direction="in"/>
+      <arg name="oa_format" type="i" direction="in"/>
+      <arg name="oa_exponent" type="i" direction="in"/>
+
+      <arg name="perf_fd" type="h" direction="out"/>
+    </method>
+
+    <!--
+        RegisterPerformanceConfiguration:
+
+        Register a metric set ID for a set of registers and values on
+        a device. *_registers arguments are arrays of pairs (register,
+        value).
+    -->
+    <method name="RegisterPerformanceConfiguration">
+      <arg name="device" type="u" direction="in"/>
+      <arg name="uuid" type="s" direction="in"/>
+      <arg name="mux_registers" type="au" direction="in"/>
+      <arg name="boolean_registers" type="au" direction="in"/>
+      <arg name="flex_registers" type="au" direction="in"/>
+
+      <arg name="metric_set" type="u" direction="out"/>
+    </method>
+
+    <!--
+        UnregisterPerformanceConfiguration:
+
+        Unregister a metric set ID on a device.
+    -->
+    <method name="UnregisterPerformanceConfiguration">
+      <arg name="device" type="u" direction="in"/>
+      <arg name="metric_set" type="u" direction="in"/>
+    </method>
+
+    <property name="CanRegisterConfigurations" type="b" access="read"/>
+
+  </interface>
+
+  <!-- ********************************************************************** -->
+
+  <!-- ********************************************************************** -->
+  <!--
+      com.intel.GPU.Frequency:
+      @short_description: Frequency setting object
+
+      Interface for the device frequency manager object located at the
+      object path <literal>/com/intel/GPU/Frequency/XXX</literal>.
+
+      Note that when the application, that has requested the creation
+      of an object with this interface, disappear from the bus, the
+      object also disappears and the operating frequency of the device
+      is restored to what it was at the time of the creation of the
+      object.
+  -->
+  <interface name="com.intel.GPU.Frequency">
+
+    <!--
+        SetFrequencyRange:
+
+        Sets the operating frequency range of the device.
+    -->
+    <method name="SetFrequency">
+      <arg name="min_frequency" type="u" direction="in"/>
+      <arg name="max_frequency" type="u" direction="in"/>
+      <arg name="boost_frequency" type="u" direction="in"/>
+    </method>
+
+    <!--
+        Release:
+
+        Releases access to set the global frequency of a device.
+    -->
+    <method name="Release"/>
+
+    <!-- Device: the device associated with this frequency setting
+         object
+    -->
+    <property name="Device" type="i" access="read"/>
+    <property name="MinFrequency" type="u" access="read"/>
+    <property name="MaxFrequency" type="u" access="read"/>
+    <property name="BoostFrequency" type="u" access="read"/>
+
+  </interface>
+
+  <!-- ********************************************************************** -->
+
+</node>

@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=com.intel.GPU
+Exec=@install_libexecdir@/intel-gpu-service
+User=root
+SystemdService=intel-gpu-service.service
