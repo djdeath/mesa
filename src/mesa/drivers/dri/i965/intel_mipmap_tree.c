@@ -420,6 +420,11 @@ make_surface(struct brw_context *brw, GLenum target, mesa_format format,
       assert(mt->surf.size_B % mt->surf.row_pitch_B == 0);
 
    if (!bo) {
+      if (mt->surf.size_B > ((uint64_t)brw->ctx.Const.MaxTextureMbytes * 1024 * 1024)) {
+         DBG("%s texture too large %"PRIu64"\n", __func__, mt->surf.size_B);
+         goto fail;
+      }
+
       mt->bo = brw_bo_alloc_tiled(brw->bufmgr, "isl-miptree",
                                   mt->surf.size_B,
                                   BRW_MEMZONE_OTHER,
