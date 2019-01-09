@@ -2101,6 +2101,8 @@ enum anv_cmd_buffer_exec_mode {
 struct anv_cmd_buffer {
    VK_LOADER_DATA                               _loader_data;
 
+   int location;
+
    struct anv_device *                          device;
 
    struct anv_cmd_pool *                        pool;

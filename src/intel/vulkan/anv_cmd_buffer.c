@@ -210,6 +210,7 @@ static VkResult anv_create_cmd_buffer(
 
    cmd_buffer->batch.status = VK_SUCCESS;
 
+   cmd_buffer->location = 8;
    cmd_buffer->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
    cmd_buffer->device = device;
    cmd_buffer->pool = pool;
@@ -276,6 +277,16 @@ VkResult anv_AllocateCommandBuffers(
 static void
 anv_cmd_buffer_destroy(struct anv_cmd_buffer *cmd_buffer)
 {
+   cmd_buffer->device->workaround_bo.map =
+      anv_gem_mmap(cmd_buffer->device, cmd_buffer->device->workaround_bo.gem_handle,
+                   0, cmd_buffer->device->workaround_bo.size, 0);
+   for (int i = 8; i < cmd_buffer->location; i += 4) {
+      uint32_t *value = (uint32_t *)(cmd_buffer->device->workaround_bo.map + i);
+      fprintf(stderr, "value%04i = 0x%x\n", i, *value);
+   }
+
+   gen_clflush_range(cmd_buffer->device->workaround_bo.map, 4096);
+   
    list_del(&cmd_buffer->pool_link);
 
    anv_cmd_buffer_fini_batch_bo_chain(cmd_buffer);

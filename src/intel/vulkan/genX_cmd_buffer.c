@@ -482,6 +482,7 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
 #define MI_PREDICATE_SRC0    0x2400
 #define MI_PREDICATE_SRC1    0x2408
 #define MI_PREDICATE_RESULT  0x2418
+#define MI_PREDICATE_DATA    0x2410
 
 static void
 set_image_compressed_bit(struct anv_cmd_buffer *cmd_buffer,
@@ -3124,12 +3125,51 @@ emit_draw_count_predicate_with_conditional_render(
    dw[3] = mi_alu(MI_ALU_SUB, 0, 0);
    dw[4] = mi_alu(MI_ALU_STORE, tmp_result_reg, MI_ALU_CF);
 
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+      srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                    cmd_buffer->location };
+      srm.RegisterAddress  = CS_GPR(condition_reg);
+   }
+   cmd_buffer->location += 4;
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+      srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                    cmd_buffer->location };
+      srm.RegisterAddress  = CS_GPR(draw_index_reg);
+   }
+   cmd_buffer->location += 4;
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+      srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                    cmd_buffer->location };
+      srm.RegisterAddress  = CS_GPR(draw_count_reg);
+   }
+   cmd_buffer->location += 4;
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), srm) {
+      srm.Address    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                              cmd_buffer->location };
+      srm.ImmediateData = 42;
+   }
+   cmd_buffer->location += 4 ;
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+      srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                    cmd_buffer->location };
+      srm.RegisterAddress  = CS_GPR(tmp_result_reg);
+   }
+   cmd_buffer->location += 4 ;
+
    /* & condition */
    dw = anv_batch_emitn(&cmd_buffer->batch, 5, GENX(MI_MATH));
    dw[1] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCA, tmp_result_reg);
    dw[2] = mi_alu(MI_ALU_LOAD, MI_ALU_SRCB, condition_reg);
    dw[3] = mi_alu(MI_ALU_AND, 0, 0);
    dw[4] = mi_alu(MI_ALU_STORE, tmp_result_reg, MI_ALU_ACCU);
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+      srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                    cmd_buffer->location };
+      srm.RegisterAddress  = CS_GPR(tmp_result_reg);
+   }
+   cmd_buffer->location += 4 ;
 
    emit_lrr(&cmd_buffer->batch, MI_PREDICATE_RESULT, CS_GPR(tmp_result_reg));
 }
@@ -3221,6 +3261,15 @@ void genX(CmdDrawIndexedIndirectCountKHR)(
 
    genX(cmd_buffer_flush_state)(cmd_buffer);
 
+   {
+      uint32_t *map = anv_gem_mmap(cmd_buffer->device,
+                                   buffer->address.bo->gem_handle,
+                                   0, 4096, 0);
+      
+      fprintf(stderr, "buffer count=%x\n", *map);
+
+      anv_gem_munmap(map, 4096);
+   }
    struct anv_address count_address =
       anv_address_add(count_buffer->address, countBufferOffset);
 
@@ -4298,13 +4347,17 @@ void genX(CmdBeginConditionalRenderingEXT)(
 
     cmd_state->conditional_render_enabled = true;
 
-    /* Needed to ensure the memory is coherent for the MI_LOAD_REGISTER_MEM
-     * command when loading the values into the predicate source registers.
-     */
-    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
-      pc.PipeControlFlushEnable = true;
-    }
-
+    /* { */
+    /*    uint32_t *map = anv_gem_mmap(cmd_buffer->device, */
+    /*                                 buffer->address.bo->gem_handle, */
+    /*                                 0, 4096, 0); */
+       
+    /*    fprintf(stderr, "buffer count=%x offset=%x\n", */
+    /*            *map, pConditionalRenderingBegin->offset); */
+       
+    /*    anv_gem_munmap(map, 4096); */
+    /* } */
+    
     /* Section 19.4 of the Vulkan 1.1.85 spec says:
      *
      *    If the value of the predicate in buffer memory changes
@@ -4317,18 +4370,112 @@ void genX(CmdBeginConditionalRenderingEXT)(
      * So it's perfectly fine to read a value from the buffer once.
      */
 
-    emit_lrm(&cmd_buffer->batch, MI_PREDICATE_SRC0, value_address);
+    for (int i = 0; i < 100; i++) {
+       anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), srm) {
+          srm.Address    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                  0 };
+          srm.ImmediateData = 42;
+       }
+    }
+
+    #define TIMESTAMP 0x2358
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = TIMESTAMP;
+    }
+    cmd_buffer->location += 4;
+
+
+    emit_lri(&cmd_buffer->batch, CS_GPR(MI_ALU_REG0), 42);
+    emit_lrr(&cmd_buffer->batch, MI_PREDICATE_SRC0, CS_GPR(MI_ALU_REG0));
+    emit_lri(&cmd_buffer->batch, MI_PREDICATE_RESULT, 42);
+    fprintf(stderr, "dummy predicate src0 location = %i\n", cmd_buffer->location);
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = MI_PREDICATE_RESULT;
+    }
+    cmd_buffer->location += 4;
+
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = TIMESTAMP;
+    }
+    cmd_buffer->location += 4;
+
+    
+    /* Needed to ensure the memory is coherent for the MI_LOAD_REGISTER_MEM
+     * command when loading the values into the predicate source registers.
+     */
+    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+      pc.DCFlushEnable = true;
+      pc.DepthCacheFlushEnable = true;
+      pc.RenderTargetCacheFlushEnable = true;
+      pc.PipeControlFlushEnable = true;
+      pc.StallAtPixelScoreboard = true;
+      pc.CommandStreamerStallEnable = true;
+    }
+
+    emit_lrm(&cmd_buffer->batch, CS_GPR(MI_ALU_REG0), value_address);
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = CS_GPR(MI_ALU_REG0);
+    }
+    cmd_buffer->location += 4;
+    emit_lri(&cmd_buffer->batch, CS_GPR(MI_ALU_REG15), 42);
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = CS_GPR(MI_ALU_REG15);
+    }
+    cmd_buffer->location += 4;
+    emit_lrr(&cmd_buffer->batch, MI_PREDICATE_SRC0, CS_GPR(MI_ALU_REG0));
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = MI_PREDICATE_SRC0;
+    }
+    cmd_buffer->location += 4;
     /* Zero the top 32-bits of MI_PREDICATE_SRC0 */
     emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC0 + 4, 0);
     emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC1, 0);
     emit_lri(&cmd_buffer->batch, MI_PREDICATE_SRC1 + 4, 0);
 
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = MI_PREDICATE_SRC0;
+    }
+    cmd_buffer->location += 4;
+    fprintf(stderr, "predicate src0 = %i inverted=%i\n",
+            cmd_buffer->location, inverted);
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = MI_PREDICATE_SRC1;
+    }
+    cmd_buffer->location += 4;
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = MI_PREDICATE_DATA;
+    }
+    cmd_buffer->location += 4;
     anv_batch_emit(&cmd_buffer->batch, GENX(MI_PREDICATE), mip) {
         mip.LoadOperation    = inverted ? LOAD_LOAD : LOAD_LOADINV;
         mip.CombineOperation = COMBINE_SET;
         mip.CompareOperation = COMPARE_SRCS_EQUAL;
     }
 
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_REGISTER_MEM), srm) {
+       srm.MemoryAddress    = (struct anv_address) { &cmd_buffer->device->workaround_bo,
+                                                     cmd_buffer->location };
+       srm.RegisterAddress  = MI_PREDICATE_RESULT;
+    }
+    cmd_buffer->location += 4;
     /* Calculate predicate result once and store it in MI_ALU_REG15
      * to prevent recalculating it when interacting with
      * VK_KHR_draw_indirect_count which also uses predicates.
