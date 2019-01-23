@@ -191,6 +191,18 @@ __vk_find_struct(void *start, VkStructureType sType)
    return NULL;
 }
 
+static inline void
+__vk_append_struct(void *start, void *element)
+{
+   vk_foreach_struct(s, start) {
+      if (s->pNext)
+         continue;
+
+      s->pNext = element;
+      break;
+   }
+}
+
 #define vk_find_struct(__start, __sType) \
    __vk_find_struct((__start), VK_STRUCTURE_TYPE_##__sType)
 

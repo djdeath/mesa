@@ -311,6 +311,12 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
    struct wsi_image_create_info image_wsi_info;
    VkImageDrmFormatModifierListCreateInfoEXT image_modifier_list;
 
+   VkImageFormatListCreateInfoKHR image_format_list = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR,
+      .viewFormatCount = chain->accepted_formats_count,
+      .pViewFormats = chain->accepted_formats,
+   };
+
    uint32_t image_modifier_count = 0, modifier_prop_count = 0;
    struct VkDrmFormatModifierPropertiesEXT *modifier_props = NULL;
    uint64_t *image_modifiers = NULL;
@@ -357,11 +363,6 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
        */
       modifier_prop_count = 0;
       for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
-         VkImageFormatListCreateInfoKHR format_list_info = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR,
-            .viewFormatCount = chain->accepted_formats_count,
-            .pViewFormats = chain->accepted_formats,
-         };
          VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
             .pNext = NULL,
@@ -371,7 +372,7 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
             .pQueueFamilyIndices = pCreateInfo->pQueueFamilyIndices,
          };
          if (chain->accepted_formats_count)
-            mod_info.pNext = &format_list_info;
+            mod_info.pNext = &image_format_list;
          VkPhysicalDeviceImageFormatInfo2 format_info = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
             .pNext = &mod_info,
@@ -441,8 +442,10 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
       }
    }
 
-   if (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR)
+   if (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) {
       image_info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR;
+      __vk_append_struct(&image_info, &image_format_list);
+   }
 
    result = wsi->CreateImage(chain->device, &image_info,
                              &chain->alloc, &image->image);
