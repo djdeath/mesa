@@ -288,6 +288,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_intel_dev \
 	libmesa_intel_common \
 	libmesa_isl \
+	libmesa_igs \
 	libmesa_blorp \
 	libmesa_intel_compiler
 

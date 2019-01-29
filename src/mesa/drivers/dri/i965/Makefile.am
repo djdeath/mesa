@@ -104,6 +104,7 @@ libi965_dri_la_LIBADD = \
 	$(top_builddir)/src/intel/isl/libisl.la \
 	$(top_builddir)/src/intel/compiler/libintel_compiler.la \
 	$(top_builddir)/src/intel/blorp/libblorp.la \
+	$(top_builddir)/src/intel/igs/libigs.la \
 	$(I965_PERGEN_LIBS) \
 	$(LIBDRM_LIBS)
 

@@ -74,6 +74,7 @@
 #include "brw_performance_query.h"
 #include "brw_oa_metrics.h"
 #include "intel_batchbuffer.h"
+#include "igs/igs_client.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
 
@@ -947,26 +948,9 @@ open_i915_perf_oa_stream(struct brw_context *brw,
                          int drm_fd,
                          uint32_t ctx_id)
 {
-   uint64_t properties[] = {
-      /* Single context sampling */
-      DRM_I915_PERF_PROP_CTX_HANDLE, ctx_id,
-
-      /* Include OA reports in samples */
-      DRM_I915_PERF_PROP_SAMPLE_OA, true,
-
-      /* OA unit configuration */
-      DRM_I915_PERF_PROP_OA_METRICS_SET, metrics_set_id,
-      DRM_I915_PERF_PROP_OA_FORMAT, report_format,
-      DRM_I915_PERF_PROP_OA_EXPONENT, period_exponent,
-   };
-   struct drm_i915_perf_open_param param = {
-      .flags = I915_PERF_FLAG_FD_CLOEXEC |
-               I915_PERF_FLAG_FD_NONBLOCK |
-               I915_PERF_FLAG_DISABLED,
-      .num_properties = ARRAY_SIZE(properties) / 2,
-      .properties_ptr = (uintptr_t) properties,
-   };
-   int fd = drmIoctl(drm_fd, DRM_IOCTL_I915_PERF_OPEN, &param);
+   int fd = igs_client_acquire_perf(drm_fd, metrics_set_id,
+                                    report_format, period_exponent,
+                                    ctx_id, -1);
    if (fd == -1) {
       DBG("Error opening i915 perf OA stream: %m\n");
       return false;
@@ -1844,29 +1828,6 @@ enumerate_sysfs_metrics(struct brw_context *brw)
    closedir(metricsdir);
 }
 
-static bool
-kernel_has_dynamic_config_support(struct brw_context *brw)
-{
-   __DRIscreen *screen = brw->screen->driScrnPriv;
-
-   hash_table_foreach(brw->perfquery.oa_metrics_table, entry) {
-      struct brw_perf_query_info *query = entry->data;
-      char config_path[280];
-      uint64_t config_id;
-
-      snprintf(config_path, sizeof(config_path), "%s/metrics/%s/id",
-               brw->perfquery.sysfs_dev_dir, query->guid);
-
-      /* Look for the test config, which we know we can't replace. */
-      if (read_file_uint64(config_path, &config_id) && config_id == 1) {
-         return drmIoctl(screen->fd, DRM_IOCTL_I915_PERF_REMOVE_CONFIG,
-                         &config_id) < 0 && errno == ENOENT;
-      }
-   }
-
-   return false;
-}
-
 static void
 init_oa_configs(struct brw_context *brw)
 {
@@ -1874,10 +1835,9 @@ init_oa_configs(struct brw_context *brw)
 
    hash_table_foreach(brw->perfquery.oa_metrics_table, entry) {
       const struct brw_perf_query_info *query = entry->data;
-      struct drm_i915_perf_oa_config config;
       char config_path[280];
       uint64_t config_id;
-      int ret;
+      uint32_t ret;
 
       snprintf(config_path, sizeof(config_path), "%s/metrics/%s/id",
                brw->perfquery.sysfs_dev_dir, query->guid);
@@ -1889,23 +1849,17 @@ init_oa_configs(struct brw_context *brw)
          continue;
       }
 
-      memset(&config, 0, sizeof(config));
-
-      memcpy(config.uuid, query->guid, sizeof(config.uuid));
-
-      config.n_mux_regs = query->n_mux_regs;
-      config.mux_regs_ptr = (uintptr_t) query->mux_regs;
-
-      config.n_boolean_regs = query->n_b_counter_regs;
-      config.boolean_regs_ptr = (uintptr_t) query->b_counter_regs;
-
-      config.n_flex_regs = query->n_flex_regs;
-      config.flex_regs_ptr = (uintptr_t) query->flex_regs;
-
-      ret = drmIoctl(screen->fd, DRM_IOCTL_I915_PERF_ADD_CONFIG, &config);
-      if (ret < 0) {
-         DBG("Failed to load \"%s\" (%s) metrics set in kernel: %s\n",
-             query->name, query->guid, strerror(errno));
+      ret = igs_client_register_configuration(screen->fd,
+                                              query->guid,
+                                              2 * query->n_mux_regs,
+                                              (const uint32_t *) query->mux_regs,
+                                              2 * query->n_b_counter_regs,
+                                              (const uint32_t *) query->b_counter_regs,
+                                              2 * query->n_flex_regs,
+                                              (const uint32_t *) query->flex_regs);
+      if (ret == 0) {
+         DBG("Failed to load \"%s\" (%s) metrics set in kernel\n",
+             query->name, query->guid);
          continue;
       }
 
@@ -2169,6 +2123,9 @@ brw_init_perf_query_info(struct gl_context *ctx)
 
    oa_register = get_register_queries_function(devinfo);
 
+#ifdef HAVE_IGS
+   i915_perf_oa_available = true;
+#else
    /* The existence of this sysctl parameter implies the kernel supports
     * the i915 perf interface.
     */
@@ -2188,6 +2145,7 @@ brw_init_perf_query_info(struct gl_context *ctx)
             i915_perf_oa_available = true;
       }
    }
+#endif
 
    if (i915_perf_oa_available &&
        oa_register &&
@@ -2203,8 +2161,9 @@ brw_init_perf_query_info(struct gl_context *ctx)
        */
       oa_register(brw);
 
+      __DRIscreen *screen = brw->screen->driScrnPriv;
       if (likely((INTEL_DEBUG & DEBUG_NO_OACONFIG) == 0) &&
-          kernel_has_dynamic_config_support(brw))
+          igs_client_can_register_configurations(screen->fd))
          init_oa_configs(brw);
       else
          enumerate_sysfs_metrics(brw);
