@@ -28,6 +28,7 @@
 
 #include <stdint.h>
 #include "compiler/shader_enums.h"
+#include "util/macros.h"
 
 #ifdef __cplusplus
 extern "C" {
