@@ -185,7 +185,7 @@ opt_cmod_propagation_local(bblock_t *block, vec4_visitor *v)
                    * The added MOV will most likely be removed later.  In the
                    * worst case, it should be cheaper to schedule.
                    */
-                  temp.swizzle = inst->src[0].swizzle;
+                  temp.swizzle = brw_swizzle_for_mask(inst->dst.writemask);
                   temp.type = scan_inst->src[0].type;
 
                   vec4_instruction *mov = v->MOV(scan_inst->dst, temp);
