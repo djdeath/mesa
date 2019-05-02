@@ -95,6 +95,31 @@ static const uint64_t stage_to_debug[] = {
    [MESA_SHADER_COMPUTE] = DEBUG_CS,
 };
 
+struct anv_spirv_debug_data {
+   struct anv_device *device;
+   const struct anv_shader_module *module;
+};
+
+static void anv_spirv_nir_debug(void *private_data,
+                                enum nir_spirv_debug_level level,
+                                size_t spirv_offset,
+                                const char *message)
+{
+   struct anv_spirv_debug_data *debug_data = private_data;
+   static const VkDebugReportFlagsEXT vk_flags[] = {
+      [NIR_SPIRV_DEBUG_LEVEL_INFO] = VK_DEBUG_REPORT_INFORMATION_BIT_EXT,
+      [NIR_SPIRV_DEBUG_LEVEL_WARNING] = VK_DEBUG_REPORT_WARNING_BIT_EXT,
+      [NIR_SPIRV_DEBUG_LEVEL_ERROR] = VK_DEBUG_REPORT_ERROR_BIT_EXT,
+   };
+
+   vk_debug_report(&debug_data->device->instance->debug_report_callbacks,
+                   vk_flags[level],
+                   VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT,
+                   (uint64_t) (uintptr_t) debug_data->module,
+                   0, 0, "anv",
+                   message);
+}
+
 /* Eventually, this will become part of anv_CreateShader.  Unfortunately,
  * we can't do that yet because we don't have the ability to copy nir.
  */
@@ -136,6 +161,10 @@ anv_shader_compile_to_nir(struct anv_device *device,
 
    nir_address_format ssbo_addr_format =
       anv_nir_ssbo_addr_format(pdevice, device->robust_buffer_access);
+   struct anv_spirv_debug_data spirv_debug_data = {
+      .device = device,
+      .module = module,
+   };
    struct spirv_to_nir_options spirv_options = {
       .lower_workgroup_access_to_offsets = true,
       .caps = {
@@ -177,6 +206,10 @@ anv_shader_compile_to_nir(struct anv_device *device,
       .phys_ssbo_ptr_type = glsl_vector_type(GLSL_TYPE_UINT64, 1),
       .push_const_ptr_type = glsl_uint_type(),
       .shared_ptr_type = glsl_uint_type(),
+      .debug = {
+         .func = anv_spirv_nir_debug,
+         .private_data = &spirv_debug_data,
+      },
    };
 
 
