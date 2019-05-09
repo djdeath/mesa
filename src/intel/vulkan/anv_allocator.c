@@ -195,7 +195,7 @@ static VkResult
 anv_state_table_expand_range(struct anv_state_table *table, uint32_t size)
 {
    void *map;
-   struct anv_mmap_cleanup *cleanup;
+   struct anv_state_table_cleanup *cleanup;
 
    /* Assert that we only ever grow the pool */
    assert(size >= table->state.end);
@@ -208,7 +208,7 @@ anv_state_table_expand_range(struct anv_state_table *table, uint32_t size)
    if (!cleanup)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   *cleanup = ANV_MMAP_CLEANUP_INIT;
+   *cleanup = ANV_STATE_TABLE_CLEANUP_INIT;
 
    /* Just leak the old map until we destroy the pool.  We can't munmap it
     * without races or imposing locking on the block allocate fast path. On
