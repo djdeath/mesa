@@ -43,8 +43,8 @@ u_vector_init(struct u_vector *vector, uint32_t element_size, uint32_t size)
    vector->head = 0;
    vector->tail = 0;
    vector->element_size = element_size;
-   vector->size = size;
-   vector->data = malloc(size);
+   vector->size = element_size * size;
+   vector->data = malloc(vector->size);
 
    return vector->data != NULL;
 }
