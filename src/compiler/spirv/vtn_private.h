@@ -269,6 +269,8 @@ struct vtn_ssa_value {
    struct vtn_ssa_value *transposed;
 
    const struct glsl_type *type;
+
+
 };
 
 enum vtn_base_type {
@@ -422,6 +424,9 @@ struct vtn_access_chain {
     * stack but the real length is given by the length field.
     */
    struct vtn_access_link link[1];
+
+   /* Access qualifiers */
+   enum gl_access_qualifier access;
 };
 
 enum vtn_variable_mode {
@@ -646,35 +651,6 @@ vtn_untyped_value(struct vtn_builder *b, uint32_t value_id)
 }
 
 static inline struct vtn_value *
-vtn_push_value(struct vtn_builder *b, uint32_t value_id,
-               enum vtn_value_type value_type)
-{
-   struct vtn_value *val = vtn_untyped_value(b, value_id);
-
-   vtn_fail_if(val->value_type != vtn_value_type_invalid,
-               "SPIR-V id %u has already been written by another instruction",
-               value_id);
-
-   val->value_type = value_type;
-   return &b->values[value_id];
-}
-
-static inline struct vtn_value *
-vtn_push_ssa(struct vtn_builder *b, uint32_t value_id,
-             struct vtn_type *type, struct vtn_ssa_value *ssa)
-{
-   struct vtn_value *val;
-   if (type->base_type == vtn_base_type_pointer) {
-      val = vtn_push_value(b, value_id, vtn_value_type_pointer);
-      val->pointer = vtn_pointer_from_ssa(b, ssa->def, type);
-   } else {
-      val = vtn_push_value(b, value_id, vtn_value_type_ssa);
-      val->ssa = ssa;
-   }
-   return val;
-}
-
-static inline struct vtn_value *
 vtn_value(struct vtn_builder *b, uint32_t value_id,
           enum vtn_value_type value_type)
 {
@@ -707,6 +683,16 @@ vtn_constant_uint(struct vtn_builder *b, uint32_t value_id)
 }
 
 struct vtn_ssa_value *vtn_ssa_value(struct vtn_builder *b, uint32_t value_id);
+
+struct vtn_value *vtn_push_value(struct vtn_builder *b, uint32_t value_id,
+                                 enum vtn_value_type value_type);
+
+struct vtn_value *vtn_push_value_pointer(struct vtn_builder *b,
+                                         uint32_t value_id,
+                                         struct vtn_pointer *ptr);
+
+struct vtn_value *vtn_push_ssa(struct vtn_builder *b, uint32_t value_id,
+                               struct vtn_type *type, struct vtn_ssa_value *ssa);
 
 struct vtn_ssa_value *vtn_create_ssa_value(struct vtn_builder *b,
                                            const struct glsl_type *type);

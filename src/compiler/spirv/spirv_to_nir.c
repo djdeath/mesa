@@ -2089,13 +2089,12 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
          vtn_value(b, w[4], vtn_value_type_pointer)->pointer;
       return;
    } else if (opcode == SpvOpImage) {
-      struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_pointer);
       struct vtn_value *src_val = vtn_untyped_value(b, w[3]);
       if (src_val->value_type == vtn_value_type_sampled_image) {
-         val->pointer = src_val->sampled_image->image;
+         vtn_push_value_pointer(b, w[2], src_val->sampled_image->image);
       } else {
          vtn_assert(src_val->value_type == vtn_value_type_pointer);
-         val->pointer = src_val->pointer;
+         vtn_push_value_pointer(b, w[2], src_val->pointer);
       }
       return;
    }
@@ -2605,6 +2604,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
       intrin->src[1] = nir_src_for_ssa(expand_to_vec4(&b->nb, image.coord));
       intrin->src[2] = nir_src_for_ssa(image.sample);
    }
+
+   nir_intrinsic_set_access(intrin, image.image->access);
 
    switch (opcode) {
    case SpvOpAtomicLoad:
