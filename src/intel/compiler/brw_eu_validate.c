@@ -1317,6 +1317,13 @@ region_alignment_rules(const struct gen_device_info *devinfo,
                         subreg;
       ERROR_IF(offset >= 64,
                "A source cannot span more than 2 adjacent GRF registers");
+
+      if (devinfo->gen >= 11 || devinfo->is_geminilake) {
+         ERROR_IF(i >= 1 && (type == BRW_REGISTER_TYPE_B ||
+                             type == BRW_REGISTER_TYPE_UB),
+                  "Byte data type is not supported for src1/2 register regioning. This includes "
+                  "byte broadcast as well.");
+      }
    }
 
    if (desc->ndst == 0 || dst_is_null(devinfo, inst))
