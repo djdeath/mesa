@@ -36,6 +36,12 @@
 
 #include "vk_format_info.h"
 
+static const enum isl_surf_dim vk_to_isl_surf_dim[] = {
+   [VK_IMAGE_TYPE_1D] = ISL_SURF_DIM_1D,
+   [VK_IMAGE_TYPE_2D] = ISL_SURF_DIM_2D,
+   [VK_IMAGE_TYPE_3D] = ISL_SURF_DIM_3D,
+};
+
 static isl_surf_usage_flags_t
 choose_isl_surf_usage(VkImageCreateFlags vk_create_flags,
                       VkImageUsageFlags vk_usage,
@@ -509,12 +515,6 @@ make_surface(struct anv_device *device,
    VkResult result;
    bool ok;
 
-   static const enum isl_surf_dim vk_to_isl_surf_dim[] = {
-      [VK_IMAGE_TYPE_1D] = ISL_SURF_DIM_1D,
-      [VK_IMAGE_TYPE_2D] = ISL_SURF_DIM_2D,
-      [VK_IMAGE_TYPE_3D] = ISL_SURF_DIM_3D,
-   };
-
    image->extent = anv_sanitize_image_extent(image->type, image->extent);
 
    const unsigned plane = anv_image_aspect_to_plane(image->aspects, aspect);
@@ -610,37 +610,35 @@ make_surface(struct anv_device *device,
    return VK_SUCCESS;
 }
 
-static uint32_t
-score_drm_format_mod(uint64_t modifier)
-{
-   switch (modifier) {
-   case DRM_FORMAT_MOD_LINEAR: return 1;
-   case I915_FORMAT_MOD_X_TILED: return 2;
-   case I915_FORMAT_MOD_Y_TILED: return 3;
-   case I915_FORMAT_MOD_Y_TILED_CCS: return 4;
-   default: unreachable("bad DRM format modifier");
-   }
-}
-
 static const struct isl_drm_modifier_info *
-choose_drm_format_mod(const struct anv_physical_device *device,
+choose_drm_format_mod(const struct anv_device *device,
+                      const VkImageCreateInfo *pCreateInfo,
                       uint32_t modifier_count, const uint64_t *modifiers)
 {
-   uint64_t best_mod = UINT64_MAX;
-   uint32_t best_score = 0;
-
-   for (uint32_t i = 0; i < modifier_count; ++i) {
-      uint32_t score = score_drm_format_mod(modifiers[i]);
-      if (score > best_score) {
-         best_mod = modifiers[i];
-         best_score = score;
-      }
-   }
-
-   if (best_score > 0)
-      return isl_drm_modifier_get_info(best_mod);
-   else
-      return NULL;
+   const  struct anv_format_plane plane_format =
+      anv_get_format_plane(&device->info, pCreateInfo->format,
+                           /* Assume color for modifier, that's all we support
+                            * at the moment.
+                            */
+                           VK_IMAGE_ASPECT_COLOR_BIT,
+                           pCreateInfo->tiling);
+   uint64_t selected_modifier =
+      isl_drm_modifier_select(&device->isl_dev,
+                              modifiers, modifier_count,
+                              .dim = vk_to_isl_surf_dim[pCreateInfo->imageType],
+                              .format = plane_format.isl_format,
+                              .width = pCreateInfo->extent.width,
+                              .height = pCreateInfo->extent.height,
+                              .depth = pCreateInfo->extent.depth,
+                              .levels = pCreateInfo->mipLevels,
+                              .array_len = pCreateInfo->arrayLayers,
+                              .samples = pCreateInfo->samples,
+                              .usage = (ISL_SURF_USAGE_RENDER_TARGET_BIT |
+                                        ISL_SURF_USAGE_TEXTURE_BIT |
+                                        ISL_SURF_USAGE_STORAGE_BIT |
+                                        ISL_SURF_USAGE_DISPLAY_BIT),
+                              .tiling_flags = ISL_TILING_ANY_MASK);
+   return isl_drm_modifier_get_info(selected_modifier);
 }
 
 VkResult
@@ -664,7 +662,7 @@ anv_image_create(VkDevice _device,
       const VkImageDrmFormatModifierListCreateInfoEXT *mod_info =
          vk_find_struct_const(pCreateInfo->pNext,
                               IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
-      isl_mod_info = choose_drm_format_mod(device->physical,
+      isl_mod_info = choose_drm_format_mod(device, pCreateInfo,
                                            mod_info->drmFormatModifierCount,
                                            mod_info->pDrmFormatModifiers);
       assert(isl_mod_info);
@@ -716,6 +714,16 @@ anv_image_create(VkDevice _device,
       return VK_SUCCESS;
    }
 
+   /* When a modifier is specified by the caller, request display usage as
+    * this could be one of the use case for modifier when pageflipping
+    * directly on KMS.
+    */
+   isl_surf_usage_flags_t isl_extra_usage_flags =
+      create_info->isl_extra_usage_flags;
+   if (image->drm_format_mod != DRM_FORMAT_MOD_INVALID) {
+      isl_extra_usage_flags |= ISL_SURF_USAGE_DISPLAY_BIT;
+   }
+
    const struct anv_format *format = anv_get_format(image->vk_format);
    assert(format != NULL);
 
@@ -732,7 +740,7 @@ anv_image_create(VkDevice _device,
    uint32_t b;
    for_each_bit(b, image->aspects) {
       r = make_surface(device, image, fmt_list, create_info->stride,
-                       isl_tiling_flags, create_info->isl_extra_usage_flags,
+                       isl_tiling_flags, isl_extra_usage_flags,
                        (1 << b));
       if (r != VK_SUCCESS)
          goto fail;
