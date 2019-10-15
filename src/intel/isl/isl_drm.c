@@ -28,7 +28,11 @@
 #include "drm-uapi/i915_drm.h"
 
 #include "isl.h"
+#include "isl_gen4.h"
+#include "isl_gen7.h"
+#include "dev/gen_debug.h"
 #include "dev/gen_device_info.h"
+#include "util/u_math.h"
 
 uint32_t
 isl_tiling_to_i915_tiling(enum isl_tiling tiling)
@@ -106,4 +110,118 @@ isl_drm_modifier_get_info(uint64_t modifier)
    }
 
    return NULL;
+}
+
+bool
+isl_format_supports_drm_modifier_s(const struct isl_device *dev,
+                                   const struct isl_surf_init_info *restrict info,
+                                   uint64_t modifier)
+{
+   switch (modifier) {
+   case DRM_FORMAT_MOD_LINEAR:
+   case I915_FORMAT_MOD_X_TILED:
+      return true;
+   case I915_FORMAT_MOD_Y_TILED:
+      return ISL_DEV_GEN(dev) >= 6;
+   case I915_FORMAT_MOD_Y_TILED_CCS: {
+      if (unlikely(INTEL_DEBUG & DEBUG_NO_RBC))
+         return false;
+
+      /* No CCS on ASTC, ETC, BC, etc... */
+      if (isl_format_is_compressed(info->format))
+         return false;
+
+      /* No CCSS for depth formats. */
+      if (info->usage & (ISL_SURF_USAGE_DEPTH_BIT |
+                         ISL_SURF_USAGE_STENCIL_BIT))
+         return false;
+
+      /* No non power of 2 formats. */
+      const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
+      uint32_t bits = 0;
+      for (uint32_t c = 0; c < ARRAY_SIZE(fmtl->channels_array); c++)
+         bits += fmtl->channels_array[c].bits;
+
+      if (!util_next_power_of_two(bits))
+         return false;
+
+      enum isl_format linear_format = isl_format_srgb_to_linear(info->format);
+      if (linear_format == ISL_FORMAT_UNSUPPORTED ||
+          !isl_format_supports_ccs_e(dev->info, linear_format))
+         return false;
+
+      /* The format of the CCS has changed on Gen12. */
+      return ISL_DEV_GEN(dev) >= 9 && ISL_DEV_GEN(dev) <= 11;
+   }
+   default:
+      return false;
+   }
+}
+
+enum modifier_priority {
+   MODIFIER_PRIORITY_INVALID = 0,
+   MODIFIER_PRIORITY_LINEAR,
+   MODIFIER_PRIORITY_X,
+   MODIFIER_PRIORITY_Y,
+   MODIFIER_PRIORITY_Y_CCS,
+};
+
+static const uint64_t priority_to_modifier[] = {
+   [MODIFIER_PRIORITY_INVALID] = DRM_FORMAT_MOD_INVALID,
+   [MODIFIER_PRIORITY_LINEAR] = DRM_FORMAT_MOD_LINEAR,
+   [MODIFIER_PRIORITY_X] = I915_FORMAT_MOD_X_TILED,
+   [MODIFIER_PRIORITY_Y] = I915_FORMAT_MOD_Y_TILED,
+   [MODIFIER_PRIORITY_Y_CCS] = I915_FORMAT_MOD_Y_TILED_CCS,
+};
+
+uint64_t
+isl_drm_modifier_select_s(const struct isl_device *dev,
+                          const struct isl_surf_init_info *restrict info,
+                          const uint64_t *modifiers,
+                          uint32_t n_modifiers)
+{
+   enum modifier_priority prio = MODIFIER_PRIORITY_INVALID;
+
+   for (int i = 0; i < n_modifiers; i++) {
+      if (!isl_format_supports_drm_modifier_s(dev, info, modifiers[i]))
+         continue;
+
+      const struct isl_drm_modifier_info *mod_info =
+         isl_drm_modifier_get_info(modifiers[i]);
+      assert(mod_info);
+
+      isl_tiling_flags_t tiling_flags = 1u << mod_info->tiling;
+      if (ISL_DEV_GEN(dev) >= 6) {
+         isl_gen6_filter_tiling(dev, info, &tiling_flags);
+      } else {
+         isl_gen4_filter_tiling(dev, info, &tiling_flags);
+      }
+
+      /* It's possible that given a set of usages we do not support a
+       * particular modifier. For instance TILING_Y is not available on
+       * Gen8 for display usage.
+       */
+      if (!tiling_flags)
+         continue;
+
+      switch (modifiers[i]) {
+      case I915_FORMAT_MOD_Y_TILED_CCS:
+         prio = MAX2(prio, MODIFIER_PRIORITY_Y_CCS);
+         break;
+      case I915_FORMAT_MOD_Y_TILED:
+         prio = MAX2(prio, MODIFIER_PRIORITY_Y);
+         break;
+      case I915_FORMAT_MOD_X_TILED:
+         prio = MAX2(prio, MODIFIER_PRIORITY_X);
+         break;
+      case DRM_FORMAT_MOD_LINEAR:
+         prio = MAX2(prio, MODIFIER_PRIORITY_LINEAR);
+         break;
+      case DRM_FORMAT_MOD_INVALID:
+      default:
+         break;
+      }
+   }
+
+   return priority_to_modifier[prio];
 }

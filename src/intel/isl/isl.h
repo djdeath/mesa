@@ -1819,6 +1819,27 @@ isl_drm_modifier_has_aux(uint64_t modifier)
    return isl_drm_modifier_get_info(modifier)->aux_usage != ISL_AUX_USAGE_NONE;
 }
 
+bool
+isl_format_supports_drm_modifier_s(const struct isl_device *dev,
+                                   const struct isl_surf_init_info *restrict info,
+                                   uint64_t modifier);
+
+#define isl_format_supports_drm_modifier(dev, modifier, ...) \
+   isl_format_supports_drm_modifier_s((dev), \
+                                      &(struct isl_surf_init_info) {  __VA_ARGS__ }, \
+                                      modifier)
+
+uint64_t
+isl_drm_modifier_select_s(const struct isl_device *dev,
+                          const struct isl_surf_init_info *restrict info,
+                          const uint64_t *modifiers,
+                          uint32_t n_modifiers);
+
+#define isl_drm_modifier_select(dev, modifiers, n_modifiers, ...) \
+   isl_drm_modifier_select_s((dev), \
+                             &(struct isl_surf_init_info) {  __VA_ARGS__ }, \
+                             (modifiers), (n_modifiers))
+
 /** Returns the default isl_aux_state for the given modifier.
  *
  * If we have a modifier which supports compression, then the auxiliary data
