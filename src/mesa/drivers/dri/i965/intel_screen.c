@@ -337,62 +337,16 @@ static const struct intel_image_format intel_image_formats[] = {
        { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } }
 };
 
-static const struct {
-   uint64_t modifier;
-   unsigned since_gen;
-} supported_modifiers[] = {
-   { .modifier = DRM_FORMAT_MOD_LINEAR       , .since_gen = 1 },
-   { .modifier = I915_FORMAT_MOD_X_TILED     , .since_gen = 1 },
-   { .modifier = I915_FORMAT_MOD_Y_TILED     , .since_gen = 6 },
-   { .modifier = I915_FORMAT_MOD_Y_TILED_CCS , .since_gen = 9 },
-};
-
-static bool
-modifier_is_supported(const struct gen_device_info *devinfo,
-                      const struct intel_image_format *fmt, int dri_format,
-                      uint64_t modifier)
+static enum isl_format
+dri_format_to_isl_format(uint32_t dri_format)
 {
-   const struct isl_drm_modifier_info *modinfo =
-      isl_drm_modifier_get_info(modifier);
-   int i;
-
-   /* ISL had better know about the modifier */
-   if (!modinfo)
-      return false;
-
-   if (modinfo->aux_usage == ISL_AUX_USAGE_CCS_E) {
-      /* If INTEL_DEBUG=norbc is set, don't support any CCS_E modifiers */
-      if (unlikely(INTEL_DEBUG & DEBUG_NO_RBC))
-         return false;
-
-      /* CCS_E is not supported for planar images */
-      if (fmt && fmt->nplanes > 1)
-         return false;
-
-      if (fmt) {
-         assert(dri_format == 0);
-         dri_format = fmt->planes[0].dri_format;
-      }
-
-      mesa_format format = driImageFormatToGLFormat(dri_format);
-      /* Whether or not we support compression is based on the RGBA non-sRGB
-       * version of the format.
-       */
-      format = _mesa_format_fallback_rgbx_to_rgba(format);
-      format = _mesa_get_srgb_format_linear(format);
-      if (!isl_format_supports_ccs_e(devinfo,
-                                     brw_isl_format_for_mesa_format(format)))
-         return false;
-   }
-
-   for (i = 0; i < ARRAY_SIZE(supported_modifiers); i++) {
-      if (supported_modifiers[i].modifier != modifier)
-         continue;
-
-      return supported_modifiers[i].since_gen <= devinfo->gen;
-   }
-
-   return false;
+   mesa_format format = driImageFormatToGLFormat(dri_format);
+   /* Whether or not we support compression is based on the RGBA non-sRGB
+    * version of the format.
+    */
+   format = _mesa_format_fallback_rgbx_to_rgba(format);
+   format = _mesa_get_srgb_format_linear(format);
+   return brw_isl_format_for_mesa_format(format);
 }
 
 static uint64_t
@@ -646,59 +600,9 @@ intel_destroy_image(__DRIimage *image)
    free(image);
 }
 
-enum modifier_priority {
-   MODIFIER_PRIORITY_INVALID = 0,
-   MODIFIER_PRIORITY_LINEAR,
-   MODIFIER_PRIORITY_X,
-   MODIFIER_PRIORITY_Y,
-   MODIFIER_PRIORITY_Y_CCS,
-};
-
-const uint64_t priority_to_modifier[] = {
-   [MODIFIER_PRIORITY_INVALID] = DRM_FORMAT_MOD_INVALID,
-   [MODIFIER_PRIORITY_LINEAR] = DRM_FORMAT_MOD_LINEAR,
-   [MODIFIER_PRIORITY_X] = I915_FORMAT_MOD_X_TILED,
-   [MODIFIER_PRIORITY_Y] = I915_FORMAT_MOD_Y_TILED,
-   [MODIFIER_PRIORITY_Y_CCS] = I915_FORMAT_MOD_Y_TILED_CCS,
-};
-
-static uint64_t
-select_best_modifier(struct gen_device_info *devinfo,
-                     int dri_format,
-                     const uint64_t *modifiers,
-                     const unsigned count)
-{
-   enum modifier_priority prio = MODIFIER_PRIORITY_INVALID;
-
-   for (int i = 0; i < count; i++) {
-      if (!modifier_is_supported(devinfo, NULL, dri_format, modifiers[i]))
-         continue;
-
-      switch (modifiers[i]) {
-      case I915_FORMAT_MOD_Y_TILED_CCS:
-         prio = MAX2(prio, MODIFIER_PRIORITY_Y_CCS);
-         break;
-      case I915_FORMAT_MOD_Y_TILED:
-         prio = MAX2(prio, MODIFIER_PRIORITY_Y);
-         break;
-      case I915_FORMAT_MOD_X_TILED:
-         prio = MAX2(prio, MODIFIER_PRIORITY_X);
-         break;
-      case DRM_FORMAT_MOD_LINEAR:
-         prio = MAX2(prio, MODIFIER_PRIORITY_LINEAR);
-         break;
-      case DRM_FORMAT_MOD_INVALID:
-      default:
-         break;
-      }
-   }
-
-   return priority_to_modifier[prio];
-}
-
 static __DRIimage *
 intel_create_image_common(__DRIscreen *dri_screen,
-                          int width, int height, int format,
+                          int width, int height, int dri_format,
                           unsigned int use,
                           const uint64_t *modifiers,
                           unsigned count,
@@ -706,6 +610,7 @@ intel_create_image_common(__DRIscreen *dri_screen,
 {
    __DRIimage *image;
    struct intel_screen *screen = dri_screen->driverPrivate;
+   mesa_format format = driImageFormatToGLFormat(dri_format);
    uint64_t modifier = DRM_FORMAT_MOD_INVALID;
    bool ok;
 
@@ -713,6 +618,21 @@ intel_create_image_common(__DRIscreen *dri_screen,
     * newer modifier interface deprecates the older usage flags.
     */
    assert(!(use && count));
+
+   struct isl_surf_init_info surf_info = {
+      .dim = ISL_SURF_DIM_2D,
+      .format = brw_isl_format_for_mesa_format(format),
+      .width = width,
+      .height = height,
+      .depth = 1,
+      .levels = 1,
+      .array_len = 1,
+      .samples = 1,
+      .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT |
+               ISL_SURF_USAGE_TEXTURE_BIT |
+               ISL_SURF_USAGE_STORAGE_BIT |
+               ((use & __DRI_IMAGE_USE_SCANOUT) ? ISL_SURF_USAGE_DISPLAY_BIT : 0),
+   };
 
    if (use & __DRI_IMAGE_USE_CURSOR) {
       if (width != 64 || height != 64)
@@ -726,8 +646,8 @@ intel_create_image_common(__DRIscreen *dri_screen,
    if (modifier == DRM_FORMAT_MOD_INVALID) {
       if (modifiers) {
          /* User requested specific modifiers */
-         modifier = select_best_modifier(&screen->devinfo, format,
-                                         modifiers, count);
+         modifier =
+            isl_drm_modifier_select_s(&screen->isl_dev, &surf_info, modifiers, count);
          if (modifier == DRM_FORMAT_MOD_INVALID)
             return NULL;
       } else {
@@ -738,29 +658,17 @@ intel_create_image_common(__DRIscreen *dri_screen,
       }
    }
 
-   image = intel_allocate_image(screen, format, loaderPrivate);
+   image = intel_allocate_image(screen, dri_format, loaderPrivate);
    if (image == NULL)
       return NULL;
 
    const struct isl_drm_modifier_info *mod_info =
       isl_drm_modifier_get_info(modifier);
 
+   surf_info.tiling_flags = (1 << mod_info->tiling);
+
    struct isl_surf surf;
-   ok = isl_surf_init(&screen->isl_dev, &surf,
-                      .dim = ISL_SURF_DIM_2D,
-                      .format = brw_isl_format_for_mesa_format(image->format),
-                      .width = width,
-                      .height = height,
-                      .depth = 1,
-                      .levels = 1,
-                      .array_len = 1,
-                      .samples = 1,
-                      .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT |
-                               ISL_SURF_USAGE_TEXTURE_BIT |
-                               ISL_SURF_USAGE_STORAGE_BIT |
-                               ((use & __DRI_IMAGE_USE_SCANOUT) ?
-                                ISL_SURF_USAGE_DISPLAY_BIT : 0),
-                      .tiling_flags = (1 << mod_info->tiling));
+   ok = isl_surf_init_s(&screen->isl_dev, &surf, &surf_info);
    assert(ok);
    if (!ok) {
       free(image);
@@ -948,6 +856,25 @@ intel_query_image(__DRIimage *image, int attrib, int *value)
    }
 }
 
+static bool
+is_modifier_supported(struct intel_screen *screen,
+                      const struct intel_image_format *f,
+                      uint64_t modifier)
+{
+   /* No aux support for multiplanar */
+   if (f->nplanes > 1 && isl_drm_modifier_has_aux(modifier))
+      return false;
+
+   return isl_format_supports_drm_modifier(
+      &screen->isl_dev,
+      modifier,
+      .dim = ISL_SURF_DIM_2D,
+      .format = dri_format_to_isl_format(f->planes[0].dri_format),
+      .width = 1, .height = 1, .depth = 1,
+      .levels = 1, .array_len = 1, .samples = 1,
+      .min_alignment_B = 0, .row_pitch_B = 0);
+}
+
 static GLboolean
 intel_query_format_modifier_attribs(__DRIscreen *dri_screen,
                                     uint32_t fourcc, uint64_t modifier,
@@ -956,7 +883,7 @@ intel_query_format_modifier_attribs(__DRIscreen *dri_screen,
    struct intel_screen *screen = dri_screen->driverPrivate;
    const struct intel_image_format *f = intel_image_format_lookup(fourcc);
 
-   if (!modifier_is_supported(&screen->devinfo, f, 0, modifier))
+   if (!is_modifier_supported(screen, f, modifier))
       return false;
 
    switch (attrib) {
@@ -1070,7 +997,7 @@ intel_create_image_from_fds_common(__DRIscreen *dri_screen,
       return NULL;
 
    if (modifier != DRM_FORMAT_MOD_INVALID &&
-       !modifier_is_supported(&screen->devinfo, f, 0, modifier))
+       !is_modifier_supported(screen, f, modifier))
       return NULL;
 
    if (f->nplanes == 1)
@@ -1380,9 +1307,15 @@ intel_query_dma_buf_modifiers(__DRIscreen *_screen, int fourcc, int max,
    if (!intel_image_format_is_supported(&screen->devinfo, f))
       return false;
 
+   static const uint64_t supported_modifiers[] = {
+      DRM_FORMAT_MOD_LINEAR,
+      I915_FORMAT_MOD_X_TILED,
+      I915_FORMAT_MOD_Y_TILED,
+      I915_FORMAT_MOD_Y_TILED_CCS,
+   };
    for (i = 0; i < ARRAY_SIZE(supported_modifiers); i++) {
-      uint64_t modifier = supported_modifiers[i].modifier;
-      if (!modifier_is_supported(&screen->devinfo, f, 0, modifier))
+      uint64_t modifier = supported_modifiers[i];
+      if (!is_modifier_supported(screen, f, modifier))
          continue;
 
       num_mods++;
