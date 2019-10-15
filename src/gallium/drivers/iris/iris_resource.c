@@ -53,87 +53,6 @@
 #include "drm-uapi/drm_fourcc.h"
 #include "drm-uapi/i915_drm.h"
 
-enum modifier_priority {
-   MODIFIER_PRIORITY_INVALID = 0,
-   MODIFIER_PRIORITY_LINEAR,
-   MODIFIER_PRIORITY_X,
-   MODIFIER_PRIORITY_Y,
-   MODIFIER_PRIORITY_Y_CCS,
-};
-
-static const uint64_t priority_to_modifier[] = {
-   [MODIFIER_PRIORITY_INVALID] = DRM_FORMAT_MOD_INVALID,
-   [MODIFIER_PRIORITY_LINEAR] = DRM_FORMAT_MOD_LINEAR,
-   [MODIFIER_PRIORITY_X] = I915_FORMAT_MOD_X_TILED,
-   [MODIFIER_PRIORITY_Y] = I915_FORMAT_MOD_Y_TILED,
-   [MODIFIER_PRIORITY_Y_CCS] = I915_FORMAT_MOD_Y_TILED_CCS,
-};
-
-static bool
-modifier_is_supported(const struct gen_device_info *devinfo,
-                      enum pipe_format pfmt, uint64_t modifier)
-{
-   /* XXX: do something real */
-   switch (modifier) {
-   case I915_FORMAT_MOD_Y_TILED_CCS: {
-      if (unlikely(INTEL_DEBUG & DEBUG_NO_RBC))
-         return false;
-
-      enum isl_format rt_format =
-         iris_format_for_usage(devinfo, pfmt,
-                               ISL_SURF_USAGE_RENDER_TARGET_BIT).fmt;
-
-      enum isl_format linear_format = isl_format_srgb_to_linear(rt_format);
-
-      if (linear_format == ISL_FORMAT_UNSUPPORTED ||
-          !isl_format_supports_ccs_e(devinfo, linear_format))
-         return false;
-
-      return devinfo->gen >= 9 && devinfo->gen <= 11;
-   }
-   case I915_FORMAT_MOD_Y_TILED:
-   case I915_FORMAT_MOD_X_TILED:
-   case DRM_FORMAT_MOD_LINEAR:
-      return true;
-   case DRM_FORMAT_MOD_INVALID:
-   default:
-      return false;
-   }
-}
-
-static uint64_t
-select_best_modifier(struct gen_device_info *devinfo, enum pipe_format pfmt,
-                     const uint64_t *modifiers,
-                     int count)
-{
-   enum modifier_priority prio = MODIFIER_PRIORITY_INVALID;
-
-   for (int i = 0; i < count; i++) {
-      if (!modifier_is_supported(devinfo, pfmt, modifiers[i]))
-         continue;
-
-      switch (modifiers[i]) {
-      case I915_FORMAT_MOD_Y_TILED_CCS:
-         prio = MAX2(prio, MODIFIER_PRIORITY_Y_CCS);
-         break;
-      case I915_FORMAT_MOD_Y_TILED:
-         prio = MAX2(prio, MODIFIER_PRIORITY_Y);
-         break;
-      case I915_FORMAT_MOD_X_TILED:
-         prio = MAX2(prio, MODIFIER_PRIORITY_X);
-         break;
-      case DRM_FORMAT_MOD_LINEAR:
-         prio = MAX2(prio, MODIFIER_PRIORITY_LINEAR);
-         break;
-      case DRM_FORMAT_MOD_INVALID:
-      default:
-         break;
-      }
-   }
-
-   return priority_to_modifier[prio];
-}
-
 enum isl_surf_dim
 target_to_isl_surf_dim(enum pipe_texture_target target)
 {
@@ -165,19 +84,28 @@ iris_query_dmabuf_modifiers(struct pipe_screen *pscreen,
                             int *count)
 {
    struct iris_screen *screen = (void *) pscreen;
-   const struct gen_device_info *devinfo = &screen->devinfo;
-
-   uint64_t all_modifiers[] = {
+   static const uint64_t all_modifiers[] = {
       DRM_FORMAT_MOD_LINEAR,
       I915_FORMAT_MOD_X_TILED,
       I915_FORMAT_MOD_Y_TILED,
       I915_FORMAT_MOD_Y_TILED_CCS,
    };
 
-   int supported_mods = 0;
+   enum isl_format isl_format = isl_format_for_pipe_format(pfmt);
+   if (isl_format == ISL_FORMAT_UNSUPPORTED) {
+      *count = 0;
+      return;
+   }
 
+   int supported_mods = 0;
    for (int i = 0; i < ARRAY_SIZE(all_modifiers); i++) {
-      if (!modifier_is_supported(devinfo, pfmt, all_modifiers[i]))
+      if (!isl_format_supports_drm_modifier(&screen->isl_dev,
+                                            all_modifiers[i],
+                                            .dim = ISL_SURF_DIM_2D,
+                                            .format = isl_format,
+                                            .width = 1, .height = 1, .depth = 1,
+                                            .levels = 1, .array_len = 1, .samples = 1,
+                                            .min_alignment_B = 0, .row_pitch_B = 0))
          continue;
 
       if (supported_mods < max) {
@@ -830,15 +758,51 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
    const struct util_format_description *format_desc =
       util_format_description(templ->format);
    const bool has_depth = util_format_has_depth(format_desc);
-   uint64_t modifier =
-      select_best_modifier(devinfo, templ->format, modifiers, modifiers_count);
 
-   isl_tiling_flags_t tiling_flags = ISL_TILING_ANY_MASK;
+   enum pipe_format pfmt = templ->format;
+   res->internal_format = pfmt;
+
+   /* Should be handled by u_transfer_helper */
+   assert(!util_format_is_depth_and_stencil(pfmt));
+
+   struct iris_format_info fmt =
+      iris_format_for_usage(devinfo, pfmt, ISL_SURF_USAGE_RENDER_TARGET_BIT);
+   assert(fmt.fmt != ISL_FORMAT_UNSUPPORTED);
+
+   struct isl_surf_init_info surf_info = {
+      .dim = target_to_isl_surf_dim(templ->target),
+      .format = fmt.fmt,
+      .width = templ->width0,
+      .height = templ->height0,
+      .depth = templ->depth0,
+      .levels = templ->last_level + 1,
+      .array_len = templ->array_size,
+      .samples = MAX2(templ->nr_samples, 1),
+      .min_alignment_B = 0,
+      .row_pitch_B = 0,
+      .usage = pipe_bind_to_isl_usage(templ->bind),
+   };
+
+   if (templ->target == PIPE_TEXTURE_CUBE ||
+       templ->target == PIPE_TEXTURE_CUBE_ARRAY)
+      surf_info.usage |= ISL_SURF_USAGE_CUBE_BIT;
+
+   if (templ->usage != PIPE_USAGE_STAGING) {
+      if (templ->format == PIPE_FORMAT_S8_UINT)
+         surf_info.usage |= ISL_SURF_USAGE_STENCIL_BIT;
+      else if (has_depth)
+         surf_info.usage |= ISL_SURF_USAGE_DEPTH_BIT;
+   }
+
+   uint64_t modifier = isl_drm_modifier_select_s(&screen->isl_dev, &surf_info,
+                                                 modifiers, modifiers_count);
+
+   surf_info.tiling_flags = ISL_TILING_ANY_MASK;
 
    if (modifier != DRM_FORMAT_MOD_INVALID) {
       res->mod_info = isl_drm_modifier_get_info(modifier);
 
-      tiling_flags = 1 << res->mod_info->tiling;
+      surf_info.tiling_flags = 1 << res->mod_info->tiling;
    } else {
       if (modifiers_count > 0) {
          fprintf(stderr, "Unsupported modifier, resource creation failed.\n");
@@ -848,47 +812,13 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
       /* Use linear for staging buffers */
       if (templ->usage == PIPE_USAGE_STAGING ||
           templ->bind & (PIPE_BIND_LINEAR | PIPE_BIND_CURSOR) )
-         tiling_flags = ISL_TILING_LINEAR_BIT;
+         surf_info.tiling_flags = ISL_TILING_LINEAR_BIT;
       else if (templ->bind & PIPE_BIND_SCANOUT)
-         tiling_flags = ISL_TILING_X_BIT;
+         surf_info.tiling_flags = ISL_TILING_X_BIT;
    }
-
-   isl_surf_usage_flags_t usage = pipe_bind_to_isl_usage(templ->bind);
-
-   if (templ->target == PIPE_TEXTURE_CUBE ||
-       templ->target == PIPE_TEXTURE_CUBE_ARRAY)
-      usage |= ISL_SURF_USAGE_CUBE_BIT;
-
-   if (templ->usage != PIPE_USAGE_STAGING) {
-      if (templ->format == PIPE_FORMAT_S8_UINT)
-         usage |= ISL_SURF_USAGE_STENCIL_BIT;
-      else if (has_depth)
-         usage |= ISL_SURF_USAGE_DEPTH_BIT;
-   }
-
-   enum pipe_format pfmt = templ->format;
-   res->internal_format = pfmt;
-
-   /* Should be handled by u_transfer_helper */
-   assert(!util_format_is_depth_and_stencil(pfmt));
-
-   struct iris_format_info fmt = iris_format_for_usage(devinfo, pfmt, usage);
-   assert(fmt.fmt != ISL_FORMAT_UNSUPPORTED);
 
    UNUSED const bool isl_surf_created_successfully =
-      isl_surf_init(&screen->isl_dev, &res->surf,
-                    .dim = target_to_isl_surf_dim(templ->target),
-                    .format = fmt.fmt,
-                    .width = templ->width0,
-                    .height = templ->height0,
-                    .depth = templ->depth0,
-                    .levels = templ->last_level + 1,
-                    .array_len = templ->array_size,
-                    .samples = MAX2(templ->nr_samples, 1),
-                    .min_alignment_B = 0,
-                    .row_pitch_B = 0,
-                    .usage = usage,
-                    .tiling_flags = tiling_flags);
+      isl_surf_init_s(&screen->isl_dev, &res->surf, &surf_info);
    assert(isl_surf_created_successfully);
 
    const char *name = "miptree";
