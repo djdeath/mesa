@@ -769,4 +769,104 @@ gen_mi_udiv32_imm(struct gen_mi_builder *b,
 
 #endif /* MI_MATH section */
 
+#if GEN_GEN >= 8
+
+struct gen_mi_builder_address_update {
+   uint64_t *ptr;
+   uint64_t mask;
+};
+
+static inline void
+gen_mi_store32_at(struct gen_mi_builder *b,
+                  void **address_ptr,
+                  struct gen_mi_value src)
+{
+   switch (src.type) {
+   case GEN_MI_VALUE_TYPE_IMM: {
+      uint32_t *dw =
+         (uint32_t *) __gen_get_batch_dwords(b->user_data,
+                                             GENX(MI_STORE_DATA_IMM_length));
+      gen_mi_builder_pack(b, GENX(MI_STORE_DATA_IMM), dw, sdi) {
+#if GEN_GEN >= 12
+         sdi.ForceWriteCompletionCheck = true;
+#endif
+         sdi.ImmediateData = src.imm;
+      }
+      *address_ptr = &dw[1];
+      break;
+   }
+
+   case GEN_MI_VALUE_TYPE_MEM32: {
+      uint32_t *dw =
+         (uint32_t *) __gen_get_batch_dwords(b->user_data,
+                                             GENX(MI_COPY_MEM_MEM_length));
+      gen_mi_builder_pack(b, GENX(MI_COPY_MEM_MEM), dw, cmm) {
+         cmm.SourceMemoryAddress = src.addr;
+      }
+      *address_ptr = &dw[1];
+      break;
+   }
+
+   case GEN_MI_VALUE_TYPE_REG32: {
+      uint32_t *dw =
+         (uint32_t *) __gen_get_batch_dwords(b->user_data,
+                                             GENX(MI_STORE_REGISTER_MEM_length));
+      gen_mi_builder_pack(b, GENX(MI_STORE_REGISTER_MEM), dw, srm) {
+         srm.RegisterAddress = src.reg;
+      }
+      *address_ptr = &dw[2];
+      break;
+   }
+
+   default:
+      unreachable("Invalid gen_mi_value type");
+   }
+}
+
+static inline void
+gen_mi_store64_at(struct gen_mi_builder *b,
+                  void **addresses_ptr,
+                  struct gen_mi_value src)
+{
+   switch (src.type) {
+   case GEN_MI_VALUE_TYPE_IMM:
+      gen_mi_store32_at(b, &addresses_ptr[0], gen_mi_value_half(src, false));
+      gen_mi_store32_at(b, &addresses_ptr[1], gen_mi_value_half(src, true));
+      break;
+
+   case GEN_MI_VALUE_TYPE_MEM32:
+   case GEN_MI_VALUE_TYPE_REG32:
+      gen_mi_store32_at(b, &addresses_ptr[0], src);
+      gen_mi_store32_at(b, &addresses_ptr[1], gen_mi_imm(0));
+      break;
+
+   case GEN_MI_VALUE_TYPE_MEM64:
+   case GEN_MI_VALUE_TYPE_REG64:
+      gen_mi_store32_at(b, &addresses_ptr[0], gen_mi_value_half(src, false));
+      gen_mi_store32_at(b, &addresses_ptr[1], gen_mi_value_half(src, true));
+      break;
+
+   default:
+      unreachable("Invalid gen_mi_value type");
+   }
+}
+
+static inline void
+gen_mi_self_mod_barrier(struct gen_mi_builder *b)
+{
+#if GEN_GEN >= 11
+   gen_mi_builder_emit(b, GENX(PIPE_CONTROL), pc) {
+      pc.CommandCacheInvalidateEnable = true;
+   }
+   /* For some reason an additional 4 NOOPs are required. */
+   for (uint32_t i = 0; i < 4; i++)
+      gen_mi_builder_emit(b, GENX(MI_NOOP), noop);
+#else
+   for (uint32_t i = 0; i < 128; i++)
+      gen_mi_builder_emit(b, GENX(MI_NOOP), noop);
+#endif
+}
+
+#endif /* GEN_GEN >= 8 */
+
 #endif /* GEN_MI_BUILDER_H */
