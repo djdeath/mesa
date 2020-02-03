@@ -24,28 +24,11 @@
 #ifndef GEN_MI_BUILDER_H
 #define GEN_MI_BUILDER_H
 
+#include "gen_mi_builder_types.h"
+
 #include "util/bitscan.h"
 #include "util/fast_idiv_by_const.h"
 #include "util/u_math.h"
-
-#ifndef GEN_MI_BUILDER_NUM_ALLOC_GPRS
-/** The number of GPRs the MI builder is allowed to allocate
- *
- * This may be set by a user of this API so that it can reserve some GPRs at
- * the top end for its own use.
- */
-#define GEN_MI_BUILDER_NUM_ALLOC_GPRS 16
-#endif
-
-/** These must be defined by the user of the builder
- *
- * void *__gen_get_batch_dwords(__gen_user_data *user_data,
- *                              unsigned num_dwords);
- *
- * __gen_address_type
- * __gen_address_offset(__gen_address_type addr, uint64_t offset);
- *
- */
 
 /*
  * Start of the actual MI builder
@@ -64,58 +47,11 @@
 #define gen_mi_builder_emit(b, cmd, name)                               \
    gen_mi_builder_pack((b), cmd, __gen_get_batch_dwords((b)->user_data, __genxml_cmd_length(cmd)), name)
 
-
-enum gen_mi_value_type {
-   GEN_MI_VALUE_TYPE_IMM,
-   GEN_MI_VALUE_TYPE_MEM32,
-   GEN_MI_VALUE_TYPE_MEM64,
-   GEN_MI_VALUE_TYPE_REG32,
-   GEN_MI_VALUE_TYPE_REG64,
-};
-
-struct gen_mi_value {
-   enum gen_mi_value_type type;
-
-   union {
-      uint64_t imm;
-      __gen_address_type addr;
-      uint32_t reg;
-   };
-
-#if GEN_GEN >= 7 || GEN_IS_HASWELL
-   bool invert;
-#endif
-};
-
 #if GEN_GEN >= 9
 #define GEN_MI_BUILDER_MAX_MATH_DWORDS 256
 #else
 #define GEN_MI_BUILDER_MAX_MATH_DWORDS 64
 #endif
-
-struct gen_mi_builder {
-   __gen_user_data *user_data;
-
-#if GEN_GEN >= 8 || GEN_IS_HASWELL
-   uint32_t gprs;
-   uint8_t gpr_refs[GEN_MI_BUILDER_NUM_ALLOC_GPRS];
-
-   unsigned num_math_dwords;
-   uint32_t math_dwords[GEN_MI_BUILDER_MAX_MATH_DWORDS];
-#endif
-};
-
-static inline void
-gen_mi_builder_init(struct gen_mi_builder *b, __gen_user_data *user_data)
-{
-   memset(b, 0, sizeof(*b));
-   b->user_data = user_data;
-
-#if GEN_GEN >= 8 || GEN_IS_HASWELL
-   b->gprs = 0;
-   b->num_math_dwords = 0;
-#endif
-}
 
 static inline void
 gen_mi_builder_flush_math(struct gen_mi_builder *b)
@@ -131,6 +67,8 @@ gen_mi_builder_flush_math(struct gen_mi_builder *b)
    }
    memcpy(dw + 1, b->math_dwords, b->num_math_dwords * sizeof(uint32_t));
    b->num_math_dwords = 0;
+#else
+   assert(b->num_math_dwords == 0);
 #endif
 }
 
