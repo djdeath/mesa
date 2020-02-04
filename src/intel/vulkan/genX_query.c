@@ -32,10 +32,6 @@
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
 
-/* We reserve GPR 14 and 15 for conditional rendering */
-#define GEN_MI_BUILDER_NUM_ALLOC_GPRS 14
-#define __gen_get_batch_dwords anv_batch_emit_dwords
-#define __gen_address_offset anv_address_add
 #include "common/gen_mi_builder.h"
 #include "perf/gen_perf.h"
 #include "perf/gen_perf_mdapi.h"
@@ -532,20 +528,18 @@ void genX(CmdResetQueryPool)(
 
    case VK_QUERY_TYPE_PIPELINE_STATISTICS:
    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT: {
-      struct gen_mi_builder b;
-      gen_mi_builder_init(&b, &cmd_buffer->batch);
+      struct gen_mi_builder *b = &cmd_buffer->state.builder;
 
       for (uint32_t i = 0; i < queryCount; i++)
-         emit_query_mi_availability(&b, anv_query_address(pool, firstQuery + i), false);
+         emit_query_mi_availability(b, anv_query_address(pool, firstQuery + i), false);
       break;
    }
 
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_INTEL: {
-      struct gen_mi_builder b;
-      gen_mi_builder_init(&b, &cmd_buffer->batch);
+      struct gen_mi_builder *b = &cmd_buffer->state.builder;
 
       for (uint32_t i = 0; i < queryCount; i++)
-         emit_query_mi_availability(&b, anv_query_address(pool, firstQuery + i), false);
+         emit_query_mi_availability(b, anv_query_address(pool, firstQuery + i), false);
       break;
    }
 
@@ -625,9 +619,7 @@ void genX(CmdBeginQueryIndexedEXT)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
    struct anv_address query_addr = anv_query_address(pool, query);
-
-   struct gen_mi_builder b;
-   gen_mi_builder_init(&b, &cmd_buffer->batch);
+   struct gen_mi_builder *b = &cmd_buffer->state.builder;
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
@@ -645,7 +637,7 @@ void genX(CmdBeginQueryIndexedEXT)(
       uint32_t offset = 8;
       while (statistics) {
          uint32_t stat = u_bit_scan(&statistics);
-         emit_pipeline_stat(&b, stat, anv_address_add(query_addr, offset));
+         emit_pipeline_stat(b, stat, anv_address_add(query_addr, offset));
          offset += 16;
       }
       break;
@@ -656,7 +648,7 @@ void genX(CmdBeginQueryIndexedEXT)(
          pc.CommandStreamerStallEnable = true;
          pc.StallAtPixelScoreboard = true;
       }
-      emit_xfb_query(&b, index, anv_address_add(query_addr, 8));
+      emit_xfb_query(b, index, anv_address_add(query_addr, 8));
       break;
 
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_INTEL: {
@@ -669,22 +661,22 @@ void genX(CmdBeginQueryIndexedEXT)(
             anv_address_add(query_addr, intel_perf_mi_rpc_offset(false));
       }
 #if GEN_GEN < 9
-      gen_mi_store(&b,
+      gen_mi_store(b,
                    gen_mi_mem32(anv_address_add(query_addr,
                                                 intel_perf_rpstart_offset(false))),
                    gen_mi_reg32(GENX(RPSTAT1_num)));
 #else
-      gen_mi_store(&b,
+      gen_mi_store(b,
                    gen_mi_mem32(anv_address_add(query_addr,
                                                 intel_perf_rpstart_offset(false))),
                    gen_mi_reg32(GENX(RPSTAT0_num)));
 #endif
 #if GEN_GEN >= 8 && GEN_GEN <= 11
-      gen_mi_store(&b, gen_mi_mem64(anv_address_add(query_addr,
-                                                    intel_perf_counter(false))),
+      gen_mi_store(b, gen_mi_mem64(anv_address_add(query_addr,
+                                                   intel_perf_counter(false))),
                    gen_mi_reg64(GENX(PERFCNT1_num)));
-      gen_mi_store(&b, gen_mi_mem64(anv_address_add(query_addr,
-                                                    intel_perf_counter(false) + 8)),
+      gen_mi_store(b, gen_mi_mem64(anv_address_add(query_addr,
+                                                   intel_perf_counter(false) + 8)),
                    gen_mi_reg64(GENX(PERFCNT2_num)));
 #endif
       break;
@@ -712,9 +704,7 @@ void genX(CmdEndQueryIndexedEXT)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
    struct anv_address query_addr = anv_query_address(pool, query);
-
-   struct gen_mi_builder b;
-   gen_mi_builder_init(&b, &cmd_buffer->batch);
+   struct gen_mi_builder *b = &cmd_buffer->state.builder;
 
    switch (pool->type) {
    case VK_QUERY_TYPE_OCCLUSION:
@@ -733,11 +723,11 @@ void genX(CmdEndQueryIndexedEXT)(
       uint32_t offset = 16;
       while (statistics) {
          uint32_t stat = u_bit_scan(&statistics);
-         emit_pipeline_stat(&b, stat, anv_address_add(query_addr, offset));
+         emit_pipeline_stat(b, stat, anv_address_add(query_addr, offset));
          offset += 16;
       }
 
-      emit_query_mi_availability(&b, query_addr, true);
+      emit_query_mi_availability(b, query_addr, true);
       break;
    }
 
@@ -747,8 +737,8 @@ void genX(CmdEndQueryIndexedEXT)(
          pc.StallAtPixelScoreboard = true;
       }
 
-      emit_xfb_query(&b, index, anv_address_add(query_addr, 16));
-      emit_query_mi_availability(&b, query_addr, true);
+      emit_xfb_query(b, index, anv_address_add(query_addr, 16));
+      emit_query_mi_availability(b, query_addr, true);
       break;
 
    case VK_QUERY_TYPE_PERFORMANCE_QUERY_INTEL: {
@@ -757,21 +747,21 @@ void genX(CmdEndQueryIndexedEXT)(
          pc.StallAtPixelScoreboard = true;
       }
       uint32_t marker_offset = intel_perf_marker_offset();
-      gen_mi_store(&b, gen_mi_mem64(anv_address_add(query_addr, marker_offset)),
+      gen_mi_store(b, gen_mi_mem64(anv_address_add(query_addr, marker_offset)),
                    gen_mi_imm(cmd_buffer->intel_perf_marker));
 #if GEN_GEN >= 8 && GEN_GEN <= 11
-      gen_mi_store(&b, gen_mi_mem64(anv_address_add(query_addr, intel_perf_counter(true))),
+      gen_mi_store(b, gen_mi_mem64(anv_address_add(query_addr, intel_perf_counter(true))),
                    gen_mi_reg64(GENX(PERFCNT1_num)));
-      gen_mi_store(&b, gen_mi_mem64(anv_address_add(query_addr, intel_perf_counter(true) + 8)),
+      gen_mi_store(b, gen_mi_mem64(anv_address_add(query_addr, intel_perf_counter(true) + 8)),
                    gen_mi_reg64(GENX(PERFCNT2_num)));
 #endif
 #if GEN_GEN < 9
-      gen_mi_store(&b,
+      gen_mi_store(b,
                    gen_mi_mem32(anv_address_add(query_addr,
                                                 intel_perf_rpstart_offset(true))),
                    gen_mi_reg32(GENX(RPSTAT1_num)));
 #else
-      gen_mi_store(&b,
+      gen_mi_store(b,
                    gen_mi_mem32(anv_address_add(query_addr,
                                                 intel_perf_rpstart_offset(true))),
                    gen_mi_reg32(GENX(RPSTAT0_num)));
@@ -784,7 +774,7 @@ void genX(CmdEndQueryIndexedEXT)(
                                              intel_perf_mi_rpc_offset(true));
          rpc.ReportID = 0xdeadbeef; /* This goes in the first dword */
       }
-      emit_query_mi_availability(&b, query_addr, true);
+      emit_query_mi_availability(b, query_addr, true);
       break;
    }
 
@@ -804,7 +794,7 @@ void genX(CmdEndQueryIndexedEXT)(
       const uint32_t num_queries =
          util_bitcount(cmd_buffer->state.subpass->view_mask);
       if (num_queries > 1)
-         emit_zero_queries(cmd_buffer, &b, pool, query + 1, num_queries - 1);
+         emit_zero_queries(cmd_buffer, b, pool, query + 1, num_queries - 1);
    }
 }
 
@@ -819,16 +809,14 @@ void genX(CmdWriteTimestamp)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
    struct anv_address query_addr = anv_query_address(pool, query);
+   struct gen_mi_builder *b = &cmd_buffer->state.builder;
 
    assert(pool->type == VK_QUERY_TYPE_TIMESTAMP);
 
-   struct gen_mi_builder b;
-   gen_mi_builder_init(&b, &cmd_buffer->batch);
-
    switch (pipelineStage) {
    case VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT:
-      gen_mi_store(&b, gen_mi_mem64(anv_address_add(query_addr, 8)),
-                       gen_mi_reg64(TIMESTAMP));
+      gen_mi_store(b, gen_mi_mem64(anv_address_add(query_addr, 8)),
+                      gen_mi_reg64(TIMESTAMP));
       break;
 
    default:
@@ -861,7 +849,7 @@ void genX(CmdWriteTimestamp)(
       const uint32_t num_queries =
          util_bitcount(cmd_buffer->state.subpass->view_mask);
       if (num_queries > 1)
-         emit_zero_queries(cmd_buffer, &b, pool, query + 1, num_queries - 1);
+         emit_zero_queries(cmd_buffer, b, pool, query + 1, num_queries - 1);
    }
 }
 
@@ -942,9 +930,7 @@ void genX(CmdCopyQueryPoolResults)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
    ANV_FROM_HANDLE(anv_buffer, buffer, destBuffer);
-
-   struct gen_mi_builder b;
-   gen_mi_builder_init(&b, &cmd_buffer->batch);
+   struct gen_mi_builder *b = &cmd_buffer->state.builder;
    struct gen_mi_value result;
 
    /* If render target writes are ongoing, request a render target cache flush
@@ -981,22 +967,22 @@ void genX(CmdCopyQueryPoolResults)(
       uint32_t idx = 0;
       switch (pool->type) {
       case VK_QUERY_TYPE_OCCLUSION:
-         result = compute_query_result(&b, anv_address_add(query_addr, 8));
+         result = compute_query_result(b, anv_address_add(query_addr, 8));
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
          /* Like in the case of vkGetQueryPoolResults, if the query is
           * unavailable and the VK_QUERY_RESULT_PARTIAL_BIT flag is set,
           * conservatively write 0 as the query result. If the
           * VK_QUERY_RESULT_PARTIAL_BIT isn't set, don't write any value.
           */
-         gpu_write_query_result_cond(cmd_buffer, &b, query_addr, dest_addr,
+         gpu_write_query_result_cond(cmd_buffer, b, query_addr, dest_addr,
                1 /* available */, flags, idx, result);
          if (flags & VK_QUERY_RESULT_PARTIAL_BIT) {
-            gpu_write_query_result_cond(cmd_buffer, &b, query_addr, dest_addr,
+            gpu_write_query_result_cond(cmd_buffer, b, query_addr, dest_addr,
                   0 /* unavailable */, flags, idx, gen_mi_imm(0));
          }
          idx++;
 #else /* GEN_GEN < 8 && !GEN_IS_HASWELL */
-         gpu_write_query_result(&b, dest_addr, flags, idx++, result);
+         gpu_write_query_result(b, dest_addr, flags, idx++, result);
 #endif
          break;
 
@@ -1005,32 +991,32 @@ void genX(CmdCopyQueryPoolResults)(
          while (statistics) {
             uint32_t stat = u_bit_scan(&statistics);
 
-            result = compute_query_result(&b, anv_address_add(query_addr,
-                                                              idx * 16 + 8));
+            result = compute_query_result(b, anv_address_add(query_addr,
+                                                             idx * 16 + 8));
 
             /* WaDividePSInvocationCountBy4:HSW,BDW */
             if ((cmd_buffer->device->info.gen == 8 ||
                  cmd_buffer->device->info.is_haswell) &&
                 (1 << stat) == VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT) {
-               result = gen_mi_ushr32_imm(&b, result, 2);
+               result = gen_mi_ushr32_imm(b, result, 2);
             }
 
-            gpu_write_query_result(&b, dest_addr, flags, idx++, result);
+            gpu_write_query_result(b, dest_addr, flags, idx++, result);
          }
          assert(idx == util_bitcount(pool->pipeline_statistics));
          break;
       }
 
       case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
-         result = compute_query_result(&b, anv_address_add(query_addr, 8));
-         gpu_write_query_result(&b, dest_addr, flags, idx++, result);
-         result = compute_query_result(&b, anv_address_add(query_addr, 24));
-         gpu_write_query_result(&b, dest_addr, flags, idx++, result);
+         result = compute_query_result(b, anv_address_add(query_addr, 8));
+         gpu_write_query_result(b, dest_addr, flags, idx++, result);
+         result = compute_query_result(b, anv_address_add(query_addr, 24));
+         gpu_write_query_result(b, dest_addr, flags, idx++, result);
          break;
 
       case VK_QUERY_TYPE_TIMESTAMP:
          result = gen_mi_mem64(anv_address_add(query_addr, 8));
-         gpu_write_query_result(&b, dest_addr, flags, 0, result);
+         gpu_write_query_result(b, dest_addr, flags, 0, result);
          break;
 
       default:
@@ -1038,7 +1024,7 @@ void genX(CmdCopyQueryPoolResults)(
       }
 
       if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {
-         gpu_write_query_result(&b, dest_addr, flags, idx,
+         gpu_write_query_result(b, dest_addr, flags, idx,
                                 gen_mi_mem64(query_addr));
       }
 

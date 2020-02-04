@@ -156,6 +156,9 @@ anv_cmd_state_init(struct anv_cmd_buffer *cmd_buffer)
    state->current_pipeline = UINT32_MAX;
    state->restart_index = UINT32_MAX;
    state->gfx.dynamic = default_dynamic_state;
+
+   gen_mi_builder_init(&state->builder,
+                       &cmd_buffer->batch);
 }
 
 static void

@@ -1717,6 +1717,17 @@ _anv_combine_address(struct anv_batch *batch, void *location,
            _dst = NULL;                                                 \
          }))
 
+/* MI builder setup */
+
+/* We reserve GPR 14 and 15 for conditional rendering */
+#define GEN_MI_BUILDER_NUM_ALLOC_GPRS 14
+#define __gen_get_batch_dwords anv_batch_emit_dwords
+#define __gen_get_batch_address anv_batch_address
+#define __gen_address_value anv_address_physical
+#define __gen_address_offset anv_address_add
+
+#include "common/gen_mi_builder_types.h"
+
 struct anv_device_memory {
    struct list_head                             link;
 
@@ -2753,6 +2764,11 @@ struct anv_cmd_state {
     * is one of the states in render_pass_states.
     */
    struct anv_state                             null_surface_state;
+
+   /**
+    * The state of the MI builder in the command buffer.
+    */
+   struct gen_mi_builder                        builder;
 };
 
 struct anv_cmd_pool {
