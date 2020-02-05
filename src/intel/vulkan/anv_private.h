@@ -1719,8 +1719,8 @@ _anv_combine_address(struct anv_batch *batch, void *location,
 
 /* MI builder setup */
 
-/* We reserve GPR 14 and 15 for conditional rendering */
-#define GEN_MI_BUILDER_NUM_ALLOC_GPRS 14
+/* We reserve GPR 15 for conditional rendering */
+#define GEN_MI_BUILDER_NUM_ALLOC_GPRS 15
 #define __gen_get_batch_dwords anv_batch_emit_dwords
 #define __gen_get_batch_address anv_batch_address
 #define __gen_address_value anv_address_physical
