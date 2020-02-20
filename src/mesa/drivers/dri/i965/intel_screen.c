@@ -631,7 +631,12 @@ intel_create_image_common(__DRIscreen *dri_screen,
       .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT |
                ISL_SURF_USAGE_TEXTURE_BIT |
                ISL_SURF_USAGE_STORAGE_BIT |
-               ((use & __DRI_IMAGE_USE_SCANOUT) ? ISL_SURF_USAGE_DISPLAY_BIT : 0),
+               /* Request ISL display usage if explicitly requested or if the
+                * linear modifier was given by the caller.
+                */
+               (((use & __DRI_IMAGE_USE_SCANOUT) ||
+                 (count > 0)) ?
+                ISL_SURF_USAGE_DISPLAY_BIT : 0),
    };
 
    if (use & __DRI_IMAGE_USE_CURSOR) {
