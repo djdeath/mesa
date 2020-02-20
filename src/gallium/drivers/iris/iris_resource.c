@@ -794,6 +794,10 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
          surf_info.usage |= ISL_SURF_USAGE_DEPTH_BIT;
    }
 
+   if (templ->bind & (PIPE_BIND_DISPLAY_TARGET | PIPE_BIND_SCANOUT))
+      surf_info.usage |= ISL_SURF_USAGE_DISPLAY_BIT;
+
+
    uint64_t modifier = isl_drm_modifier_select_s(&screen->isl_dev, &surf_info,
                                                  modifiers, modifiers_count);
 
