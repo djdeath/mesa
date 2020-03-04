@@ -1558,6 +1558,8 @@ struct anv_batch_bo {
 struct anv_batch {
    const VkAllocationCallbacks *                alloc;
 
+   struct anv_batch_bo *                        current_bo;
+
    void *                                       start;
    void *                                       end;
    void *                                       next;

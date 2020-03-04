@@ -396,6 +396,7 @@ static void
 anv_batch_bo_start(struct anv_batch_bo *bbo, struct anv_batch *batch,
                    size_t batch_padding)
 {
+   batch->current_bo = bbo;
    batch->next = batch->start = bbo->bo->map;
    batch->end = bbo->bo->map + bbo->bo->size - batch_padding;
    batch->relocs = &bbo->relocs;
@@ -406,6 +407,7 @@ static void
 anv_batch_bo_continue(struct anv_batch_bo *bbo, struct anv_batch *batch,
                       size_t batch_padding)
 {
+   batch->current_bo = bbo;
    batch->start = bbo->bo->map;
    batch->next = bbo->bo->map + bbo->length;
    batch->end = bbo->bo->map + bbo->bo->size - batch_padding;
